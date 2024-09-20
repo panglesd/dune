@@ -70,41 +70,36 @@ module C_define : sig
 end
 
 module Pkg_config : sig
-    type configurator = t
-    type t
+  type configurator := t
+  type t
 
-    (** Search pkg-config in PATH. Prefers the [PKG_CONFIG_PATH] environment
-        variable if set. Returns [None] if pkg-config is not found. *)
-    val get : configurator -> t option
+  (** Search pkg-config in PATH. Prefers the [PKG_CONFIG_PATH] environment
+      variable if set. Returns [None] if pkg-config is not found. *)
+  val get : configurator -> t option
 
-    type package_conf =
-      { libs : string list
-      ; cflags : string list
-      }
+  type package_conf =
+    { libs : string list
+    ; cflags : string list
+    }
 
-    (** [query t ~package] query pkg-config for the [package]. The package must
-        not contain a version constraint. Multiple, unversioned packages are
-        separated with spaces, for example "gtk+-3.0 gtksourceview-3.0". If set,
-        the [PKG_CONFIG_ARGN] environment variable specifies a list of arguments
-        to pass to pkg-config. Returns [None] if [package] is not available *)
-    val query : t -> package:string -> package_conf option
+  (** [query t ~package] query pkg-config for the [package]. The package must
+      not contain a version constraint. Multiple, unversioned packages are
+      separated with spaces, for example "gtk+-3.0 gtksourceview-3.0". If set,
+      the [PKG_CONFIG_ARGN] environment variable specifies a list of arguments
+      to pass to pkg-config. Returns [None] if [package] is not available *)
+  val query : t -> package:string -> package_conf option
 
-    val query_expr : t -> package:string -> expr:string -> package_conf option
-    [@@ocaml.deprecated "please use [query_expr_err]"]
+  val query_expr : t -> package:string -> expr:string -> package_conf option
+  [@@ocaml.deprecated "please use [query_expr_err]"]
 
-    (** [query_expr_err t ~package ~expr] query pkg-config for the [package].
-        [expr] may contain a version constraint, for example "gtk+-3.0 >= 3.18".
-        [package] must be just the name of the package. If [expr] is specified,
-        [package] must be specified as well. If set, the [PKG_CONFIG_ARGN]
-        environment variable specifies a list of arguments to pass to pkg-config.
-        Returns [Error error_msg] if [package] is not available *)
-    val query_expr_err
-      :  t
-      -> package:string
-      -> expr:string
-      -> (package_conf, string) result
-  end
-  with type configurator := t
+  (** [query_expr_err t ~package ~expr] query pkg-config for the [package].
+      [expr] may contain a version constraint, for example "gtk+-3.0 >= 3.18".
+      [package] must be just the name of the package. If [expr] is specified,
+      [package] must be specified as well. If set, the [PKG_CONFIG_ARGN]
+      environment variable specifies a list of arguments to pass to pkg-config.
+      Returns [Error error_msg] if [package] is not available *)
+  val query_expr_err : t -> package:string -> expr:string -> (package_conf, string) result
+end
 
 module Flags : sig
   (** [write_sexp fname s] writes the list of strings [s] to the file [fname] in

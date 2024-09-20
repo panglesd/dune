@@ -40,7 +40,37 @@ module Paths = struct
   let odoc_support ctx ~all = html_root ctx ~all ++ odoc_support_dirname
 end
 
-module Index = struct
+module Index : sig
+  type ext_ty =
+    | Relative_to_stdlib
+    | Relative_to_findlib of (int * Path.t)
+    | Local_packages
+    | Other (* plan b *)
+
+  type ty =
+    | Private_lib of string
+    | Top_dir of ext_ty
+    | Sub_dir of string
+
+  val compare_ty : ty -> ty -> ordering
+
+  type t = ty list
+
+  val of_pkg : ext_loc_maps -> Dune_lang.Package_name.t -> t
+  val odoc_dir : Context.t -> all:'a -> t -> Path.Build.t
+  val of_external_lib : ext_loc_maps -> Lib.t -> t
+  val of_local_lib : Lib.Local.t -> t
+  val of_local_package : Dune_lang.Package_name.t -> t
+  val of_external_loc : ext_loc_maps -> Ext_loc_map.key -> t option
+  val html_dir : Context.t -> all:'a -> t -> Path.Build.t
+  val obj_dir : Context.t -> all:'a -> t -> Path.Build.t
+  val mld_filename : t -> string
+  val to_dyn : ty list -> Dyn.t
+  val mld_name : t -> string
+  val mld_name_ty : ty -> string
+  val mld_path : Context.t -> all:'a -> t -> Path.Build.t
+  val is_external : t -> bool
+end = struct
   (* The index represents the position in the output HTML where the
      an artifact will be found. *)
 
@@ -134,7 +164,11 @@ module Index = struct
     | x :: _ -> mld_name_ty x
   ;;
 
-  let mld_filename index = mld_name index ^ ".mld"
+  let mld_filename index =
+    let _ = odoc_dir in
+    mld_name index ^ ".mld"
+  ;;
+
   let mld_path ctx ~all index = obj_dir ctx ~all index ++ mld_filename index
 
   let of_local_lib lib =
@@ -676,12 +710,22 @@ module Artifact : sig
   val is_visible : t -> bool
   val is_module : t -> bool
   val artifact_ty : t -> artifact_ty
+  val id : t -> string
   val reference : t -> string
   val module_name : t -> Module_name.t option
   val name : t -> string
-  val make_module : Context.t -> all:bool -> Index.t -> Path.t -> visible:bool -> t
-  val external_mld : Context.t -> Index.t -> Path.t -> t
-  val index : Context.t -> all:bool -> Index.t -> t
+
+  val make_module
+    :  Context.t
+    -> all:bool
+    -> Index.t
+    -> Path.t
+    -> visible:bool
+    -> id:string list
+    -> t
+
+  val external_mld : Context.t -> Index.t -> Path.t -> id:string list -> t
+  val index : Context.t -> all:bool -> Index.t -> id:string list -> t
 end = struct
   type artifact_ty =
     | Module of bool
@@ -693,6 +737,7 @@ end = struct
     ; html_dir : Path.Build.t
     ; html_file : Path.Build.t
     ; ty : artifact_ty
+    ; id : string list
     }
 
   let odoc_file v = v.odoc
@@ -727,6 +772,8 @@ end = struct
       sprintf "module-%s" basename
   ;;
 
+  let id _v = failwith "TODO"
+
   let module_name v =
     match v.ty with
     | Module _ ->
@@ -738,9 +785,12 @@ end = struct
   ;;
 
   let name v = Path.basename v.source |> Filename.remove_extension
-  let v ~source ~odoc ~html_dir ~html_file ~ty = { source; odoc; html_dir; html_file; ty }
 
-  let make_module ctx ~all index source ~visible =
+  let v ~source ~odoc ~html_dir ~html_file ~ty ~id =
+    { source; odoc; html_dir; html_file; ty; id }
+  ;;
+
+  let make_module ctx ~all index source ~visible ~id =
     let basename =
       Path.basename source |> Filename.remove_extension |> Stdune.String.uncapitalize
     in
@@ -752,10 +802,10 @@ end = struct
        in the name. So we declare anything with a double underscore as hidden
        in addition to anything that dune believes should not be an entry module. *)
     let visible = visible && not (String.contains_double_underscore basename) in
-    v ~source ~odoc ~html_dir ~html_file:html ~ty:(Module visible)
+    v ~source ~odoc ~html_dir ~html_file:html ~ty:(Module visible) ~id
   ;;
 
-  let int_make_mld ctx ~all index source ~is_index =
+  let int_make_mld ctx ~all index source ~is_index ~id =
     let basename = Path.basename source |> Filename.remove_extension in
     let odoc =
       (if is_index then Index.obj_dir ctx ~all index else Index.odoc_dir ctx ~all index)
@@ -765,42 +815,45 @@ end = struct
     let html =
       html_dir ++ if is_index then "index.html" else sprintf "%s.html" basename
     in
-    v ~source ~odoc ~html_dir ~html_file:html ~ty:Mld
+    v ~source ~odoc ~html_dir ~html_file:html ~ty:Mld ~id
   ;;
 
-  let external_mld ctx index source =
-    int_make_mld ctx ~all:true index source ~is_index:false
+  let external_mld ctx index source ~id =
+    int_make_mld ctx ~all:true index source ~is_index:false ~id
   ;;
 
-  let index ctx ~all index =
+  let index ctx ~all index ~id =
     let source =
       let filename = Index.mld_filename index in
       let dir = Index.obj_dir ctx ~all index in
       Path.build (dir ++ filename)
     in
-    int_make_mld ctx ~all index source ~is_index:true
+    int_make_mld ctx ~all index source ~is_index:true ~id
   ;;
 end
 
 (* A parent is always an index. Here we operate on the parent as an artifact
    to find the arguments to odoc. *)
-let parent_args parent_opt =
+let parent_id parent_opt =
   match parent_opt with
-  | None -> []
+  | None -> [ Command.Args.A "--parent-id"; A "" ]
   | Some mld ->
-    let dir = Artifact.odoc_file mld |> Path.Build.parent_exn in
-    let reference = Artifact.reference mld in
-    let odoc_file =
-      Artifact.odoc_file mld
-      |> Path.build
-      |> Dune_engine.Dep.file
-      |> Dune_engine.Dep.Set.singleton
-    in
-    [ Command.Args.A "-I"
-    ; Path (Path.build dir)
-    ; A "--parent"
-    ; A reference
-    ; Hidden_deps odoc_file
+    let id = Artifact.id mld in
+    (* let dir = Artifact.odoc_file mld |> Path.Build.parent_exn in *)
+    (* let reference = Artifact.reference mld in *)
+    (* let odoc_file = *)
+    (*   Artifact.odoc_file mld *)
+    (*   |> Path.build *)
+    (*   |> Dune_engine.Dep.file *)
+    (*   |> Dune_engine.Dep.Set.singleton *)
+    (* in *)
+    [ Command.Args.A "--parent-id"
+    ; A id
+      (* Command.Args.A "-I" *)
+      (* ; Path (Path.build dir) *)
+      (* ; A "--parent" *)
+      (* ; A reference *)
+      (* ; Hidden_deps odoc_file *)
     ]
 ;;
 
@@ -868,7 +921,7 @@ let compile_module
         let iflags =
           Command.Args.memo (odoc_include_flags ctx all maps package requires indices)
         in
-        let parent_args = parent_args parent_opt in
+        let parent_id = parent_id parent_opt in
         let quiet_arg =
           if quiet then Command.Args.A "--print-warnings=false" else Command.Args.empty
         in
@@ -885,7 +938,7 @@ let compile_module
            ; Target odoc_file
            ; Dep cmti
            ]
-           @ parent_args
+           @ parent_id
            @ [ quiet_arg ])
       in
       let file_deps =
@@ -936,11 +989,7 @@ let compile_mld sctx a ~parent_opt ~quiet ~is_index ~children =
     in
     let doc_dir = Path.Build.parent_exn (Artifact.odoc_file a) in
     let odoc_input = Artifact.source_file a in
-    let parent_args =
-      match parent_opt with
-      | None -> []
-      | _ -> parent_args parent_opt
-    in
+    let parent_id = parent_id parent_opt in
     let child_args =
       let child_args =
         List.fold_left children ~init:[] ~f:(fun args child ->
@@ -961,7 +1010,7 @@ let compile_mld sctx a ~parent_opt ~quiet ~is_index ~children =
        :: Dep odoc_input
        :: As child_args
        :: quiet_arg
-       :: parent_args)
+       :: parent_id)
   in
   let+ () = add_rule sctx run_odoc in
   odoc_file
@@ -1195,7 +1244,7 @@ let fallback_artifacts
         let visible =
           Module_name.to_string mod_name |> String.contains_double_underscore |> not
         in
-        Artifact.make_module ctx ~all:true index cmti_file ~visible)
+        Artifact.make_module ctx ~all:true index cmti_file ~visible ~id:[ "TODO" ])
     in
     [ mods, libs ]
 ;;
@@ -1227,7 +1276,7 @@ let lib_artifacts ctx all index lib modules =
          |> not
     in
     let cmti_file = Obj_dir.Module.cmti_file obj_dir ~cm_kind m in
-    Artifact.make_module ctx ~all index cmti_file ~visible :: acc)
+    Artifact.make_module ctx ~all index cmti_file ~visible ~id:[ "TODO" ] :: acc)
 ;;
 
 let ext_package_mlds (ctx : Context.t) (pkg : Package.Name.t) =
@@ -1286,7 +1335,7 @@ let pkg_artifacts sctx index pkg =
   let artifacts =
     let mlds_noindex = String.Map.filteri ~f:(fun i _ -> i <> "index") mlds_map in
     String.Map.values mlds_noindex
-    |> List.map ~f:(fun mld -> Artifact.external_mld ctx index mld)
+    |> List.map ~f:(fun mld -> Artifact.external_mld ctx index mld ~id:[ "TODO" ])
   in
   let index_file = String.Map.find mlds_map "index" in
   index_file, artifacts
@@ -1368,7 +1417,7 @@ module Index_tree = struct
     List.fold_left indexes ~init:(Br (empty, [])) ~f:add_one
   ;;
 
-  let of_index_info =
+  let of_index_infos =
     let empty =
       { artifact_sets = []
       ; predefined_index = None
@@ -1753,19 +1802,21 @@ let full_tree sctx ~all =
       let+ ii = index_info_of_lib sctx all (lib :> Lib.t) in
       List.rev_append ii acc)
   in
-  Ext_loc_map.foldi ~init:indexes categorized.externals ~f:(fun loc ty acc ->
-    let* acc = acc in
-    match ty with
-    | Dune_with_modules (_, lib) ->
-      let+ ii = index_info_of_lib sctx all lib in
-      List.rev_append ii acc
-    | Fallback fallback ->
-      let+ ii =
-        index_info_of_external_fallback (Super_context.context sctx) loc fallback
-      in
-      List.rev_append ii acc
-    | Nothing -> Memo.return acc)
-  >>| Index_tree.of_index_info
+  let index_infos =
+    Ext_loc_map.foldi ~init:indexes categorized.externals ~f:(fun loc ty acc ->
+      let* acc = acc in
+      match ty with
+      | Dune_with_modules (_, lib) ->
+        let+ ii = index_info_of_lib sctx all lib in
+        List.rev_append ii acc
+      | Fallback fallback ->
+        let+ ii =
+          index_info_of_external_fallback (Super_context.context sctx) loc fallback
+        in
+        List.rev_append ii acc
+      | Nothing -> Memo.return acc)
+  in
+  index_infos >>| Index_tree.of_index_infos
 ;;
 
 (* Here are the rules that operate on the Index_tree, for compiling and linking
@@ -1775,10 +1826,11 @@ let full_tree sctx ~all =
 let hierarchical_index_rules sctx ~all (tree : Index_tree.info Index_tree.t) =
   let ctx = Super_context.context sctx in
   let rec inner index (Index_tree.Br ((ii : Index_tree.info), children) as t) =
-    let mld = Artifact.index ctx ~all index in
+    let mld = Artifact.index ctx ~all index ~id:[ "TODO" ] in
     let extra_children =
-      let subindexes = List.map children ~f:(function x, _ -> x :: index) in
-      List.map ~f:(Artifact.index ctx ~all) subindexes
+      children
+      |> List.map ~f:(function x, _ -> x :: index)
+      |> List.map ~f:(Artifact.index ctx ~all ~id:[ "TODO" ])
     in
     let quiet = false in
     let* () =
@@ -1798,7 +1850,7 @@ let hierarchical_index_rules sctx ~all (tree : Index_tree.info Index_tree.t) =
       let parent_opt =
         match index with
         | [] -> None
-        | _ :: idx -> Some (Artifact.index ctx ~all idx)
+        | _ :: idx -> Some (Artifact.index ctx ~all idx ~id:[ "TODO" ])
       in
       let all_artifacts = Index_tree.all_artifacts ii in
       compile_mld
@@ -1825,7 +1877,7 @@ let hierarchical_index_rules sctx ~all (tree : Index_tree.info Index_tree.t) =
           |> List.rev
           |> List.tl
         in
-        List.map all_descendent_indices ~f:(Artifact.index ctx ~all)
+        List.map all_descendent_indices ~f:(Artifact.index ctx ~all ~id:[ "TODO" ])
       in
       let all_artifacts = Index_tree.all_artifacts ii in
       link_odoc_rules
@@ -1847,7 +1899,7 @@ let hierarchical_html_rules sctx all tree ~search_db =
   Index_tree.fold ~init:(Memo.return []) tree ~f:(fun index (ii : Index_tree.info) dirs ->
     let* dirs = dirs in
     let artifacts =
-      let index_artifact = Artifact.index ctx ~all:true index in
+      let index_artifact = Artifact.index ctx ~all:true index ~id:[ "TODO" ] in
       let all_artifacts = Index_tree.all_artifacts ii in
       List.filter ~f:Artifact.is_visible (index_artifact :: all_artifacts)
     in
@@ -1875,7 +1927,7 @@ let hierarchical_odoc_rules sctx ~all tree =
     let libs = Lib.Map.keys ii.libs in
     let all_artifacts = Index_tree.all_artifacts ii in
     let* () =
-      let parent = Artifact.index ctx ~all index in
+      let parent = Artifact.index ctx ~all index ~id:[ "TODO" ] in
       Memo.List.iter
         ~f:(fun a ->
           compile_odocs
@@ -1939,7 +1991,7 @@ let setup_all_html_rules sctx ~all =
       Index_tree.fold tree ~init:([], []) ~f:(fun index ii acc ->
         let externals, odocls = acc in
         let is_external = Index.is_external index in
-        let index_artifact = Artifact.index ctx ~all:true index in
+        let index_artifact = Artifact.index ctx ~all:true index ~id:[ "TODO" ] in
         let new_artifacts =
           index_artifact :: Index_tree.all_artifacts ii
           |> List.filter_map ~f:(fun a ->
@@ -1953,7 +2005,7 @@ let setup_all_html_rules sctx ~all =
   in
   let+ () =
     let html =
-      let artifact = Artifact.index ctx ~all [] in
+      let artifact = Artifact.index ctx ~all [] ~id:[ "TODO" ] in
       Artifact.html_file artifact :: static_html_rule ctx ~all
       |> List.map ~f:(fun b -> Path.build b)
     in
