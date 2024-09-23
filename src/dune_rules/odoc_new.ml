@@ -56,20 +56,28 @@ module Index : sig
 
   type t = ty list
 
+  (** {1 Ways to create an index} *)
+
   val of_pkg : ext_loc_maps -> Dune_lang.Package_name.t -> t
-  val odoc_dir : Context.t -> all:'a -> t -> Path.Build.t
   val of_external_lib : ext_loc_maps -> Lib.t -> t
   val of_local_lib : Lib.Local.t -> t
   val of_local_package : Dune_lang.Package_name.t -> t
   val of_external_loc : ext_loc_maps -> Ext_loc_map.key -> t option
+
+  (** {1 Accessing properties} *)
+
+  val odoc_dir : Context.t -> all:'a -> t -> Path.Build.t
   val html_dir : Context.t -> all:'a -> t -> Path.Build.t
   val obj_dir : Context.t -> all:'a -> t -> Path.Build.t
   val mld_filename : t -> string
-  val to_dyn : ty list -> Dyn.t
   val mld_name : t -> string
   val mld_name_ty : ty -> string
   val mld_path : Context.t -> all:'a -> t -> Path.Build.t
   val is_external : t -> bool
+
+  (** {1 Dynamic respresentation} *)
+
+  val to_dyn : t -> Dyn.t
 end = struct
   (* The index represents the position in the output HTML where the
      an artifact will be found. *)
@@ -703,6 +711,7 @@ module Artifact : sig
   type t
 
   val odoc_file : t -> Path.Build.t
+  val odoc_id : t -> string list
   val odocl_file : t -> Path.Build.t
   val html_file : t -> Path.Build.t
   val html_dir : t -> Path.Build.t
@@ -745,6 +754,7 @@ end = struct
   let source_file v = v.source
   let html_file v = v.html_file
   let html_dir v = v.html_dir
+  let odoc_id v = v.id
 
   let is_visible v =
     match v.ty with
@@ -831,6 +841,8 @@ end = struct
     int_make_mld ctx ~all index source ~is_index:true ~id
   ;;
 end
+
+let () = ignore Artifact.odoc_id
 
 (* A parent is always an index. Here we operate on the parent as an artifact
    to find the arguments to odoc. *)
