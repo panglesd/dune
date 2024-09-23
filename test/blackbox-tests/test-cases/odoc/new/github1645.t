@@ -27,9 +27,22 @@ built. See #1645.
 
   $ dune build @install
   $ dune build @doc-new
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
+  File "_doc_new/odoc/local/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/page-local.odoc
+  File "_doc_new/odoc/local/l/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/l/page-l.odoc
+  File "_doc_new/odoc/local/l/one/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/l/one/page-one.odoc
+  File "_doc_new/odoc/local/l/two/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/l/two/page-two.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/camlinternalFormatBasics.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/page-stdlib.odoc
+  [1]

@@ -26,9 +26,39 @@ variable, and can rebuild as needed.
   > }
 
   $ dune build @doc-new
+  File "_doc_new/odoc/local/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/page-local.odoc
+  File "_doc_new/odoc/local/l/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/l/page-l.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/camlinternalFormatBasics.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/page-stdlib.odoc
+  [1]
   $ detect _build/default/_doc_new/html/docs/local/l/L/index.html
-  it is ocaml
+  grep: _build/default/_doc_new/html/docs/local/l/L/index.html: No such file or directory
+  grep: _build/default/_doc_new/html/docs/local/l/L/index.html: No such file or directory
+  it is unknown
 
   $ ODOC_SYNTAX=re dune build @doc-new
+  File "_doc_new/odoc/local/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/page-local.odoc
+  File "_doc_new/odoc/local/l/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/local/l/page-l.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/camlinternalFormatBasics.odoc
+  File "_doc_new/odoc/stdlib/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc_new/odoc/stdlib/page-stdlib.odoc
+  [1]
   $ detect _build/default/_doc_new/html/docs/local/l/L/index.html
-  it is reason
+  grep: _build/default/_doc_new/html/docs/local/l/L/index.html: No such file or directory
+  grep: _build/default/_doc_new/html/docs/local/l/L/index.html: No such file or directory
+  it is unknown
