@@ -16,50 +16,50 @@ To make the test not depend on whether it is installed, we filter the output.
 
 This test if `.odocl` files are generated
   $ find . -name '*.odocl' | sort -n | scrub_num
-  ./_build/default/_doc_new/index/local/bar/page-bar.odocl
-  ./_build/default/_doc_new/index/local/foo/byte/page-byte.odocl
-  ./_build/default/_doc_new/index/local/foo/page-foo.odocl
-  ./_build/default/_doc_new/index/local/page-local.odocl
-  ./_build/default/_doc_new/index/page-docs.odocl
-  ./_build/default/_doc_new/index/stdlib/page-stdlib.odocl
   ./_build/default/_doc_new/odoc/local/bar/bar.odocl
+  ./_build/default/_doc_new/odoc/local/bar/page-bar.odocl
   ./_build/default/_doc_new/odoc/local/foo/byte/foo_byte.odocl
+  ./_build/default/_doc_new/odoc/local/foo/byte/page-byte.odocl
   ./_build/default/_doc_new/odoc/local/foo/foo.odocl
   ./_build/default/_doc_new/odoc/local/foo/foo2.odocl
+  ./_build/default/_doc_new/odoc/local/foo/page-foo.odocl
+  ./_build/default/_doc_new/odoc/local/page-local.odocl
+  ./_build/default/_doc_new/odoc/page-docs.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalFormat.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalFormatBasics.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalLazy.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalMod.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalOO.odocl
+  ./_build/default/_doc_new/odoc/stdlib/page-stdlib.odocl
   ./_build/default/_doc_new/odoc/stdlib/std_exit.odocl
   ./_build/default/_doc_new/odoc/stdlib/stdlib.odocl
 
 This test if the sherlodoc js files are generated
   $ find . -name '*.js' | sort -n
-  ./_build/default/_doc_new/html/docs/db.js
+  ./_build/default/_doc_new/html/db.js
   ./_build/default/_doc_new/html/docs/odoc.support/highlight.pack.js
   ./_build/default/_doc_new/html/docs/odoc.support/katex.min.js
   ./_build/default/_doc_new/html/docs/odoc.support/odoc_search.js
-  ./_build/default/_doc_new/html/docs/sherlodoc.js
+  ./_build/default/_doc_new/html/sherlodoc.js
 
-  $ cat ./_build/default/_doc_new/html/docs/db.js | scrub_num
+  $ cat ./_build/default/_doc_new/html/db.js | scrub_num
   /* Sherlodoc DB for: */
-  /*   - ../../odoc/stdlib/camlinternalFormat.odocl */
-  /*   - ../../odoc/stdlib/camlinternalFormatBasics.odocl */
-  /*   - ../../odoc/stdlib/camlinternalLazy.odocl */
-  /*   - ../../odoc/stdlib/camlinternalMod.odocl */
-  /*   - ../../odoc/stdlib/camlinternalOO.odocl */
-  /*   - ../../odoc/stdlib/std_exit.odocl */
-  /*   - ../../odoc/stdlib/stdlib.odocl */
-  /*   - --favored ../../index/page-docs.odocl */
-  /*   - --favored ../../index/local/page-local.odocl */
-  /*   - --favored ../../odoc/local/bar/bar.odocl */
-  /*   - --favored ../../index/local/bar/page-bar.odocl */
-  /*   - --favored ../../odoc/local/foo/foo2.odocl */
-  /*   - --favored ../../odoc/local/foo/foo.odocl */
-  /*   - --favored ../../index/local/foo/page-foo.odocl */
-  /*   - --favored ../../odoc/local/foo/byte/foo_byte.odocl */
-  /*   - --favored ../../index/local/foo/byte/page-byte.odocl */
+  /*   - ../odoc/stdlib/camlinternalFormat.odocl */
+  /*   - ../odoc/stdlib/camlinternalFormatBasics.odocl */
+  /*   - ../odoc/stdlib/camlinternalLazy.odocl */
+  /*   - ../odoc/stdlib/camlinternalMod.odocl */
+  /*   - ../odoc/stdlib/camlinternalOO.odocl */
+  /*   - ../odoc/stdlib/std_exit.odocl */
+  /*   - ../odoc/stdlib/stdlib.odocl */
+  /*   - --favored ../odoc/page-docs.odocl */
+  /*   - --favored ../odoc/local/page-local.odocl */
+  /*   - --favored ../odoc/local/bar/bar.odocl */
+  /*   - --favored ../odoc/local/bar/page-bar.odocl */
+  /*   - --favored ../odoc/local/foo/foo2.odocl */
+  /*   - --favored ../odoc/local/foo/foo.odocl */
+  /*   - --favored ../odoc/local/foo/page-foo.odocl */
+  /*   - --favored ../odoc/local/foo/byte/foo_byte.odocl */
+  /*   - --favored ../odoc/local/foo/byte/page-byte.odocl */
   $ dune runtest
   <!DOCTYPE html>
   <html xmlns="http://www.w3.org/1999/xhtml">

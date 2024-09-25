@@ -44,8 +44,6 @@ Without the --display-separate-messages flag, no blank line is put
 between error messages for different files, as expected.
 
   $ dune build
-  File "c.ml", line 3, characters 0-0:
-  Error: Syntax error
   File "a.ml", line 1, characters 6-7:
   1 | let f x y z = ()
             ^
@@ -65,6 +63,8 @@ between error messages for different files, as expected.
                ^
   Error: This expression has type int but an expression was expected of type
            unit
+  File "c.ml", line 3, characters 0-0:
+  Error: Syntax error
   [1]
 
 With the --display-separate-messages flag, a blank line is put between
@@ -73,9 +73,6 @@ the first message, and no blank line is inserted after the last
 message either.
 
   $ dune build --display-separate-messages
-  File "c.ml", line 3, characters 0-0:
-  Error: Syntax error
-  
   File "a.ml", line 1, characters 6-7:
   1 | let f x y z = ()
             ^
@@ -96,4 +93,7 @@ message either.
                ^
   Error: This expression has type int but an expression was expected of type
            unit
+  
+  File "c.ml", line 3, characters 0-0:
+  Error: Syntax error
   [1]
