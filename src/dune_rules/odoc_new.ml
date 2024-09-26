@@ -29,15 +29,17 @@ let is_public lib =
 ;;
 
 module Paths = struct
-  let odoc_support_dirname = "docs/odoc.support"
-
   let root (context : Context.t) =
     let sub = "_doc_new" in
     Path.Build.relative (Context.build_dir context) sub
   ;;
 
   let html_root ctx = root ctx ++ "html"
-  let odoc_support ctx = html_root ctx ++ odoc_support_dirname
+
+  let odoc_support ctx =
+    let odoc_support_dirname = "docs/odoc.support" in
+    html_root ctx ++ odoc_support_dirname
+  ;;
 end
 
 module Odoc_parent_id : sig
@@ -387,7 +389,34 @@ let libs_maps_def =
 
 let libs_maps_general ctx libs = Memo.exec libs_maps_def (ctx, libs)
 
-module Classify = struct
+module Classify : sig
+  (** Here we classify top-level dirs in the findlib paths. They are either
+      packages built by dune for which we have all the info we need -
+      a [Modules.t] value - or there exists one (or more!) libraries within
+      the directory that don't satisfy this, and these are labelled
+      fallback directories. *)
+
+  (** The fallback is simply a map of subdirectory to list of libraries
+      found in that subdir. This is the value returned by [libs_of_local_dir] *)
+  type fallback = { libs : Lib.t Lib_name.Map.t }
+
+  val fallback_equal : fallback -> fallback -> bool
+  val fallback_to_dyn : fallback -> Dyn.t
+  val fallback_hash : fallback -> int
+
+  type local_dir_type =
+    | Nothing
+    | Dune_with_modules of (Package.Name.t * Lib.t)
+    | Fallback of fallback
+
+  (** We need to know if every single library within a findlib package dir is
+      confined to its own subdirectory (ie, no two libraries are found in the
+      same dir), and that we have information about the modules of every
+      library within the tree. If this is not the case, we'll fall back to a
+      less specific mode that simply documents the modules found within each
+      dir without assigning them a library. *)
+  val classify_location : ext_loc_maps -> Ext_loc_map.key -> local_dir_type Memo.t
+end = struct
   (* Here we classify top-level dirs in the findlib paths. They are either
      packages built by dune for which we have all the info we need -
      a [Modules.t] value - or there exists one (or more!) libraries within
@@ -453,7 +482,31 @@ module Classify = struct
   ;;
 end
 
-module Valid = struct
+module Valid : sig
+  (** These functions return a allowlist of libraries and packages that
+      should be documented. There is one single function that performs this
+      task because there needs to be an exact correspondence at various points
+      in the process - e.g. the indexes need to know exactly which libraries will
+      be documented and where. *)
+
+  val libs_maps : Context.t -> all:bool -> ext_loc_maps Memo.t
+  val get : Context.t -> all:bool -> (Lib.t list * Dune_lang.Package_name.t list) Memo.t
+  val filter_libs : Context.t -> all:bool -> Lib.t list -> Lib.t list Memo.t
+
+  val filter_fallback_libs
+    :  Context.t
+    -> all:bool
+    -> Lib.t Lib_name.Map.t
+    -> Lib.t Lib_name.Map.t Memo.t
+
+  type categorized =
+    { packages : Package.Name.Set.t
+    ; local : Lib.Local.t Lib_name.Map.t
+    ; externals : Classify.local_dir_type Ext_loc_map.t
+    }
+
+  val get_categorized : Context.t -> bool -> categorized Memo.t
+end = struct
   (* These functions return a allowlist of libraries and packages that
      should be documented. There is one single function that performs this
      task because there needs to be an exact correspondence at various points
@@ -1664,34 +1717,35 @@ let toplevel_index_contents (* t *) () =
 let full_tree sctx ~all =
   let ctx = Super_context.context sctx in
   let* categorized = Valid.get_categorized ctx all in
-  let indexes =
-    let indexes =
-      Package.Name.Set.fold categorized.packages ~init:(Memo.return []) ~f:(fun pkg acc ->
-        let* acc = acc in
-        let+ ii = index_info_of_pkg sctx all pkg in
-        List.rev_append ii acc)
-    in
-    Lib_name.Map.fold ~init:indexes categorized.local ~f:(fun lib acc ->
-      let* acc = acc in
-      let+ ii = index_info_of_lib sctx all (lib :> Lib.t) in
-      List.rev_append ii acc)
-  in
-  let index_infos =
-    Ext_loc_map.foldi ~init:indexes categorized.externals ~f:(fun loc ty acc ->
-      let* acc = acc in
-      match ty with
-      | Dune_with_modules (_, lib) ->
-        let+ ii = index_info_of_lib sctx all lib in
-        List.rev_append ii acc
-      | Fallback fallback ->
-        let+ ii =
-          index_info_of_external_fallback (Super_context.context sctx) loc fallback
-        in
-        List.rev_append ii acc
-      | Nothing -> Memo.return acc)
-  in
-  index_infos (* >>| Index_tree.of_index_infos *)
+  Memo.return []
+  |> fun init ->
+  Package.Name.Set.fold categorized.packages ~init ~f:(fun pkg acc ->
+    let* acc = acc in
+    let+ ii = index_info_of_pkg sctx all pkg in
+    List.rev_append ii acc)
+  |> fun init ->
+  Lib_name.Map.fold ~init categorized.local ~f:(fun lib acc ->
+    let* acc = acc in
+    let+ ii = index_info_of_lib sctx all (lib :> Lib.t) in
+    List.rev_append ii acc)
+  |> fun init ->
+  Ext_loc_map.foldi ~init categorized.externals ~f:(fun loc ty acc ->
+    let* acc = acc in
+    match ty with
+    | Dune_with_modules (_, lib) ->
+      let+ ii = index_info_of_lib sctx all lib in
+      List.rev_append ii acc
+    | Fallback fallback ->
+      let+ ii =
+        index_info_of_external_fallback (Super_context.context sctx) loc fallback
+      in
+      List.rev_append ii acc
+    | Nothing -> Memo.return acc)
 ;;
+
+(* in *)
+(* indexes *)
+(* >>| Index_tree.of_index_infos *)
 
 (* Here are the rules that operate on the Index_tree, for compiling and linking
    indexes, compiling and linking the artifacts of a package/library/fallback dir,
