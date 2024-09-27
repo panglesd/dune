@@ -324,7 +324,8 @@ end = struct
                 in
                 libs :: acc))
           in
-          List.concat libs_list
+          libs_list
+          |> List.concat
           |> List.concat
           |> Lib.Set.of_list
           |> Lib.Set.to_list
