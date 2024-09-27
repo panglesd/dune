@@ -2,6 +2,13 @@ open Import
 open Memo.O
 module Ext_loc_map = Map.Make (Dune_package.External_location)
 
+type package =
+  { name : Package.Name.t
+  ; libs : Lib.t list
+  ; mlds : Path.t list
+  ; is_external : bool
+  }
+
 type ext_loc_maps =
   { findlib_paths : int Path.Map.t
   ; loc_of_pkg : Dune_package.External_location.t Package.Name.Map.t
@@ -117,27 +124,29 @@ end = struct
   ;;
 end
 
-(* Returns a [ext_loc_maps] value that contains all the information
-   needed to find the location of a library or package stored externally
-   to the current workspace.
+(* Returns a [ext_loc_maps] value that contains all the information needed to
+   find the location of a library or package stored externally to the current
+   workspace.
 
-   Note that this list may contain entries for libraries that are also
-   in the dune workspace, if they happen to be installed elsewhere. These
-   are filtered out in the `Valid` module below, and this general function
-   should not be used.
+   Note that this list may contain entries for libraries that are also in the
+   dune workspace, if they happen to be installed elsewhere. These are filtered
+   out in the `Valid` module below, and this general function should not be
+   used.
 
-   Note: There are two reasons why we have a fallback mechanism for
-   non-dune installed packages - first that there is more than one library
-   in a particular directory, and the second is that we don't have a
-   [Modules.t] value for the library. They essentially boil down to the
-   problem that it's very hard to know which modules correspond to which
-   library given a simple include path. Introspecting the cmas isn't
-   sufficient because of the existence of cmi-only modules. A potential
-   improvement is to handle the case of only one library per directory,
-   though this is likely only of limited benefit. If we do this, we would
-   need to modify this function to work on _all_ packages in the findlib
-   directory so we can correctly identify those directories containing
-   multiple libs.
+   Note note: This is probably fine to use when all the libs passed as input are
+   external libs
+
+   Note: There are two reasons why we have a fallback mechanism for non-dune
+   installed packages - first that there is more than one library in a
+   particular directory, and the second is that we don't have a [Modules.t]
+   value for the library. They essentially boil down to the problem that it's
+   very hard to know which modules correspond to which library given a simple
+   include path. Introspecting the cmas isn't sufficient because of the
+   existence of cmi-only modules. A potential improvement is to handle the case
+   of only one library per directory, though this is likely only of limited
+   benefit. If we do this, we would need to modify this function to work on
+   _all_ packages in the findlib directory so we can correctly identify those
+   directories containing multiple libs.
 *)
 let libs_maps_def =
   let f (ctx, libs) =
@@ -464,4 +473,20 @@ end = struct
   ;;
 
   let get_categorized ctx all = Memo.exec get_categorized_memo (ctx, all)
+
+  module Pkgmap = Dune_lang.Package_name.Map
+
+  let get_t ctx all =
+    let+ { local; packages; externals } = get_categorized ctx all in
+    let pkgmap =
+      Lib_name.Map.fold local ~init:Pkgmap.empty ~f:(fun lib acc ->
+        let package = Option.value_exn @@ Lib_info.package (Lib.Local.info lib) in
+        let lib = Lib.Local.to_lib lib in
+        Pkgmap.update acc package ~f:(function
+          | None -> Some [ lib ]
+          | Some libs -> Some (lib :: libs)))
+    in
+    Pkgmap.foldi pkgmap ~init:[] ~f:(fun package_name libs acc ->
+      { name = package_name; libs; mlds = []; is_external = false } :: acc)
+  ;;
 end
