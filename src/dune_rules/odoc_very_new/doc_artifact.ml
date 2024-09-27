@@ -1,6 +1,9 @@
 open Import
 open Doc_index
 
+let ( ++ ) = Path.Build.relative
+
+
 (* An artifact is a single compilation unit (module) or mld file, and contains
    all info to find the html output, the odoc file, the source, whether it's
    hidden or not, to construct a reference to it, to find the index under

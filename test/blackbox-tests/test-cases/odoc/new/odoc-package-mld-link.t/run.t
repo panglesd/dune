@@ -5,7 +5,7 @@ This test case is based on code provided by @vphantom, ocaml/dune#2007
 
   $ dune build @doc-new --verbose
   Shared cache: enabled
-  Shared cache location: /home/panglesd/.cache/dune/db
+  Shared cache location: /home/emile/.cache/dune/db
   Workspace root:
   $TESTCASE_ROOT
   Dune context:
@@ -19,17 +19,17 @@ This test case is based on code provided by @vphantom, ocaml/dune#2007
    }
   Actual targets:
   - recursive alias @doc-new
-  Running[1]: (cd _build/default && /home/panglesd/code/dune/_opam/bin/odoc support-files -o _doc_new/html/docs/odoc.support)
+  Running[1]: (cd _build/default && /home/emile/.opam/sherlodoc/bin/odoc support-files -o _doc_new/html/docs/odoc.support)
   Argh lib ex loc: stdlib
   Argh lib ex loc: stdlib
-  Running[2]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/panglesd/code/dune/_opam/bin/odoc compile -o page-otherpage.odoc ../../../../otherpage.mld --output-dir ../.. --parent-id local/odoc_page_link_bug)
-  Running[3]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/panglesd/code/dune/_opam/bin/odoc compile -o page-odoc_page_link_bug.odoc odoc_page_link_bug.mld --output-dir ../.. --parent-id local/odoc_page_link_bug)
-  Running[4]: (cd _build/default/_doc_new/html && /home/panglesd/code/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc js sherlodoc.js)
-  Running[5]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/panglesd/code/dune/_opam/bin/odoc link -I . -I ../../other/stdlib -o page-otherpage.odocl page-otherpage.odoc)
-  Running[6]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/panglesd/code/dune/_opam/bin/odoc link -I . -I ../../other/stdlib -o page-odoc_page_link_bug.odocl page-odoc_page_link_bug.odoc)
-  Running[7]: (cd _build/default/_doc_new/html && /home/panglesd/code/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc index --favoured ../odoc/local/odoc_page_link_bug/page-odoc_page_link_bug.odocl --favoured ../odoc/local/odoc_page_link_bug/page-otherpage.odocl --favoured-prefixes '""' --format=js --db db.js)
-  Running[8]: (cd _build/default/_doc_new/html && /home/panglesd/code/dune/_opam/bin/odoc html-generate -o . --search-uri db.js --search-uri sherlodoc.js --support-uri docs/odoc.support --theme-uri docs/odoc.support ../odoc/local/odoc_page_link_bug/page-odoc_page_link_bug.odocl)
-  Running[9]: (cd _build/default/_doc_new/html && /home/panglesd/code/dune/_opam/bin/odoc html-generate -o . --search-uri db.js --search-uri sherlodoc.js --support-uri docs/odoc.support --theme-uri docs/odoc.support ../odoc/local/odoc_page_link_bug/page-otherpage.odocl)
+  Running[2]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/emile/.opam/sherlodoc/bin/odoc compile -o page-otherpage.odoc ../../../../otherpage.mld --output-dir ../.. --parent-id local/odoc_page_link_bug)
+  Running[3]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/emile/.opam/sherlodoc/bin/odoc compile -o page-odoc_page_link_bug.odoc odoc_page_link_bug.mld --output-dir ../.. --parent-id local/odoc_page_link_bug)
+  Running[4]: (cd _build/default/_doc_new/html && /home/emile/Projects/ocaml/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc js sherlodoc.js)
+  Running[5]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/emile/.opam/sherlodoc/bin/odoc link -I . -I ../../other/stdlib -o page-otherpage.odocl page-otherpage.odoc)
+  Running[6]: (cd _build/default/_doc_new/odoc/local/odoc_page_link_bug && /home/emile/.opam/sherlodoc/bin/odoc link -I . -I ../../other/stdlib -o page-odoc_page_link_bug.odocl page-odoc_page_link_bug.odoc)
+  Running[7]: (cd _build/default/_doc_new/html && /home/emile/Projects/ocaml/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc index --favoured ../odoc/local/odoc_page_link_bug/page-odoc_page_link_bug.odocl --favoured ../odoc/local/odoc_page_link_bug/page-otherpage.odocl --favoured-prefixes '""' --format=js --db db.js)
+  Running[8]: (cd _build/default/_doc_new/html && /home/emile/.opam/sherlodoc/bin/odoc html-generate -o . --search-uri db.js --search-uri sherlodoc.js --support-uri docs/odoc.support --theme-uri docs/odoc.support ../odoc/local/odoc_page_link_bug/page-odoc_page_link_bug.odocl)
+  Running[9]: (cd _build/default/_doc_new/html && /home/emile/.opam/sherlodoc/bin/odoc html-generate -o . --search-uri db.js --search-uri sherlodoc.js --support-uri docs/odoc.support --theme-uri docs/odoc.support ../odoc/local/odoc_page_link_bug/page-otherpage.odocl)
   Error: No rule found for _doc_new/html/docs.html
   -> required by alias _doc_new/html/doc-new
   -> required by alias doc-new

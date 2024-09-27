@@ -20,9 +20,10 @@ file-watching mode.
   $ start_dune
 
   $ build x.exe
-  Success
+  Timed out
   $ _build/default/x.exe
-  Hello, World
+  _build/default/x.exe: Permission denied
+  [126]
 
 Now let's make [lib/a.ml] depend on [lib/b.ml]. It doesn't work!
 

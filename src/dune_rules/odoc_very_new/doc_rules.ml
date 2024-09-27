@@ -1,5 +1,6 @@
 open Import
 open Memo.O
+module Gen_rules = Build_config.Gen_rules
 open Doc_index
 open Doc_index_tree
 
@@ -27,7 +28,7 @@ module Dep : sig
     These dependencies may be used using the [deps] function *)
   val setup_deps : Context.t -> Index.t -> Path.Set.t -> unit Memo.t
 end = struct
-  let html_alias dir = Alias.make Alias0.doc_new ~dir
+  let html_alias dir = Alias.make Alias0.doc_very_new ~dir
   let alias = Alias.make (Alias.Name.of_string ".odoc-all")
 
   let deps ctx maps valid_libs pkg requires =
@@ -706,7 +707,7 @@ let gen_project_rules sctx project =
       Path.Build.append_source (Context.build_dir ctx) pkg_dir
     in
     let register =
-      let alias = Alias.make Alias0.doc_new ~dir in
+      let alias = Alias.make Alias0.doc_very_new ~dir in
       fun () ->
         let top_alias = Dep.html_alias (Index.html_dir ctx []) in
         Dune_engine.Dep.alias top_alias

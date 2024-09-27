@@ -1,42 +1,54 @@
 This test generates documentation using odoc for a library:
+  $ ls
+  bar.ml
+  bar.opam
+  dune
+  dune-project
+  foo.ml
+  foo.opam
+  foo2.ml
+  foo3.ml
+  foo_byte.ml
+
+  $ dune build @doc-very-new
+  Error: Multiple rules generated for
+  _build/default/_doc_very_new/html/local/bar/bar.html:
+  - <internal location>
+  - <internal location>
+  -> required by alias _doc_very_new/html/doc-very-new
+  -> required by alias doc-very-new
+  Error: Multiple rules generated for
+  _build/default/_doc_very_new/html/local/foo/foo.html:
+  - <internal location>
+  - <internal location>
+  -> required by alias _doc_very_new/html/doc-very-new
+  -> required by alias doc-very-new
+  Error: Multiple rules generated for
+  _build/default/_doc_very_new/odoc/local/bar/bar.mld:
+  - <internal location>
+  - <internal location>
+  -> required by _build/default/_doc_very_new/html/db.js
+  -> required by
+     _build/default/_doc_very_new/html/stdlib/CamlinternalFormat/index.html
+  -> required by alias _doc_very_new/html/stdlib/doc-very-new
+  -> required by alias _doc_very_new/html/doc-very-new
+  -> required by alias doc-very-new
+  Error: Multiple rules generated for
+  _build/default/_doc_very_new/odoc/local/foo/foo.mld:
+  - <internal location>
+  - <internal location>
+  -> required by _build/default/_doc_very_new/html/db.js
+  -> required by
+     _build/default/_doc_very_new/html/stdlib/CamlinternalFormat/index.html
+  -> required by alias _doc_very_new/html/stdlib/doc-very-new
+  -> required by alias _doc_very_new/html/doc-very-new
+  -> required by alias doc-very-new
+  Error: No rule found for _doc_very_new/html/docs.html
+  -> required by alias _doc_very_new/html/doc-very-new
+  -> required by alias doc-very-new
+  [1]
 
   $ dune build @doc-new
-  Error: Multiple rules generated for
-  _build/default/_doc_new/html/local/bar/bar.html:
-  - <internal location>
-  - <internal location>
-  -> required by alias _doc_new/html/doc-new
-  -> required by alias doc-new
-  Error: Multiple rules generated for
-  _build/default/_doc_new/html/local/foo/foo.html:
-  - <internal location>
-  - <internal location>
-  -> required by alias _doc_new/html/doc-new
-  -> required by alias doc-new
-  Error: Multiple rules generated for
-  _build/default/_doc_new/odoc/local/bar/bar.mld:
-  - <internal location>
-  - <internal location>
-  -> required by _build/default/_doc_new/html/db.js
-  -> required by
-     _build/default/_doc_new/html/stdlib/CamlinternalFormat/index.html
-  -> required by alias _doc_new/html/stdlib/doc-new
-  -> required by alias _doc_new/html/doc-new
-  -> required by alias doc-new
-  Error: Multiple rules generated for
-  _build/default/_doc_new/odoc/local/foo/foo.mld:
-  - <internal location>
-  - <internal location>
-  -> required by _build/default/_doc_new/html/db.js
-  -> required by
-     _build/default/_doc_new/html/stdlib/CamlinternalFormat/index.html
-  -> required by alias _doc_new/html/stdlib/doc-new
-  -> required by alias _doc_new/html/doc-new
-  -> required by alias doc-new
-  Error: No rule found for _doc_new/html/docs.html
-  -> required by alias _doc_new/html/doc-new
-  -> required by alias doc-new
-  [1]
 
 We index the compiler directory (+ocaml), in which num is optionally present.
 To make the test not depend on whether it is installed, we filter the output.
@@ -52,21 +64,43 @@ To make the test not depend on whether it is installed, we filter the output.
 
 This test if `.odocl` files are generated
   $ find . -name '*.odocl' | sort -n | scrub_num
+  ./_build/default/_doc_new/index/local/bar/page-bar.odocl
+  ./_build/default/_doc_new/index/local/foo/byte/page-byte.odocl
+  ./_build/default/_doc_new/index/local/foo/page-foo.odocl
+  ./_build/default/_doc_new/index/local/page-local.odocl
+  ./_build/default/_doc_new/index/page-docs.odocl
+  ./_build/default/_doc_new/index/stdlib/page-stdlib.odocl
+  ./_build/default/_doc_new/odoc/local/bar/bar.odocl
+  ./_build/default/_doc_new/odoc/local/foo/byte/foo_byte.odocl
+  ./_build/default/_doc_new/odoc/local/foo/foo.odocl
+  ./_build/default/_doc_new/odoc/local/foo/foo2.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalFormat.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalFormatBasics.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalLazy.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalMod.odocl
   ./_build/default/_doc_new/odoc/stdlib/camlinternalOO.odocl
-  ./_build/default/_doc_new/odoc/stdlib/page-stdlib.odocl
   ./_build/default/_doc_new/odoc/stdlib/std_exit.odocl
   ./_build/default/_doc_new/odoc/stdlib/stdlib.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/camlinternalFormat.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/camlinternalFormatBasics.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/camlinternalLazy.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/camlinternalMod.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/camlinternalOO.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/page-stdlib.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/std_exit.odocl
+  ./_build/default/_doc_very_new/odoc/stdlib/stdlib.odocl
 
 This test if the sherlodoc js files are generated
   $ find . -name '*.js' | sort -n
+  ./_build/default/_doc_new/html/docs/db.js
   ./_build/default/_doc_new/html/docs/odoc.support/highlight.pack.js
   ./_build/default/_doc_new/html/docs/odoc.support/katex.min.js
   ./_build/default/_doc_new/html/docs/odoc.support/odoc_search.js
-  ./_build/default/_doc_new/html/sherlodoc.js
+  ./_build/default/_doc_new/html/docs/sherlodoc.js
+  ./_build/default/_doc_very_new/html/docs/odoc.support/highlight.pack.js
+  ./_build/default/_doc_very_new/html/docs/odoc.support/katex.min.js
+  ./_build/default/_doc_very_new/html/docs/odoc.support/odoc_search.js
+  ./_build/default/_doc_very_new/html/sherlodoc.js
 
   $ cat ./_build/default/_doc_new/html/db.js | scrub_num
   cat: ./_build/default/_doc_new/html/db.js: No such file or directory

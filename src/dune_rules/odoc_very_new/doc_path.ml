@@ -5,7 +5,7 @@ let ( ++ ) = Path.Build.relative
 
 module Paths = struct
   let root (context : Context.t) =
-    let sub = "_doc_new" in
+    let sub = "_doc_very_new" in
     Path.Build.relative (Context.build_dir context) sub
   ;;
 
