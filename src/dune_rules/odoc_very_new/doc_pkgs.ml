@@ -296,7 +296,7 @@ end = struct
                       | Some p -> List.mem ~equal:Package.Name.equal mask p
                       | None -> false)
                 in
-                (proj, lib_db, libs) :: libs_acc
+                libs :: libs_acc
               in
               let pkg_acc =
                 let pkgs =
@@ -315,7 +315,7 @@ end = struct
         let+ libs_list =
           let+ libs_list =
             let* stdlib = stdlib_lib (Context.name ctx) in
-            Memo.parallel_map libs ~f:(fun (_, _lib_db, libs) ->
+            Memo.parallel_map libs ~f:(fun libs ->
               Lib.Set.fold ~init:(Memo.return []) libs ~f:(fun lib acc ->
                 let* acc = acc in
                 let+ libs =
