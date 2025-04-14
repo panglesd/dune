@@ -491,7 +491,7 @@ end = struct
           >>| List.rev_map ~f:(fun mld ->
             Install.Entry.make
               ~kind:`File
-              ~dst:(sprintf "odoc-pages/%s" (Path.Build.basename mld))
+              ~dst:(sprintf "odoc-pages/%s/%s" stanza.path (Path.Build.basename mld))
               Section.Doc
               mld
             |> Install.Entry.Sourced.create ~loc:stanza.loc)

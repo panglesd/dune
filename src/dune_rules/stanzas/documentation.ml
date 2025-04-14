@@ -4,6 +4,7 @@ type t =
   { loc : Loc.t
   ; package : Package.t
   ; mld_files : Ordered_set_lang.t
+  ; path : string
   }
 
 include Stanza.Make (struct
@@ -17,6 +18,7 @@ let decode =
   fields
     (let+ package = Stanza_common.Pkg.field ~stanza:"documentation"
      and+ mld_files = Ordered_set_lang.field "mld_files"
+     and+ path = field "path" string
      and+ loc = loc in
-     { loc; package; mld_files })
+     { loc; package; mld_files; path })
 ;;

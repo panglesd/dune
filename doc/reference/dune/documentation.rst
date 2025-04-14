@@ -20,4 +20,8 @@ Where ``<optional-fields>`` are:
   basenames attached to the package, where ``:standard`` refers to all the
   ``.mld`` files in the stanza's directory.
 
+- ``(path <path>)``: the ``<path>`` argument is a unix-style path relative
+  path. It declares under which directory the mld files should be installed. The
+  default is at the root of the documentation folder.
+
 For more information, see :ref:`documentation`.
