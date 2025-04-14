@@ -42,6 +42,13 @@ module Package_paths = struct
     Path.Build.relative (build_dir ctx pkg) (Package.Name.to_string name ^ ".dune-package")
   ;;
 
+  let odoc_config_file ctx pkg =
+    let name = Package.name pkg in
+    Path.Build.relative
+      (build_dir ctx pkg)
+      (Package.Name.to_string name ^ ".odoc-config.sexp")
+  ;;
+
   let deprecated_dune_package_file ctx pkg name =
     Path.Build.relative (build_dir ctx pkg) (Package.Name.to_string name ^ ".dune-package")
   ;;
@@ -533,8 +540,10 @@ end = struct
           in
           let meta_file = Package_paths.meta_file ctx pkg in
           let dune_package_file = Package_paths.dune_package_file ctx pkg in
+          let odoc_config_file = Package_paths.odoc_config_file ctx pkg in
           file Lib meta_file Dune_findlib.Package.meta_fn
           :: file Lib dune_package_file Dune_package.fn
+          :: file Doc odoc_config_file "odoc-config.sexp"
           ::
           (match opam_file with
            | None -> deprecated_meta_and_dune_files
@@ -811,6 +820,26 @@ end = struct
     Super_context.add_rule sctx ~dir:ctx.build_dir action
   ;;
 
+  let gen_odoc_config sctx (pkg : Package.t) =
+    let lib_deps, pkg_deps = Package.doc_depends pkg in
+    let ctx = Super_context.context sctx |> Context.build_context in
+    let _dune_version = Dune_lang.Syntax.greatest_supported_version_exn Stanza.syntax in
+    let action =
+      let odoc_config_file = Package_paths.odoc_config_file ctx pkg in
+      Action_builder.write_file_dyn
+        odoc_config_file
+        (Action_builder.return
+         @@ Format.asprintf
+              "(libraries %s)\n(packages %s)"
+              (String.concat ~sep:" " lib_deps)
+              (pkg_deps
+               |> List.map ~f:(fun d ->
+                 d.Package_dependency.name |> Dune_lang.Package_name.to_string)
+               |> String.concat ~sep:" "))
+    in
+    Super_context.add_rule sctx ~dir:ctx.build_dir action
+  ;;
+
   let gen_meta_file sctx (pkg : Package.t) entries =
     let ctx = Super_context.context sctx |> Context.build_context in
     let* () =
@@ -930,7 +959,9 @@ end = struct
     |> Dune_lang.Package_name.Map.to_seq
     |> Memo.parallel_iter_seq ~f:(fun (name, (pkg : Package.t)) ->
       let entries = Scope.DB.lib_entries_of_package ctx name in
-      gen_dune_package sctx pkg entries >>> gen_meta_file sctx pkg entries)
+      gen_dune_package sctx pkg entries
+      >>> gen_meta_file sctx pkg entries
+      >>> gen_odoc_config sctx pkg)
   ;;
 end
 
