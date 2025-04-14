@@ -415,6 +415,7 @@ module Component = struct
                 ; constraint_ = None
                 }
               ]
+            ~doc_depends:([], [])
         in
         let packages = Package.Name.Map.singleton (Package.name package) package in
         let info =
