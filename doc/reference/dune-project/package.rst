@@ -23,6 +23,13 @@ package
 
       Package dependencies, as :token:`~pkg-dep:dep_specification`.
 
+   .. describe:: (doc_depends (packages <dep-specification>)(libraries <name list>))
+
+      Dependencies to build the docs of the package, both in terms of packages
+      and referenced libraries. Packages are specified as
+      :token:`~pkg-dep:dep_specification`, while libraries are specified by
+      name.
+
    .. describe:: (conflicts <dep-specification>)
 
       Package conflicts, as :token:`~pkg-dep:dep_specification`.
