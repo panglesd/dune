@@ -2,20 +2,22 @@ open Import
 open Memo.O
 module Gen_rules = Build_config.Gen_rules
 
-let install_stanza_rules ~ctx_dir ~expander (install_conf : Install_conf.t) =
+let install_stanza_rules
+      ~ctx_dir
+      ~expander
+      (files : Install_entry.File.t list)
+      (dirs : Install_entry.Dir.t list)
+  =
   let action =
     (* XXX we're evaluating these stanzas here and [Install_rules]. Seems a bit
        sad to do that *)
     let files_and_dirs =
       let expand = Expander.No_deps.expand expander ~mode:Single in
       let+ files_expanded =
-        Install_entry.File.to_file_bindings_expanded
-          install_conf.files
-          ~expand
-          ~dir:ctx_dir
+        Install_entry.File.to_file_bindings_expanded files ~expand ~dir:ctx_dir
       and+ dirs_expanded =
         Install_entry.Dir.to_file_bindings_expanded
-          install_conf.dirs
+          dirs
           ~expand
           ~dir:ctx_dir
           ~relative_dst_path_starts_with_parent_error_when:`Deprecation_warning_from_3_11
@@ -129,7 +131,12 @@ end = struct
       Expander.eval_blang expander exes.enabled_if
       >>= if_available (fun () ->
         let+ () =
-          Memo.Option.iter exes.install_conf ~f:(install_stanza_rules ~expander ~ctx_dir)
+          Memo.Option.iter exes.install_conf ~f:(fun ic ->
+            install_stanza_rules
+              ~expander
+              ~ctx_dir
+              ic.Install_conf.files
+              ic.Install_conf.dirs)
         and+ cctx_merlin =
           Exe_rules.rules exes ~sctx ~dir ~scope ~expander ~dir_contents
         in
@@ -163,7 +170,10 @@ end = struct
       in
       { empty_none with source_dirs }
     | Install_conf.T i ->
-      let+ () = install_stanza_rules ~ctx_dir ~expander i in
+      let+ () = install_stanza_rules ~ctx_dir ~expander i.files i.dirs in
+      empty_none
+    | Documentation.T i ->
+      let+ () = install_stanza_rules ~ctx_dir ~expander i.files i.dirs in
       empty_none
     | Plugin.T p ->
       let+ () = Plugin_rules.setup_rules ~sctx ~dir p in

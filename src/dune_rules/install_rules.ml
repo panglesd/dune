@@ -493,15 +493,42 @@ end = struct
           lib_install_files sctx ~scope ~dir ~sub_dir lib ~dir_contents
         | Coq_stanza.Theory.T coqlib -> Coq_rules.install_rules ~sctx ~dir coqlib
         | Documentation.T stanza ->
-          Dir_contents.get sctx ~dir
-          >>= Dir_contents.mlds ~stanza
-          >>| List.rev_map ~f:(fun mld ->
-            Install.Entry.make
-              ~kind:`File
-              ~dst:(sprintf "odoc-pages/%s/%s" stanza.path (Path.Build.basename mld))
-              Section.Doc
-              mld
-            |> Install.Entry.Sourced.create ~loc:stanza.loc)
+          let* one =
+            let expand = Expander.No_deps.expand expander ~mode:Single in
+            let make_entry fb ~kind =
+              let src = File_binding.Expanded.src fb in
+              let dst =
+                Install.Entry.adjust_dst'
+                  ~src
+                  ~dst:(File_binding.Expanded.dst fb)
+                  ~section:Section.Doc
+              in
+              let dst =
+                Install.Entry.Dst.add_prefix ("odoc-pages/" ^ stanza.path ^ "/") dst
+              in
+              Install.Entry.make_with_dst ~kind Section.Doc ~src dst
+            in
+            let+ files =
+              Install_entry.File.to_file_bindings_expanded stanza.files ~expand ~dir
+              >>= Memo.List.map ~f:(fun fb ->
+                let entry = make_entry ~kind:`File fb in
+                let loc = File_binding.Expanded.src_loc fb in
+                Memo.return @@ Install.Entry.Sourced.create ~loc entry)
+            in
+            files
+          in
+          let+ two =
+            Dir_contents.get sctx ~dir
+            >>= Dir_contents.mlds ~stanza
+            >>| List.rev_map ~f:(fun mld ->
+              Install.Entry.make
+                ~kind:`File
+                ~dst:(sprintf "odoc-pages/%s/%s" stanza.path (Path.Build.basename mld))
+                Section.Doc
+                mld
+              |> Install.Entry.Sourced.create ~loc:stanza.loc)
+          in
+          one @ two
         | Plugin.T t -> Plugin_rules.install_rules ~sctx ~package_db ~dir t
         | _ -> Memo.return []
       in
