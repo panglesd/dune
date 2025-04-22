@@ -17,7 +17,21 @@ let mlds_by_package_def =
          >>= Memo.parallel_map ~f:(fun stanza ->
            match Stanza.repr stanza with
            | Documentation.T stanza ->
-             let+ mlds =
+             let* one =
+               let ctx = Context.build_context (Super_context.context sctx) in
+               let dir =
+                 Path.Build.append_source ctx.build_dir (Dune_file.dir dune_file)
+               in
+               let* expander = Super_context.expander sctx ~dir in
+               let expand = Expander.No_deps.expand expander ~mode:Single in
+               let make_entry fb = File_binding.Expanded.src fb in
+               let+ files =
+                 Install_entry.File.to_file_bindings_expanded stanza.files ~expand ~dir
+                 >>= Memo.List.map ~f:(fun fb -> Memo.return @@ make_entry fb)
+               in
+               files
+             in
+             let+ two =
                (let dir =
                   Path.Build.append_source
                     (Context.build_dir ctx)
@@ -26,6 +40,7 @@ let mlds_by_package_def =
                 Dir_contents.get sctx ~dir)
                >>= Dir_contents.mlds ~stanza
              in
+             let mlds = one @ two in
              let name = Package.name stanza.package in
              Some (name, mlds)
            | _ -> Memo.return None)
