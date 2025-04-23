@@ -32,9 +32,8 @@
   > EOF
 
   $ dune build
-  Context: melange
-  File "foo.ml", line 1, characters 8-18:
-  1 | let t = Str.regexp
-              ^^^^^^^^^^
-  Error: Unbound module Str
+  File ".foo.objs/melange/_unknown_", line 1, characters 0-0:
+  Error: Program melc not found in the tree or in PATH
+   (context: melange)
+  Hint: opam install melange
   [1]

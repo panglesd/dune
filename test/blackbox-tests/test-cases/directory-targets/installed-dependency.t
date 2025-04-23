@@ -27,8 +27,11 @@ Allow directories to be installable
   $ cat a/_build/install/default/lib/foo/dune-package
   (lang dune 3.18)
   (name foo)
-  (sections (lib .) (share ../../share/foo))
-  (files (lib (META dune-package)) (share ((dir bar) x y)))
+  (sections (lib .) (share ../../share/foo) (doc ../../doc/foo))
+  (files
+   (lib (META dune-package))
+   (share ((dir bar) x y))
+   (doc (odoc-config.sexp)))
   $ dune install --root a --prefix $PWD/prefix --display short
   Installing $TESTCASE_ROOT/prefix/lib/foo/META
   Installing $TESTCASE_ROOT/prefix/lib/foo/dune-package
@@ -39,6 +42,7 @@ Allow directories to be installable
   Installing $TESTCASE_ROOT/prefix/share/foo/bar/z
   Installing $TESTCASE_ROOT/prefix/share/foo/x
   Installing $TESTCASE_ROOT/prefix/share/foo/y
+  Installing $TESTCASE_ROOT/prefix/doc/foo/odoc-config.sexp
 
   $ cat > b/dune-project <<EOF
   > (lang dune 3.5)

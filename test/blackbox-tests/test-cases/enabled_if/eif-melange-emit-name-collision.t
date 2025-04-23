@@ -34,3 +34,20 @@ Using same melange.emit target in two contexts
   > EOF
 
   $ dune build
+  File "a/dune", lines 1-3, characters 0-72:
+  1 | (melange.emit
+  2 |  (target foo)
+  3 |  (enabled_if (= %{context_name} "default")))
+  Error: Library "melange" not found.
+  -> required by _build/default/a/foo/a/foo.js
+  -> required by alias a/all
+  -> required by alias default
+  File "b/dune", lines 1-3, characters 0-76:
+  1 | (melange.emit
+  2 |  (target foo)
+  3 |  (enabled_if (= %{context_name} "alt-context")))
+  Error: Library "melange" not found.
+  -> required by _build/alt-context/b/foo/b/foo.js
+  -> required by alias b/all (context alt-context)
+  -> required by alias default (context alt-context)
+  [1]

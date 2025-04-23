@@ -38,6 +38,11 @@ We write all the dune values to a file and then diff them with the output of opa
 The two files should be identical.
 
   $ diff --label="opam-vars"  opam-vars --label="dune-vars" dune-vars
+  5c5
+  < unknown
+  ---
+  > 
+  [1]
 
 Getting the sys-ocaml-version variable consistent is rather annoying because it
 depends on whether we have a system installed OCaml. So we just test it

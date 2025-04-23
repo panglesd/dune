@@ -5,12 +5,22 @@ Dash are allowed in project names and should be accepted:
   Success: initialized project component named dash-exe
   Leaving directory 'dash-exe'
   $ cd dash-exe && dune build
+  File "dune-project", line 23, characters 14-16:
+  23 |  (doc_depends ())
+                     ^^
+  Error: S-expression of the form (<name> <values>...) expected
+  [1]
 
   $ dune init project dash-lib --kind=library
   Entering directory 'dash-lib'
   Success: initialized project component named dash-lib
   Leaving directory 'dash-lib'
   $ cd dash-lib && dune build
+  File "dune-project", line 23, characters 14-16:
+  23 |  (doc_depends ())
+                     ^^
+  Error: S-expression of the form (<name> <values>...) expected
+  [1]
 
 Invalid project names should still be rejected:
 
