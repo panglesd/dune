@@ -27,13 +27,9 @@ let decode =
      and+ source_trees = field_o "source_trees" (repeat Install_entry.Dir.decode)
      and+ loc = loc in
      let files, dirs, source_trees =
-       match files, dirs, source_trees with
-       | None, None, None ->
-         User_error.raise ~loc [ Pp.textf "dirs, files, or source_trees must be set" ]
-       | _, _, _ ->
-         ( Option.value files ~default:[]
-         , Option.value dirs ~default:[]
-         , Option.value source_trees ~default:[] )
+       ( Option.value files ~default:[]
+       , Option.value dirs ~default:[]
+       , Option.value source_trees ~default:[] )
      in
      let path = Option.value ~default:"." path in
      { loc; package; mld_files; path; files; dirs; source_trees })
