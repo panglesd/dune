@@ -21,7 +21,7 @@ let decode =
   fields
     (let+ package = Stanza_common.Pkg.field ~stanza:"documentation"
      and+ mld_files = Ordered_set_lang.field "mld_files"
-     and+ path = field "path" string
+     and+ path = field_o "path" string
      and+ files = field_o "files" (repeat Install_entry.File.decode)
      and+ dirs = field_o "dirs" (repeat Install_entry.Dir.decode)
      and+ source_trees = field_o "source_trees" (repeat Install_entry.Dir.decode)
@@ -35,5 +35,6 @@ let decode =
          , Option.value dirs ~default:[]
          , Option.value source_trees ~default:[] )
      in
+     let path = Option.value ~default:"." path in
      { loc; package; mld_files; path; files; dirs; source_trees })
 ;;
