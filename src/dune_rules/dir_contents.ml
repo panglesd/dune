@@ -250,6 +250,14 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
         in
         files_from_dirs @ from_files @ source_trees @ from_mld_files
       in
+      List.iter
+        ~f:(fun fb ->
+          Format.printf
+            "from %s : %s -> %s\n%!"
+            (Path.Build.to_string dir)
+            (Path.Build.to_string (File_binding.Expanded.src fb))
+            (Path.Build.to_string (File_binding.Expanded.dst_path ~dir fb)))
+        mlds;
       doc, mlds (* List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir) *))
 ;;
 

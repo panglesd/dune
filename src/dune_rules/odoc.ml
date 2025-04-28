@@ -350,7 +350,7 @@ let compile_module
   m, odoc_file
 ;;
 
-let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg =
+let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg:_ =
   let odoc_file = Mld.odoc_file m ~doc_dir in
   let odoc_input = Mld.odoc_input m in
   let run_odoc =
@@ -361,7 +361,8 @@ let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg =
       ~quiet:false
       ~flags_for:(Some odoc_input)
       [ Command.Args.dyn includes
-      ; As [ "--pkg"; Package.Name.to_string pkg ]
+      ; As [ "--output-dir"; "./" ]
+      ; As [ "--parent-id"; "" ] (* ; As [ "--pkg"; Package.Name.to_string pkg ] *)
       ; A "-o"
       ; Target odoc_file
       ; Dep (Path.build odoc_input)
