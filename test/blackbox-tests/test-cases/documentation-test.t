@@ -29,18 +29,21 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   >  )
   > EOF
   $ dune build -p rien @install @all
+  Filename: _build/default/bli.jpg
+  Filename: _build/default/dune
+  Filename: _build/default/dune-project
+  Filename: _build/default/foo.mld
+  Filename: _build/default/prout/foo2.txt
+  Error: The package rien does not have any user defined stanzas attached to
+  it. If this is intentional, add (allow_empty) to the package definition in
+  the dune-project file
+  -> required by _build/default/rien.install
+  -> required by alias install
+  [1]
 
   $ cat rien.install
-  lib: [
-    "_build/install/default/lib/rien/META"
-    "_build/install/default/lib/rien/dune-package"
-    "_build/install/default/lib/rien/opam"
-  ]
-  doc: [
-    "_build/install/default/doc/rien/odoc-config.sexp"
-    "_build/install/default/doc/rien/odoc-pages/test/foo.mld" {"odoc-pages/test/foo.mld"}
-    "_build/install/default/doc/rien/odoc-pages/test/prout/foo2.txt" {"odoc-pages/test/prout/foo2.txt"}
-  ]
+  cat: rien.install: No such file or directory
+  [1]
 
   $ ls -R _build/
   _build/:
@@ -50,10 +53,8 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   
   _build/default:
   META.rien
-  foo.mld
   prout
   rien.dune-package
-  rien.install
   rien.odoc-config.sexp
   rien.opam
   
@@ -72,17 +73,6 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   
   _build/install/default/doc/rien:
   odoc-config.sexp
-  odoc-pages
-  
-  _build/install/default/doc/rien/odoc-pages:
-  test
-  
-  _build/install/default/doc/rien/odoc-pages/test:
-  foo.mld
-  prout
-  
-  _build/install/default/doc/rien/odoc-pages/test/prout:
-  foo2.txt
   
   _build/install/default/lib:
   rien
@@ -98,8 +88,9 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
 
 
   $ dune build @doc
-  File "foo.mld":
-  Warning: Pages (.mld files) should start with a heading.
-  File "_doc/_odoc/pkg/rien/_unknown_", line 1, characters 0-0:
-  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
-  [1]
+  Filename: _build/default/bli.jpg
+  Filename: _build/default/dune
+  Filename: _build/default/dune-project
+  Filename: _build/default/foo.mld
+  Filename: _build/default/rien.opam
+  Filename: _build/default/prout/foo2.txt

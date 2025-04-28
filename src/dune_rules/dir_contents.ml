@@ -118,7 +118,7 @@ let mlds t ~(stanza : Documentation.t) =
       ]
 ;;
 
-let build_mlds_map stanzas ~dir ~files ~include_subdirs:_ ~dirs:_ expander =
+let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
   let mlds =
     Memo.lazy_ (fun () ->
       Filename.Set.fold files ~init:Filename.Map.empty ~f:(fun fn acc ->
@@ -128,80 +128,129 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs:_ ~dirs:_ expander =
         | _ -> acc)
       |> Memo.return)
   in
-  Dune_file.find_stanzas stanzas Documentation.key
-  >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
-    let+ mlds =
-      let* from_files =
-        let expand = Expander.No_deps.expand expander ~mode:Single in
-        Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
-      in
-      let* files_from_dirs =
-        let expand = Expander.No_deps.expand expander ~mode:Single in
-        Install_entry.Dir.to_file_bindings_expanded
-          doc.dirs
-          ~expand
-          ~dir
-          ~relative_dst_path_starts_with_parent_error_when:`Deprecation_warning_from_3_11
-      in
-      let* source_trees =
-        (* There's no deprecation warning when a relative destination path
+  match include_subdirs with
+  | _, Include_subdirs.Include As_manual ->
+    List.fold_left
+      dirs
+      ~init:()
+      ~f:(fun () { Source_file_dir.dir; path_to_root = _; files } ->
+        let paths =
+          files
+          |> String.Set.to_list
+          |> List.map ~f:(fun fn -> Path.Build.relative dir fn)
+        in
+        List.iter
+          ~f:(fun p -> Format.printf "Filename: %s\n%!" @@ Path.Build.to_string p)
+          paths
+        (* let modules = modules_of_files ~dialects ~dir ~files ~path in *)
+        (* match Module_trie.set_map acc path modules with *)
+        (* | Ok s -> s *)
+        (* | Error module_ -> *)
+        (*   let module_ = *)
+        (*     match module_ with *)
+        (*     | Leaf m -> *)
+        (*       Module.Source.files m *)
+        (*       |> List.hd *)
+        (*       |> Module.File.path *)
+        (*       |> Path.drop_optional_build_context *)
+        (*       |> Path.to_string_maybe_quoted *)
+        (*     | Map _ -> *)
+        (*       (\* it's not possible to define the same group twice because *)
+        (*              there can be at most one directory *\) *)
+        (*       assert false *)
+        (*   in *)
+        (*   let group = *)
+        (*     (dir *)
+        (*      |> Path.Build.drop_build_context_exn *)
+        (*      |> Path.Source.to_string_maybe_quoted) *)
+        (*     ^ "/" *)
+        (*   in *)
+        (*   User_error.raise *)
+        (*     ~loc *)
+        (*     [ Pp.text *)
+        (*         "The following module and module group cannot co-exist in the same \ *)
+        (*          executable or library because they correspond to the same module path" *)
+        (*     ; Pp.textf "- module %s" module_ *)
+        (*     ; Pp.textf "- module group %s" group *)
+        (*     ] *));
+    Dune_file.find_stanzas stanzas Documentation.key
+    >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) -> Memo.return (doc, []))
+  | _ ->
+    Dune_file.find_stanzas stanzas Documentation.key
+    >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
+      let+ mlds =
+        let* from_files =
+          let expand = Expander.No_deps.expand expander ~mode:Single in
+          Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
+        in
+        let* files_from_dirs =
+          let expand = Expander.No_deps.expand expander ~mode:Single in
+          Install_entry.Dir.to_file_bindings_expanded
+            doc.dirs
+            ~expand
+            ~dir
+            ~relative_dst_path_starts_with_parent_error_when:
+              `Deprecation_warning_from_3_11
+        in
+        let* source_trees =
+          (* There's no deprecation warning when a relative destination path
          starts with a parent in this feature. It's safe to raise an error in
          this case as installing source trees was added in the same dune version
          that we deprecated starting a destination install path with "..". *)
-        let expand = Expander.No_deps.expand expander ~mode:Single in
-        Install_entry.Dir.to_file_bindings_expanded
-          doc.source_trees
-          ~expand
-          ~dir
-          ~relative_dst_path_starts_with_parent_error_when:`Always_error
-      in
-      let+ from_mld_files =
-        let* mlds = Memo.Lazy.force mlds in
-        let values =
-          Ordered_set_lang.Unordered_string.eval
-            doc.mld_files
-            ~standard:mlds
-            ~key:Fun.id
-            ~parse:(fun ~loc s ->
-              match Filename.Map.find mlds s with
-              | Some s -> s
-              | None ->
-                User_error.raise
-                  ~loc
-                  [ Pp.textf
-                      "%s.mld doesn't exist in %s"
-                      s
-                      (Path.to_string_maybe_quoted
-                         (Path.drop_optional_build_context (Path.build dir)))
-                  ])
-          |> Filename.Map.values
+          let expand = Expander.No_deps.expand expander ~mode:Single in
+          Install_entry.Dir.to_file_bindings_expanded
+            doc.source_trees
+            ~expand
+            ~dir
+            ~relative_dst_path_starts_with_parent_error_when:`Always_error
         in
-        let res =
-          Memo.List.map
-            ~f:(fun s ->
-              let src, dst = (doc.loc, s), (doc.loc, s) in
-              let x =
-                File_binding.Unexpanded.make ~src ~dst ~dune_syntax:(3, 18) ~dir:None
-              in
-              let y =
-                File_binding.Unexpanded.expand
-                  ~dir
-                  ~f:(fun x ->
-                    String_with_vars.text_only x
-                    |> (function
-                     | Some x -> x
-                     | None -> assert false)
-                    |> Memo.return)
-                  x
-              in
-              y)
-            values
+        let+ from_mld_files =
+          let* mlds = Memo.Lazy.force mlds in
+          let values =
+            Ordered_set_lang.Unordered_string.eval
+              doc.mld_files
+              ~standard:mlds
+              ~key:Fun.id
+              ~parse:(fun ~loc s ->
+                match Filename.Map.find mlds s with
+                | Some s -> s
+                | None ->
+                  User_error.raise
+                    ~loc
+                    [ Pp.textf
+                        "%s.mld doesn't exist in %s"
+                        s
+                        (Path.to_string_maybe_quoted
+                           (Path.drop_optional_build_context (Path.build dir)))
+                    ])
+            |> Filename.Map.values
+          in
+          let res =
+            Memo.List.map
+              ~f:(fun s ->
+                let src, dst = (doc.loc, s), (doc.loc, s) in
+                let x =
+                  File_binding.Unexpanded.make ~src ~dst ~dune_syntax:(3, 18) ~dir:None
+                in
+                let y =
+                  File_binding.Unexpanded.expand
+                    ~dir
+                    ~f:(fun x ->
+                      String_with_vars.text_only x
+                      |> (function
+                       | Some x -> x
+                       | None -> assert false)
+                      |> Memo.return)
+                    x
+                in
+                y)
+              values
+          in
+          res
         in
-        res
+        files_from_dirs @ from_files @ source_trees @ from_mld_files
       in
-      files_from_dirs @ from_files @ source_trees @ from_mld_files
-    in
-    doc, mlds (* List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir) *))
+      doc, mlds (* List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir) *))
 ;;
 
 module rec Load : sig
