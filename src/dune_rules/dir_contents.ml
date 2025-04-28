@@ -22,7 +22,7 @@ type t =
   ; dir : Path.Build.t
   ; text_files : Filename.Set.t
   ; foreign_sources : Foreign_sources.t Memo.Lazy.t
-  ; mlds : (Documentation.t * Path.Build.t list) list Memo.Lazy.t
+  ; mlds : (Documentation.t * File_binding.Expanded.t list) list Memo.Lazy.t
   ; coq : Coq_sources.t Memo.Lazy.t
   ; ml : Ml_sources.t Memo.Lazy.t
   }
@@ -118,7 +118,7 @@ let mlds t ~(stanza : Documentation.t) =
       ]
 ;;
 
-let build_mlds_map stanzas ~dir ~files =
+let build_mlds_map stanzas ~dir ~files ~include_subdirs:_ ~dirs:_ expander =
   let mlds =
     Memo.lazy_ (fun () ->
       Filename.Set.fold files ~init:Filename.Map.empty ~f:(fun fn acc ->
@@ -131,25 +131,77 @@ let build_mlds_map stanzas ~dir ~files =
   Dune_file.find_stanzas stanzas Documentation.key
   >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
     let+ mlds =
-      let+ mlds = Memo.Lazy.force mlds in
-      Ordered_set_lang.Unordered_string.eval
-        doc.mld_files
-        ~standard:mlds
-        ~key:Fun.id
-        ~parse:(fun ~loc s ->
-          match Filename.Map.find mlds s with
-          | Some s -> s
-          | None ->
-            User_error.raise
-              ~loc
-              [ Pp.textf
-                  "%s.mld doesn't exist in %s"
-                  s
-                  (Path.to_string_maybe_quoted
-                     (Path.drop_optional_build_context (Path.build dir)))
-              ])
+      let* from_files =
+        let expand = Expander.No_deps.expand expander ~mode:Single in
+        Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
+      in
+      let* files_from_dirs =
+        let expand = Expander.No_deps.expand expander ~mode:Single in
+        Install_entry.Dir.to_file_bindings_expanded
+          doc.dirs
+          ~expand
+          ~dir
+          ~relative_dst_path_starts_with_parent_error_when:`Deprecation_warning_from_3_11
+      in
+      let* source_trees =
+        (* There's no deprecation warning when a relative destination path
+         starts with a parent in this feature. It's safe to raise an error in
+         this case as installing source trees was added in the same dune version
+         that we deprecated starting a destination install path with "..". *)
+        let expand = Expander.No_deps.expand expander ~mode:Single in
+        Install_entry.Dir.to_file_bindings_expanded
+          doc.source_trees
+          ~expand
+          ~dir
+          ~relative_dst_path_starts_with_parent_error_when:`Always_error
+      in
+      let+ from_mld_files =
+        let* mlds = Memo.Lazy.force mlds in
+        let values =
+          Ordered_set_lang.Unordered_string.eval
+            doc.mld_files
+            ~standard:mlds
+            ~key:Fun.id
+            ~parse:(fun ~loc s ->
+              match Filename.Map.find mlds s with
+              | Some s -> s
+              | None ->
+                User_error.raise
+                  ~loc
+                  [ Pp.textf
+                      "%s.mld doesn't exist in %s"
+                      s
+                      (Path.to_string_maybe_quoted
+                         (Path.drop_optional_build_context (Path.build dir)))
+                  ])
+          |> Filename.Map.values
+        in
+        let res =
+          Memo.List.map
+            ~f:(fun s ->
+              let src, dst = (doc.loc, s), (doc.loc, s) in
+              let x =
+                File_binding.Unexpanded.make ~src ~dst ~dune_syntax:(3, 18) ~dir:None
+              in
+              let y =
+                File_binding.Unexpanded.expand
+                  ~dir
+                  ~f:(fun x ->
+                    String_with_vars.text_only x
+                    |> (function
+                     | Some x -> x
+                     | None -> assert false)
+                    |> Memo.return)
+                  x
+              in
+              y)
+            values
+        in
+        res
+      in
+      files_from_dirs @ from_files @ source_trees @ from_mld_files
     in
-    doc, List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir))
+    doc, mlds (* List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir) *))
 ;;
 
 module rec Load : sig
@@ -283,12 +335,17 @@ end = struct
                     ~lookup_vlib
                     ~dirs)
           in
+          let mlds =
+            Memo.lazy_ (fun () ->
+              let* expander = Super_context.expander sctx ~dir in
+              build_mlds_map d ~dir ~files ~include_subdirs ~dirs expander)
+          in
           { Standalone_or_root.root =
               { kind = Standalone
               ; dir
               ; text_files = files
               ; ml
-              ; mlds = Memo.lazy_ (fun () -> build_mlds_map d ~dir ~files)
+              ; mlds
               ; foreign_sources =
                   Memo.lazy_ (fun () ->
                     let dune_version = Dune_project.dune_version project in
@@ -376,6 +433,11 @@ end = struct
              Memo.lazy_ (fun () ->
                stanzas >>| Coq_sources.of_dir ~dir ~dirs ~include_subdirs)
            in
+           let mlds =
+             Memo.lazy_ (fun () ->
+               let* expander = Super_context.expander sctx ~dir in
+               build_mlds_map dune_file ~dir ~files ~include_subdirs ~dirs expander)
+           in
            let subdirs =
              List.map subdirs ~f:(fun { Source_file_dir.dir; path_to_root = _; files } ->
                { kind = Group_part
@@ -383,7 +445,7 @@ end = struct
                ; text_files = files
                ; ml
                ; foreign_sources
-               ; mlds = Memo.lazy_ (fun () -> build_mlds_map dune_file ~dir ~files)
+               ; mlds
                ; coq
                })
            in
@@ -393,7 +455,7 @@ end = struct
              ; text_files = files
              ; ml
              ; foreign_sources
-             ; mlds = Memo.lazy_ (fun () -> build_mlds_map dune_file ~dir ~files)
+             ; mlds
              ; coq
              }
            in

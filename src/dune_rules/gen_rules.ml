@@ -254,7 +254,7 @@ let gen_rules_for_stanzas sctx dir_contents cctxs expander dune_file ~dir:ctx_di
            let* ml_sources = Dir_contents.ocaml dir_contents in
            let base_path =
              match Ml_sources.include_subdirs ml_sources with
-             | Include Unqualified | No -> []
+             | Include (Unqualified | As_manual) | No -> []
              | Include Qualified ->
                Path.Local.descendant
                  (Path.Build.local ctx_dir)

@@ -3,6 +3,7 @@ open Import
 type qualification =
   | Unqualified
   | Qualified
+  | As_manual
 
 type t =
   | No
@@ -16,7 +17,7 @@ include Stanza.Make (struct
     include Poly
   end)
 
-let decode ~enable_qualified =
+let decode ~enable_qualified ~enable_documentation =
   let open Dune_lang.Decoder in
   sum
     [ "no", return No
@@ -26,5 +27,10 @@ let decode ~enable_qualified =
           if enable_qualified then return () else Syntax.since Stanza.syntax (3, 7)
         in
         Include Qualified )
+    ; ( "as_documentation"
+      , let+ () =
+          if enable_documentation then return () else Syntax.since Stanza.syntax (3, 18)
+        in
+        Include As_manual )
     ]
 ;;

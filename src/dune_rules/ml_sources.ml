@@ -571,6 +571,10 @@ let make
     let modules =
       let dialects = Dune_project.dialects project in
       match include_subdirs with
+      | Include As_manual ->
+        User_error.raise
+          ~loc
+          [ Pp.text "(include_subdirs as_documentation) cannot be used with (library)" ]
       | Include Qualified ->
         List.fold_left
           dirs

@@ -39,6 +39,12 @@ let mlds_by_package_def =
                 in
                 Dir_contents.get sctx ~dir)
                >>= Dir_contents.mlds ~stanza
+               >>= fun fb ->
+               let make_entry fb = File_binding.Expanded.src fb in
+               let+ files =
+                 Memo.List.map ~f:(fun fb -> Memo.return @@ make_entry fb) fb
+               in
+               files
              in
              let mlds = one @ two in
              let name = Package.name stanza.package in

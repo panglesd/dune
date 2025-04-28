@@ -203,13 +203,15 @@ module Dir = struct
       Memo.List.concat_map
         ts
         ~f:(Recursive_include.expand_include ~expand ~dir:(Path.build dir))
-      >>= Memo.List.map
-            ~f:
-              (File_binding.Unexpanded.expand
-                 ~dir
-                 ~f:
-                   (expand_with_check_for_local_path ~expand:(fun s ->
-                      expand s >>| Value.to_string ~dir:(Path.build dir))))
+      >>= fun xxx ->
+      Memo.List.map
+        ~f:
+          (File_binding.Unexpanded.expand
+             ~dir
+             ~f:
+               (expand_with_check_for_local_path ~expand:(fun s ->
+                  expand s >>| Value.to_string ~dir:(Path.build dir))))
+        xxx
     in
     (* Note that validation is deferred until after file bindings have been
        expanded as a path may be invalid due to the contents of a variable

@@ -122,7 +122,7 @@ let stanzas : constructors =
         let+ () = Dune_lang.Syntax.since Stanza.syntax (1, 1)
         and+ t =
           let enable_qualified = Dune_project.is_extension_set project Coq_stanza.key in
-          Include_subdirs.decode ~enable_qualified
+          Include_subdirs.decode ~enable_qualified ~enable_documentation:true
         and+ loc = loc in
         [ Include_subdirs.make_stanza (loc, t) ] )
     ; ( "toplevel"
