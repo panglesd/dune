@@ -98,7 +98,8 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
 
 
   $ dune build @doc
-  Error: Package rien has two mld's with the same basename
-  _build/default/prout/foo2.txt, _build/default/prout/foo2.txt
-  -> required by alias doc
+  File "foo.mld":
+  Warning: Pages (.mld files) should start with a heading.
+  File "_doc/_odoc/pkg/rien/_unknown_", line 1, characters 0-0:
+  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
   [1]
