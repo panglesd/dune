@@ -503,49 +503,6 @@ end = struct
           lib_install_files sctx ~scope ~dir ~sub_dir lib ~dir_contents
         | Coq_stanza.Theory.T coqlib -> Coq_rules.install_rules ~sctx ~dir coqlib
         | Documentation.T stanza ->
-          (* let* from_files = *)
-          (*   let expand = Expander.No_deps.expand expander ~mode:Single in *)
-          (*   let+ files = *)
-          (*     Install_entry.File.to_file_bindings_expanded stanza.files ~expand ~dir *)
-          (*     >>= Memo.List.map ~f:(fun fb -> *)
-          (*       let entry = make_entry ~kind:`File fb in *)
-          (*       let loc = File_binding.Expanded.src_loc fb in *)
-          (*       Memo.return @@ Install.Entry.Sourced.create ~loc entry) *)
-          (*   in *)
-          (*   files *)
-          (* in *)
-          (* let* files_from_dirs = *)
-          (*   let expand = Expander.No_deps.expand expander ~mode:Single in *)
-          (*   Install_entry.Dir.to_file_bindings_expanded *)
-          (*     stanza.dirs *)
-          (*     ~expand *)
-          (*     ~dir *)
-          (*     ~relative_dst_path_starts_with_parent_error_when: *)
-          (*       `Deprecation_warning_from_3_11 *)
-          (*   >>= Memo.List.map ~f:(fun fb -> *)
-          (*     let loc = File_binding.Expanded.src_loc fb in *)
-          (*     let entry = make_entry ~kind:`Directory fb in *)
-          (*     Memo.return @@ Install.Entry.Sourced.create ~loc entry) *)
-          (* in *)
-          (* let* source_trees = *)
-          (*   let expand = Expander.No_deps.expand expander ~mode:Single in *)
-          (*   Install_entry.Dir.to_file_bindings_expanded *)
-          (*     stanza.source_trees *)
-          (*     ~expand *)
-          (*     ~dir *)
-          (*     ~relative_dst_path_starts_with_parent_error_when:`Always_error *)
-          (*   >>= Memo.List.map ~f:(fun fb -> *)
-          (*     let loc = File_binding.Expanded.src_loc fb in *)
-          (*     let entry = make_entry ~kind:`Source_tree fb in *)
-          (*     let+ () = *)
-          (*       Source_tree.find_dir (Path.Build.drop_build_context_exn entry.src) *)
-          (*       >>| function *)
-          (*       | Some _ -> () *)
-          (*       | None -> *)
-          (*         User_error.raise ~loc [ Pp.text "This source directory does not exist" ] *)
-          (*     in *)
-          (*     Install.Entry.Sourced.create ~loc entry) *)
-          (* in *)
           let+ from_mld_files =
             Dir_contents.get sctx ~dir
             >>= Dir_contents.mlds ~stanza
@@ -562,7 +519,7 @@ end = struct
                 mld.path
               |> Install.Entry.Sourced.create ~loc:stanza.loc)
           in
-          (* from_files @  *) from_mld_files (* @ files_from_dirs @ source_trees *)
+          from_mld_files
         | Plugin.T t -> Plugin_rules.install_rules ~sctx ~package_db ~dir t
         | _ -> Memo.return []
       in

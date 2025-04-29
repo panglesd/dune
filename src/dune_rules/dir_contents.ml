@@ -146,38 +146,7 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
         in
         List.iter
           ~f:(fun p -> Format.printf "Filename: %s\n%!" @@ Path.Build.to_string p)
-          paths
-        (* let modules = modules_of_files ~dialects ~dir ~files ~path in *)
-        (* match Module_trie.set_map acc path modules with *)
-        (* | Ok s -> s *)
-        (* | Error module_ -> *)
-        (*   let module_ = *)
-        (*     match module_ with *)
-        (*     | Leaf m -> *)
-        (*       Module.Source.files m *)
-        (*       |> List.hd *)
-        (*       |> Module.File.path *)
-        (*       |> Path.drop_optional_build_context *)
-        (*       |> Path.to_string_maybe_quoted *)
-        (*     | Map _ -> *)
-        (*       (\* it's not possible to define the same group twice because *)
-        (*              there can be at most one directory *\) *)
-        (*       assert false *)
-        (*   in *)
-        (*   let group = *)
-        (*     (dir *)
-        (*      |> Path.Build.drop_build_context_exn *)
-        (*      |> Path.Source.to_string_maybe_quoted) *)
-        (*     ^ "/" *)
-        (*   in *)
-        (*   User_error.raise *)
-        (*     ~loc *)
-        (*     [ Pp.text *)
-        (*         "The following module and module group cannot co-exist in the same \ *)
-        (*          executable or library because they correspond to the same module path" *)
-        (*     ; Pp.textf "- module %s" module_ *)
-        (*     ; Pp.textf "- module group %s" group *)
-        (*     ] *));
+          paths);
     Dune_file.find_stanzas stanzas Documentation.key
     >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) -> Memo.return (doc, []))
   | _ ->
