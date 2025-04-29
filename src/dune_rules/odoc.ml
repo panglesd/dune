@@ -200,20 +200,27 @@ let odoc_ext = ".odoc"
 module Mld : sig
   type t
 
-  val create : Path.Build.t -> t
-  val odoc_file : doc_dir:Path.Build.t -> t -> Path.Build.t
+  val create : Path.Build.t * string list -> t
+  val odoc_file : pkg:Package.Name.t -> doc_dir:Path.Build.t -> t -> Path.Build.t
   val odoc_input : t -> Path.Build.t
+  val parent_id : pkg:Package.Name.t -> t -> string
 end = struct
-  type t = Path.Build.t
+  type t = Path.Build.t * string list
 
   let create p = p
 
-  let odoc_file ~doc_dir t =
+  let odoc_file ~pkg ~doc_dir (t, parent_id) =
     let t = Filename.remove_extension (Path.Build.basename t) in
+    let doc_dir = Path.Build.relative doc_dir (Package.Name.to_string pkg) in
+    let doc_dir = List.fold_left ~f:Path.Build.relative ~init:doc_dir parent_id in
     Path.Build.relative doc_dir (sprintf "page-%s%s" t odoc_ext)
   ;;
 
-  let odoc_input t = t
+  let odoc_input (t, _parent_id) = t
+
+  let parent_id ~pkg (_t, parent_id) =
+    Package.Name.to_string pkg :: parent_id |> String.concat ~sep:"/"
+  ;;
 end
 
 module Flags = struct
@@ -350,9 +357,10 @@ let compile_module
   m, odoc_file
 ;;
 
-let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg:_ =
-  let odoc_file = Mld.odoc_file m ~doc_dir in
+let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg =
+  let odoc_file = Mld.odoc_file ~pkg m ~doc_dir in
   let odoc_input = Mld.odoc_input m in
+  let parent_id = Mld.parent_id ~pkg m in
   let run_odoc =
     run_odoc
       sctx
@@ -362,7 +370,7 @@ let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg:_ =
       ~flags_for:(Some odoc_input)
       [ Command.Args.dyn includes
       ; As [ "--output-dir"; "./" ]
-      ; As [ "--parent-id"; "" ] (* ; As [ "--pkg"; Package.Name.to_string pkg ] *)
+      ; As [ "--parent-id"; parent_id ]
       ; A "-o"
       ; Target odoc_file
       ; Dep (Path.build odoc_input)
@@ -630,7 +638,7 @@ let entry_modules sctx ~pkg =
   Lib.Local.Map.of_list_exn l
 ;;
 
-let create_odoc ctx ~target odoc_file =
+let create_odoc ctx ~target ?(parent_id = "") odoc_file =
   let html_base = Paths.html ctx target in
   let odocl_base = Paths.odocl ctx target in
   let basename = Path.Build.basename odoc_file |> Filename.remove_extension in
@@ -644,6 +652,8 @@ let create_odoc ctx ~target odoc_file =
     in
     { odoc_file; odocl_file; html_file = file Html; json_file = file Json }
   | Pkg _ ->
+    let parent_id = String.split_on_char ~sep:'/' parent_id |> List.tl in
+    let html_base = List.fold_left ~f:Path.Build.relative ~init:html_base parent_id in
     let file output =
       html_base ++ (basename |> String.drop_prefix ~prefix:"page-" |> Option.value_exn)
       |> Path.Build.extend_basename ~suffix:(Output_format.extension output)
@@ -653,8 +663,8 @@ let create_odoc ctx ~target odoc_file =
 
 let check_mlds_no_dupes ~pkg ~mlds =
   match
-    List.rev_map mlds ~f:(fun mld ->
-      Filename.remove_extension (Path.Build.basename mld), mld)
+    List.rev_map mlds ~f:(fun (mld, parent_id) ->
+      Filename.remove_extension (Path.Build.basename mld), (mld, parent_id))
     |> Filename.Map.of_list
   with
   | Ok m -> m
@@ -663,8 +673,9 @@ let check_mlds_no_dupes ~pkg ~mlds =
       [ Pp.textf
           "Package %s has two mld's with the same basename %s, %s"
           (Package.Name.to_string pkg)
-          (Path.to_string_maybe_quoted (Path.build p1))
-          (Path.to_string_maybe_quoted (Path.build p2))
+          (Path.to_string_maybe_quoted (Path.build (fst p1))) (* TODO *)
+          (Path.to_string_maybe_quoted (Path.build (fst p2)))
+        (* TODO *)
       ]
 ;;
 
@@ -677,11 +688,13 @@ let odoc_artefacts sctx target =
       let+ mlds = Packages.mlds sctx pkg in
       let mlds = check_mlds_no_dupes ~pkg ~mlds in
       Filename.Map.update mlds "index" ~f:(function
-        | None -> Some (Paths.gen_mld_dir ctx pkg ++ "index.mld")
+        | None -> Some (Paths.gen_mld_dir ctx pkg ++ "index.mld", [])
         | Some _ as s -> s)
     in
     Filename.Map.to_list_map mlds ~f:(fun _ mld ->
-      Mld.create mld |> Mld.odoc_file ~doc_dir:dir |> create_odoc ctx ~target)
+      let mld = Mld.create mld in
+      Mld.odoc_file ~pkg ~doc_dir:dir mld
+      |> create_odoc ctx ~parent_id:(Mld.parent_id ~pkg mld) ~target)
   | Lib lib ->
     let info = Lib.Local.info lib in
     let obj_dir = Lib_info.obj_dir info in
@@ -935,7 +948,7 @@ let package_mlds =
                  sctx
                  (Action_builder.write_file gen_mld (default_index ~pkg entry_modules))
              in
-             Filename.Map.set mlds "index" gen_mld)))
+             Filename.Map.set mlds "index" (gen_mld, []))))
   in
   fun sctx ~pkg -> Memo.exec memo (sctx, pkg)
 ;;

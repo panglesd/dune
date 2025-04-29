@@ -18,18 +18,33 @@ let mlds_by_package_def =
            match Stanza.repr stanza with
            | Documentation.T stanza ->
              let+ mlds =
-               (let dir =
-                  Path.Build.append_source
-                    (Context.build_dir ctx)
-                    (Dune_file.dir dune_file)
-                in
-                Dir_contents.get sctx ~dir)
+               let dir =
+                 Path.Build.append_source
+                   (Context.build_dir ctx)
+                   (Dune_file.dir dune_file)
+               in
+               Dir_contents.get sctx ~dir
                >>= Dir_contents.mlds ~stanza
                >>= fun fb ->
-               let make_entry fb = File_binding.Expanded.src fb in
-               let+ files =
-                 Memo.List.map ~f:(fun fb -> Memo.return @@ make_entry fb) fb
+               let make_entry fb =
+                 let parent_id =
+                   let origin_dir = dir |> Path.Build.explode in
+                   let dst =
+                     File_binding.Expanded.dst_path fb ~dir
+                     |> Path.Build.parent_exn
+                     |> Path.Build.explode
+                   in
+                   let rec rem_prefix x y =
+                     match x, y with
+                     | [], _ | _, [] -> y
+                     | a :: b, c :: d when a = c -> rem_prefix b d
+                     | _, y -> y
+                   in
+                   rem_prefix origin_dir dst
+                 in
+                 File_binding.Expanded.src fb, parent_id
                in
+               let+ files = Memo.List.map ~f:(fun fb -> Memo.return (make_entry fb)) fb in
                files
              in
              let name = Package.name stanza.package in

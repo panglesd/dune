@@ -118,60 +118,24 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   from _build/default : _build/default/prout/foo2.mld -> _build/default/prout/foo2.mld
   from _build/default : _build/default/foo.mld -> _build/default/foo.mld
   Running[1]: (cd _build/default && /home/panglesd/.opam/5.2.0/bin/odoc support-files -o _doc/_html/odoc.support)
-  Running[2]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id '' -o page-foo.odoc ../../../../foo.mld)
+  Running[2]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id rien -o rien/page-foo.odoc ../../../../foo.mld)
   Output[2]:
   File "foo.mld":
   Warning: Pages (.mld files) should start with a heading.
-  Running[3]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id '' -o page-foo2.odoc ../../../../prout/foo2.mld)
-  Running[4]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id '' -o page-index.odoc ../../../_mlds/rien/index.mld)
+  Running[3]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id rien -o rien/page-index.odoc ../../../_mlds/rien/index.mld)
+  Running[4]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id rien/prout -o rien/prout/page-foo2.odoc ../../../../prout/foo2.mld)
   Running[5]: (cd _build/default/_doc/_html && /home/panglesd/code/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc js sherlodoc.js)
-  Running[6]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-foo.odocl ../_odoc/pkg/rien/page-foo.odoc)
-  Running[7]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-foo2.odocl ../_odoc/pkg/rien/page-foo2.odoc)
-  Running[8]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-index.odocl ../_odoc/pkg/rien/page-index.odoc)
+  Running[6]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-foo.odocl ../_odoc/pkg/rien/rien/page-foo.odoc)
+  Running[7]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-foo2.odocl ../_odoc/pkg/rien/rien/prout/page-foo2.odoc)
+  Running[8]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc link -I ../_odoc/pkg/rien -o ../_odocls/rien/page-index.odocl ../_odoc/pkg/rien/rien/page-index.odoc)
   Running[9]: (cd _build/default/_doc/_html/rien && /home/panglesd/code/dune/_build/default/test/blackbox-tests/test-cases/.bin/sherlodoc index --favoured ../../_odocls/rien/page-foo.odocl --favoured ../../_odocls/rien/page-foo2.odocl --favoured ../../_odocls/rien/page-index.odocl --favoured-prefixes '""' --format=js --db db.js)
   Running[10]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-foo.odocl)
-  Running[11]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-foo2.odocl)
-  Running[12]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-index.odocl)
-  File "_doc/_html/rien/_unknown_", line 1, characters 0-0:
-  Command [12] exited with code 2:
-  $ (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-index.odocl)
-  odoc: internal error, uncaught exception:
-        Sys_error("index.html: Permission denied")
-        Raised by primitive operation at Stdlib.open_out_gen in file "stdlib.ml", line 331, characters 29-55
-        Called from Stdlib.open_out in file "stdlib.ml" (inlined), line 336, characters 2-74
-        Called from Odoc_odoc__Rendering.render_document.(fun) in file "src/odoc/rendering.ml", line 55, characters 15-52
-        Called from Odoc_document__Renderer.traverse.aux in file "src/document/renderer.ml", line 16, characters 4-32
-        Called from Stdlib__List.iter in file "list.ml", line 112, characters 12-15
-        Called from Odoc_odoc__Rendering.generate_odoc.(fun) in file "src/odoc/rendering.ml", line 74, characters 2-68
-        Called from Cmdliner_term.app.(fun) in file "cmdliner_term.ml", line 24, characters 19-24
-        Called from Cmdliner_term.app.(fun) in file "cmdliner_term.ml", line 22, characters 12-19
-        Called from Cmdliner_eval.run_parser in file "cmdliner_eval.ml", line 35, characters 37-44
-  File "_doc/_html/rien/_unknown_", line 1, characters 0-0:
-  Error: Rule failed to generate the following targets:
-  - _doc/_html/rien/foo.html
-  File "_doc/_html/rien/_unknown_", line 1, characters 0-0:
-  Error: Rule failed to generate the following targets:
-  - _doc/_html/rien/foo2.html
-  [1]
-  $ (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-index.odocl)
-  odoc: internal error, uncaught exception:
-        Sys_error("index.html: Permission denied")
-        Raised by primitive operation at Stdlib.open_out_gen in file "stdlib.ml", line 331, characters 29-55
-        Called from Stdlib.open_out in file "stdlib.ml" (inlined), line 336, characters 2-74
-        Called from Odoc_odoc__Rendering.render_document.(fun) in file "src/odoc/rendering.ml", line 55, characters 15-52
-        Called from Odoc_document__Renderer.traverse.aux in file "src/document/renderer.ml", line 16, characters 4-32
-        Called from Stdlib__List.iter in file "list.ml", line 112, characters 12-15
-        Called from Odoc_odoc__Rendering.generate_odoc.(fun) in file "src/odoc/rendering.ml", line 74, characters 2-68
-        Called from Cmdliner_term.app.(fun) in file "cmdliner_term.ml", line 24, characters 19-24
-        Called from Cmdliner_term.app.(fun) in file "cmdliner_term.ml", line 22, characters 12-19
-        Called from Cmdliner_eval.run_parser in file "cmdliner_eval.ml", line 35, characters 37-44
-  [2]
+  Running[11]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-index.odocl)
+  Running[12]: (cd _build/default/_doc/_html && /home/panglesd/.opam/5.2.0/bin/odoc html-generate --search-uri rien/db.js --search-uri sherlodoc.js -o . --support-uri odoc.support --theme-uri odoc.support ../_odocls/rien/page-foo2.odocl)
 
   $ tree _build/default/_doc
   _build/default/_doc
   |-- _html
-  |   |-- foo.html
-  |   |-- foo2.html
   |   |-- index.html
   |   |-- odoc.support
   |   |   |-- fonts
@@ -212,7 +176,11 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   |   |   |-- odoc.css
   |   |   `-- odoc_search.js
   |   |-- rien
-  |   |   `-- db.js
+  |   |   |-- db.js
+  |   |   |-- foo.html
+  |   |   |-- index.html
+  |   |   `-- prout
+  |   |       `-- foo2.html
   |   `-- sherlodoc.js
   |-- _mlds
   |   `-- rien
@@ -220,13 +188,15 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   |-- _odoc
   |   `-- pkg
   |       `-- rien
-  |           |-- page-foo.odoc
-  |           |-- page-foo2.odoc
-  |           `-- page-index.odoc
+  |           `-- rien
+  |               |-- page-foo.odoc
+  |               |-- page-index.odoc
+  |               `-- prout
+  |                   `-- page-foo2.odoc
   `-- _odocls
       `-- rien
           |-- page-foo.odocl
           |-- page-foo2.odocl
           `-- page-index.odocl
   
-  12 directories, 48 files
+  15 directories, 49 files
