@@ -8,6 +8,12 @@ let install_file ~(package : Package.Name.t) ~findlib_toolchain =
   | Some x -> sprintf "%s-%s.install" package (Context_name.to_string x)
 ;;
 
+let need_odoc_config (pkg : Package.t) =
+  match Package.doc_depends pkg with
+  | [], [] -> false
+  | _ -> true
+;;
+
 module Package_paths = struct
   let opam_file (ctx : Build_context.t) (pkg : Package.t) =
     let opam_file = Package.opam_file pkg in
@@ -43,10 +49,14 @@ module Package_paths = struct
   ;;
 
   let odoc_config_file ctx pkg =
-    let name = Package.name pkg in
-    Path.Build.relative
-      (build_dir ctx pkg)
-      (Package.Name.to_string name ^ ".odoc-config.sexp")
+    if need_odoc_config pkg
+    then (
+      let name = Package.name pkg in
+      Some
+        (Path.Build.relative
+           (build_dir ctx pkg)
+           (Package.Name.to_string name ^ ".odoc-config.sexp")))
+    else None
   ;;
 
   let deprecated_dune_package_file ctx pkg name =
@@ -602,14 +612,18 @@ end = struct
           in
           let meta_file = Package_paths.meta_file ctx pkg in
           let dune_package_file = Package_paths.dune_package_file ctx pkg in
-          let odoc_config_file = Package_paths.odoc_config_file ctx pkg in
-          file Lib meta_file Dune_findlib.Package.meta_fn
-          :: file Lib dune_package_file Dune_package.fn
-          :: file Doc odoc_config_file "odoc-config.sexp"
-          ::
-          (match opam_file with
-           | None -> deprecated_meta_and_dune_files
-           | Some opam_file -> file Lib opam_file "opam" :: deprecated_meta_and_dune_files)
+          let odoc_config_file =
+            match Package_paths.odoc_config_file ctx pkg with
+            | None -> []
+            | Some config_file -> [ file Doc config_file "odoc-config.sexp" ]
+          in
+          (file Lib meta_file Dune_findlib.Package.meta_fn
+           :: file Lib dune_package_file Dune_package.fn
+           :: odoc_config_file)
+          @
+          match opam_file with
+          | None -> deprecated_meta_and_dune_files
+          | Some opam_file -> file Lib opam_file "opam" :: deprecated_meta_and_dune_files
         in
         let pkg_dir = Package.dir pkg in
         Source_tree.find_dir pkg_dir
@@ -885,21 +899,22 @@ end = struct
   let gen_odoc_config sctx (pkg : Package.t) =
     let lib_deps, pkg_deps = Package.doc_depends pkg in
     let ctx = Super_context.context sctx |> Context.build_context in
-    let _dune_version = Dune_lang.Syntax.greatest_supported_version_exn Stanza.syntax in
-    let action =
-      let odoc_config_file = Package_paths.odoc_config_file ctx pkg in
-      Action_builder.write_file_dyn
-        odoc_config_file
-        (Action_builder.return
-         @@ Format.asprintf
-              "(libraries %s)\n(packages %s)"
-              (String.concat ~sep:" " lib_deps)
-              (pkg_deps
-               |> List.map ~f:(fun d ->
-                 d.Package_dependency.name |> Dune_lang.Package_name.to_string)
-               |> String.concat ~sep:" "))
-    in
-    Super_context.add_rule sctx ~dir:ctx.build_dir action
+    match Package_paths.odoc_config_file ctx pkg with
+    | None -> Memo.return ()
+    | Some odoc_config_file ->
+      let action =
+        Action_builder.write_file_dyn
+          odoc_config_file
+          (Action_builder.return
+           @@ Format.asprintf
+                "(libraries %s)\n(packages %s)"
+                (String.concat ~sep:" " lib_deps)
+                (pkg_deps
+                 |> List.map ~f:(fun d ->
+                   d.Package_dependency.name |> Dune_lang.Package_name.to_string)
+                 |> String.concat ~sep:" "))
+      in
+      Super_context.add_rule sctx ~dir:ctx.build_dir action
   ;;
 
   let gen_meta_file sctx (pkg : Package.t) entries =

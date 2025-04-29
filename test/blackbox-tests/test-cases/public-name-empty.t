@@ -27,9 +27,6 @@ In 3.7, this declares a public name of "-":
   bin: [
     "_build/install/default/bin/-"
   ]
-  doc: [
-    "_build/install/default/doc/e/odoc-config.sexp"
-  ]
 
 In 3.8, this is equivalent to no `(public_name)` field, consistently with what
 happens with `(executables)`.
@@ -40,7 +37,4 @@ happens with `(executables)`.
   lib: [
     "_build/install/default/lib/e/META"
     "_build/install/default/lib/e/dune-package"
-  ]
-  doc: [
-    "_build/install/default/doc/e/odoc-config.sexp"
   ]

@@ -30,7 +30,6 @@ Begin by installing a library with C stubs.
   Installing install/lib/libA/libA.ml
   Installing install/lib/libA/liblibA_stubs.a
   Installing install/lib/libA/libA.cmxs
-  Installing install/doc/libA/odoc-config.sexp
   Installing install/lib/stublibs/dlllibA_stubs.so
   $ cat ./install/lib/libA/dune-package
   (lang dune 3.18)
@@ -40,8 +39,6 @@ Begin by installing a library with C stubs.
     $TESTCASE_ROOT/install/lib/libA)
    (libexec
     $TESTCASE_ROOT/install/lib/libA)
-   (doc
-    $TESTCASE_ROOT/install/doc/libA)
    (stublibs
     $TESTCASE_ROOT/install/lib/stublibs))
   (files
@@ -57,7 +54,6 @@ Begin by installing a library with C stubs.
      libA.ml
      liblibA_stubs.a))
    (libexec (libA.cmxs))
-   (doc (odoc-config.sexp))
    (stublibs (dlllibA_stubs.so)))
   (library
    (name libA)

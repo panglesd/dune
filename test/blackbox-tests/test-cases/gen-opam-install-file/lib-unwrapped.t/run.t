@@ -18,6 +18,3 @@ unwrapped libraries have the correct artifacts
   libexec: [
     "_build/install/default/lib/foo/foo.cmxs"
   ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
-  ]

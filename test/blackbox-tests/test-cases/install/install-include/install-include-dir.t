@@ -34,6 +34,3 @@ Example of including a file in the dirs field of the install stanza
   share: [
     "_build/install/default/share/hello/bar/a" {"bar/a"}
   ]
-  doc: [
-    "_build/install/default/doc/hello/odoc-config.sexp"
-  ]

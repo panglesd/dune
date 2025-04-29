@@ -7,7 +7,7 @@ transitive deps expressed in the dune-package
   $ dune_cmd cat _build/install/default/lib/pkg/dune-package | sed "s/(lang dune .*)/(lang dune <version>)/" | dune_cmd sanitize
   (lang dune <version>)
   (name pkg)
-  (sections (lib .) (libexec .) (doc ../../doc/pkg))
+  (sections (lib .) (libexec .))
   (files
    (lib
     (META
@@ -33,8 +33,7 @@ transitive deps expressed in the dune-package
      ccc/ccc.cmxa
      ccc/ccc.ml
      dune-package))
-   (libexec (aaa/aaa.cmxs bbb/bbb.cmxs ccc/ccc.cmxs))
-   (doc (odoc-config.sexp)))
+   (libexec (aaa/aaa.cmxs bbb/bbb.cmxs ccc/ccc.cmxs)))
   (library
    (name pkg.aaa)
    (kind normal)

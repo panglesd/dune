@@ -23,7 +23,6 @@
   Installing $TESTCASE_ROOT/prefix/lib/a/META
   Installing $TESTCASE_ROOT/prefix/lib/a/dune-package
   Installing $TESTCASE_ROOT/prefix/share/a/CATME
-  Installing $TESTCASE_ROOT/prefix/doc/a/odoc-config.sexp
 
   $ cat >b/dune-project <<EOF
   > (lang dune 2.9)
@@ -59,8 +58,6 @@
   Installing $TESTCASE_ROOT/prefix/lib/a/dune-package
   Deleting $TESTCASE_ROOT/prefix/share/a/CATME
   Installing $TESTCASE_ROOT/prefix/share/a/CATME
-  Deleting $TESTCASE_ROOT/prefix/doc/a/odoc-config.sexp
-  Installing $TESTCASE_ROOT/prefix/doc/a/odoc-config.sexp
 
   $ OCAMLPATH=$PWD/prefix/lib/:$OCAMLPATH dune build --root b @runtest
   Entering directory 'b'

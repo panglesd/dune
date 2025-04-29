@@ -14,7 +14,6 @@
   Installing $TESTCASE_ROOT/install/lib/foo/META
   Installing $TESTCASE_ROOT/install/lib/foo/dune-package
   Installing $TESTCASE_ROOT/install/lib/foo/opam
-  Installing install/doc/foo/odoc-config.sexp
   Installing install/man/man-page-a.default.1
   Installing install/man/man1/man-page-b.default.1
   Installing install/man/man3/another-man-page.3

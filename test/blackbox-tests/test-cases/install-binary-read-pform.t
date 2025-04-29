@@ -30,9 +30,6 @@ Allow binary name to vary using pforms
   bin: [
     "_build/install/default/bin/x"
   ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
-  ]
 
   $ runtest y
   lib: [
@@ -41,7 +38,4 @@ Allow binary name to vary using pforms
   ]
   bin: [
     "_build/install/default/bin/y"
-  ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
   ]

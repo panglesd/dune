@@ -201,9 +201,6 @@ Test with an opam like installation
   libexec: [
     "_destdir/_destdir/lib/a/a.cmxs"
   ]
-  doc: [
-    "_build/install/default/doc/a/odoc-config.sexp"
-  ]
 
 Build everything
 ----------------
@@ -218,7 +215,7 @@ Test with a normal installation
 Once installed, we have the sites information:
 
   $ grep share/a _install/lib/a/dune-package
-    $TESTCASE_ROOT/_install/share/a)
+    $TESTCASE_ROOT/_install/share/a))
 
   $ OCAMLPATH=_install/lib:$OCAMLPATH _install/bin/c
   run a

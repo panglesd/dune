@@ -21,4 +21,3 @@ Installing a library with `-x foo` should install the library for that context
   Installing prefix/foo-sysroot/lib/repro/repro__Foo.cmt
   Installing prefix/foo-sysroot/lib/repro/repro__Foo.cmx
   Installing prefix/foo-sysroot/lib/repro/repro.cmxs
-  Installing prefix/foo-sysroot/doc/repro/odoc-config.sexp

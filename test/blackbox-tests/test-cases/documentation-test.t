@@ -29,8 +29,6 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
   >  )
   > EOF
   $ dune build -p rien @install @all
-  from _build/default : _build/default/prout/foo2.mld -> _build/default/prout/foo2.mld
-  from _build/default : _build/default/foo.mld -> _build/default/foo.mld
 
   $ cat rien.install
   lib: [
@@ -115,8 +113,6 @@ Make a dune file and build the project, using the "flags" field to exercise OSL.
    }
   Actual targets:
   - recursive alias @doc
-  from _build/default : _build/default/prout/foo2.mld -> _build/default/prout/foo2.mld
-  from _build/default : _build/default/foo.mld -> _build/default/foo.mld
   Running[1]: (cd _build/default && /home/panglesd/.opam/5.2.0/bin/odoc support-files -o _doc/_html/odoc.support)
   Running[2]: (cd _build/default/_doc/_odoc/pkg/rien && /home/panglesd/.opam/5.2.0/bin/odoc compile --output-dir ./ --parent-id rien -o rien/page-foo.odoc ../../../../foo.mld)
   Output[2]:

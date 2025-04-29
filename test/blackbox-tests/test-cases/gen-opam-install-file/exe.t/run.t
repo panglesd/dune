@@ -9,6 +9,3 @@ public exes are installed
   bin: [
     "_build/install/default/bin/bar"
   ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
-  ]

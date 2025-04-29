@@ -16,6 +16,3 @@ ppx artifacts
     "_build/install/default/lib/foo/ppx_rewriter_dune/foo_ppx_rewriter_dune.cmxs" {"ppx_rewriter_dune/foo_ppx_rewriter_dune.cmxs"}
     "_build/install/default/lib/foo/ppx_rewriter_dune/ppx.exe" {"ppx_rewriter_dune/ppx.exe"}
   ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
-  ]

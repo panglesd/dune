@@ -4,7 +4,7 @@ Check that default implementation data is installed in the dune package file.
   $ dune_cmd cat _build/install/default/lib/a/dune-package | sed "s/(lang dune .*)/(lang dune <version>)/" | dune_cmd sanitize
   (lang dune <version>)
   (name a)
-  (sections (lib .) (libexec .) (doc ../../doc/a))
+  (sections (lib .) (libexec .))
   (files
    (lib
     (META
@@ -32,8 +32,7 @@ Check that default implementation data is installed in the dune package file.
      dune-package
      opam
      x.mli))
-   (libexec (default-impl/a_default.cmxs))
-   (doc (odoc-config.sexp)))
+   (libexec (default-impl/a_default.cmxs)))
   (library
    (name a)
    (kind normal)

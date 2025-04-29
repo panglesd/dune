@@ -22,6 +22,3 @@ wrapped lib without lib interface module
   libexec: [
     "_build/install/default/lib/foo/foo.cmxs"
   ]
-  doc: [
-    "_build/install/default/doc/foo/odoc-config.sexp"
-  ]

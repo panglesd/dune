@@ -36,11 +36,6 @@ Define libraries in multiple contexts
   > EOF
 
   $ dune build
-  File "a/.foo.objs/melange/_unknown_", line 1, characters 0-0:
-  Error: Program melc not found in the tree or in PATH
-   (context: melange)
-  Hint: opam install melange
-  [1]
 
   $ mkdir -p out/man
 
@@ -48,7 +43,6 @@ Define libraries in multiple contexts
 Try installing both
 
   $ dune install foo --prefix out
-  Error: The following <package>.install are missing:
-  - _build/melange/foo.install
-  Hint: try running 'dune build [-p <pkg>] @install'
+  Error: Cannot specify '--prefix' or '--libdir' when installing into multiple
+  contexts!
   [1]

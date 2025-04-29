@@ -48,7 +48,6 @@ tests that the "old_public_name" field is evaluated lazily
   > dune install --prefix $PWD/../_install --display short)
   Installing $TESTCASE_ROOT/a/../_install/lib/a/META
   Installing $TESTCASE_ROOT/a/../_install/lib/a/dune-package
-  Installing $TESTCASE_ROOT/a/../_install/doc/a/odoc-config.sexp
 
   $ rm -rf a
 
@@ -61,10 +60,8 @@ tests that the "old_public_name" field is evaluated lazily
   (name a)
   (sections
    (lib
-    $TESTCASE_ROOT/a/../_install/lib/a)
-   (doc
-    $TESTCASE_ROOT/a/../_install/doc/a))
-  (files (lib (META dune-package)) (doc (odoc-config.sexp)))
+    $TESTCASE_ROOT/a/../_install/lib/a))
+  (files (lib (META dune-package)))
   (deprecated_library_name (old_public_name a) (new_public_name b))
 
 Now we install "b". We do need to install it as an installed
@@ -83,7 +80,6 @@ deprecated library will be resolved in the installed world only.
   Installing $TESTCASE_ROOT/b/../_install/lib/b/b.ml
   Installing $TESTCASE_ROOT/b/../_install/lib/b/dune-package
   Installing $TESTCASE_ROOT/b/../_install/lib/b/b.cmxs
-  Installing $TESTCASE_ROOT/b/../_install/doc/b/odoc-config.sexp
 
   $ rm -rf b
 

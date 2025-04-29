@@ -39,7 +39,6 @@ Install the project
   Installing install/lib/test/META
   Installing install/lib/test/dune-package
   Installing install/lib/test/opam
-  Installing install/doc/test/odoc-config.sexp
   Installing install/man/man1/test.1
 
 -------------------------------------------------------------------------------
@@ -55,9 +54,7 @@ tools, dune should not remove it, nor complain about it being non-empty.
   Deleting install/lib/test/META
   Deleting install/lib/test/dune-package
   Deleting install/lib/test/opam
-  Deleting install/doc/test/odoc-config.sexp
   Deleting install/man/man1/test.1
   Error: Directory install/man/man1 is not empty, cannot delete (ignoring).
   Deleting empty directory install/lib/test
-  Deleting empty directory install/doc/test
 

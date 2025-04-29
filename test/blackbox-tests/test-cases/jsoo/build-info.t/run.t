@@ -12,7 +12,6 @@ Jsoo and build-info
   Installing _install/lib/main/opam
   Installing _install/bin/main
   Installing _install/bin/main.bc.js
-  Installing _install/doc/main/odoc-config.sexp
   $ node _install/bin/main.bc.js
   unknown
   $ git init -q
@@ -39,8 +38,6 @@ Jsoo and build-info
   Deleting _install/bin/main.bc.js
   Installing _install/bin/main.bc.js
   Installing _install/doc/main/README
-  Deleting _install/doc/main/odoc-config.sexp
-  Installing _install/doc/main/odoc-config.sexp
   $ node _install/bin/main.bc.js
   v1-1-xxxxx-dirty
   $ echo "(name main)" >> dune-project
@@ -63,7 +60,5 @@ Jsoo and build-info
   Installing _install/bin/main.bc.js
   Deleting _install/doc/main/README
   Installing _install/doc/main/README
-  Deleting _install/doc/main/odoc-config.sexp
-  Installing _install/doc/main/odoc-config.sexp
   $ node _build/default/src/main.bc.js
   0.2.0
