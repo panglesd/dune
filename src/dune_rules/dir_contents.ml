@@ -17,12 +17,17 @@ let loc_of_dune_file st_dir =
   |> Loc.in_file
 ;;
 
+type mld =
+  { path : Path.Build.t
+  ; parent_id : string list
+  }
+
 type t =
   { kind : kind
   ; dir : Path.Build.t
   ; text_files : Filename.Set.t
   ; foreign_sources : Foreign_sources.t Memo.Lazy.t
-  ; mlds : (Documentation.t * File_binding.Expanded.t list) list Memo.Lazy.t
+  ; mlds : (Documentation.t * mld list) list Memo.Lazy.t
   ; coq : Coq_sources.t Memo.Lazy.t
   ; ml : Ml_sources.t Memo.Lazy.t
   }
@@ -179,18 +184,54 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
     Dune_file.find_stanzas stanzas Documentation.key
     >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
       let+ mlds =
+        let of_file_bindings fbs =
+          List.map fbs ~f:(fun file_binding ->
+            let path = File_binding.Expanded.src file_binding in
+            let parent_id =
+              match File_binding.Expanded.dst file_binding with
+              | None ->
+                let rec rem_prefix l1 l2 =
+                  match l1, l2 with
+                  | [], l2 -> l2
+                  | _, [] -> assert false
+                  | x :: l1, y :: l2 ->
+                    assert (x = y);
+                    rem_prefix l1 l2
+                in
+                Format.printf
+                  "path = %s and parent = %s\n%!"
+                  (Path.Build.to_string path)
+                  (Path.Build.to_string @@ (path |> Path.Build.parent_exn));
+                rem_prefix
+                  (Path.Build.explode dir)
+                  (path |> Path.Build.parent_exn |> Path.Build.explode)
+              | Some parent_id ->
+                let rec remove_tail acc = function
+                  | [] | [ _ ] -> List.rev acc
+                  | h :: t -> remove_tail (h :: acc) t
+                in
+                String.split_on_char ~sep:'/' parent_id |> remove_tail []
+            in
+            { path; parent_id })
+        in
         let* from_files =
           let expand = Expander.No_deps.expand expander ~mode:Single in
-          Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
+          let+ file_bindings =
+            Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
+          in
+          of_file_bindings file_bindings
         in
         let* files_from_dirs =
           let expand = Expander.No_deps.expand expander ~mode:Single in
-          Install_entry.Dir.to_file_bindings_expanded
-            doc.dirs
-            ~expand
-            ~dir
-            ~relative_dst_path_starts_with_parent_error_when:
-              `Deprecation_warning_from_3_11
+          let+ file_bindings =
+            Install_entry.Dir.to_file_bindings_expanded
+              doc.dirs
+              ~expand
+              ~dir
+              ~relative_dst_path_starts_with_parent_error_when:
+                `Deprecation_warning_from_3_11
+          in
+          of_file_bindings file_bindings
         in
         let* source_trees =
           (* There's no deprecation warning when a relative destination path
@@ -198,14 +239,17 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
          this case as installing source trees was added in the same dune version
          that we deprecated starting a destination install path with "..". *)
           let expand = Expander.No_deps.expand expander ~mode:Single in
-          Install_entry.Dir.to_file_bindings_expanded
-            doc.source_trees
-            ~expand
-            ~dir
-            ~relative_dst_path_starts_with_parent_error_when:`Always_error
+          let+ file_bindings =
+            Install_entry.Dir.to_file_bindings_expanded
+              doc.source_trees
+              ~expand
+              ~dir
+              ~relative_dst_path_starts_with_parent_error_when:`Always_error
+          in
+          of_file_bindings file_bindings
         in
         let+ from_mld_files =
-          let* mlds = Memo.Lazy.force mlds in
+          let+ mlds = Memo.Lazy.force mlds in
           let values =
             Ordered_set_lang.Unordered_string.eval
               doc.mld_files
@@ -225,39 +269,20 @@ let build_mlds_map stanzas ~dir ~files ~include_subdirs ~dirs expander =
                     ])
             |> Filename.Map.values
           in
-          let res =
-            Memo.List.map
-              ~f:(fun s ->
-                let src, dst = (doc.loc, s), (doc.loc, s) in
-                let x =
-                  File_binding.Unexpanded.make ~src ~dst ~dune_syntax:(3, 18) ~dir:None
-                in
-                let y =
-                  File_binding.Unexpanded.expand
-                    ~dir
-                    ~f:(fun x ->
-                      String_with_vars.text_only x
-                      |> (function
-                       | Some x -> x
-                       | None -> assert false)
-                      |> Memo.return)
-                    x
-                in
-                y)
-              values
-          in
-          res
+          List.map
+            ~f:(fun x -> { path = Path.Build.relative dir x; parent_id = [] })
+            values
         in
         files_from_dirs @ from_files @ source_trees @ from_mld_files
       in
-      List.iter
-        ~f:(fun fb ->
-          Format.printf
-            "from %s : %s -> %s\n%!"
-            (Path.Build.to_string dir)
-            (Path.Build.to_string (File_binding.Expanded.src fb))
-            (Path.Build.to_string (File_binding.Expanded.dst_path ~dir fb)))
-        mlds;
+      (* List.iter *)
+      (*   ~f:(fun fb -> *)
+      (*     Format.printf *)
+      (*       "from %s : %s -> %s\n%!" *)
+      (*       (Path.Build.to_string dir) *)
+      (*       (Path.Build.to_string (File_binding.Expanded.src fb)) *)
+      (*       (Path.Build.to_string (File_binding.Expanded.dst_path ~dir fb))) *)
+      (*   mlds; *)
       doc, mlds (* List.map (Filename.Map.values mlds) ~f:(Path.Build.relative dir) *))
 ;;
 

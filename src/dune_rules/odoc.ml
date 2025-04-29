@@ -663,7 +663,7 @@ let create_odoc ctx ~target ?(parent_id = "") odoc_file =
 
 let check_mlds_no_dupes ~pkg ~mlds =
   match
-    List.rev_map mlds ~f:(fun (mld, parent_id) ->
+    List.rev_map mlds ~f:(fun { Dir_contents.path = mld; parent_id } ->
       Filename.remove_extension (Path.Build.basename mld), (mld, parent_id))
     |> Filename.Map.of_list
   with

@@ -503,19 +503,6 @@ end = struct
           lib_install_files sctx ~scope ~dir ~sub_dir lib ~dir_contents
         | Coq_stanza.Theory.T coqlib -> Coq_rules.install_rules ~sctx ~dir coqlib
         | Documentation.T stanza ->
-          let make_entry fb ~kind =
-            let src = File_binding.Expanded.src fb in
-            let dst =
-              Install.Entry.adjust_dst'
-                ~src
-                ~dst:(File_binding.Expanded.dst fb)
-                ~section:Section.Doc
-            in
-            let dst =
-              Install.Entry.Dst.add_prefix ("odoc-pages/" ^ stanza.path ^ "/") dst
-            in
-            Install.Entry.make_with_dst ~kind Section.Doc ~src dst
-          in
           (* let* from_files = *)
           (*   let expand = Expander.No_deps.expand expander ~mode:Single in *)
           (*   let+ files = *)
@@ -562,16 +549,18 @@ end = struct
           let+ from_mld_files =
             Dir_contents.get sctx ~dir
             >>= Dir_contents.mlds ~stanza
-            >>= Memo.List.map ~f:(fun fb ->
-              let loc = File_binding.Expanded.src_loc fb in
-              let entry = make_entry ~kind:`File fb in
-              Memo.return @@ Install.Entry.Sourced.create ~loc entry
-              (*                  Install.Entry.make *)
-              (*   ~kind:`File *)
-              (*   ~dst:(sprintf "odoc-pages/%s/%s" stanza.path (Path.Build.basename mld)) *)
-              (*   Section.Doc *)
-              (*   mld *)
-              (* |> Install.Entry.Sourced.create ~loc:stanza.loc *))
+            >>| List.map ~f:(fun mld ->
+              Install.Entry.make
+                ~kind:`File
+                ~dst:
+                  (sprintf
+                     "odoc-pages/%s"
+                     (String.concat ~sep:"/"
+                      @@ (stanza.path :: mld.Dir_contents.parent_id)
+                      @ [ Path.Build.basename mld.path ]))
+                Section.Doc
+                mld.path
+              |> Install.Entry.Sourced.create ~loc:stanza.loc)
           in
           (* from_files @  *) from_mld_files (* @ files_from_dirs @ source_trees *)
         | Plugin.T t -> Plugin_rules.install_rules ~sctx ~package_db ~dir t

@@ -1255,7 +1255,9 @@ let ext_package_mlds (ctx : Context.t) (pkg : Package.Name.t) =
 let pkg_mlds sctx pkg =
   let* pkgs = Dune_load.packages () in
   if Package.Name.Map.mem pkgs pkg
-  then Packages.mlds sctx pkg >>| List.map ~f:(fun (x, _) -> Path.build x)
+  then
+    Packages.mlds sctx pkg
+    >>| List.map ~f:(fun { Dir_contents.path; _ } -> Path.build path)
   else (
     let ctx = Super_context.context sctx in
     ext_package_mlds ctx pkg)
