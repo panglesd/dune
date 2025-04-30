@@ -48,7 +48,7 @@ type t =
   ; synopsis : string option
   ; description : string option
   ; depends : Package_dependency.t list
-  ; doc_depends : string list * Package_dependency.t list
+  ; doc_depends : Package_doc_dependency.t
   ; conflicts : Package_dependency.t list
   ; depopts : Package_dependency.t list
   ; info : Package_info.t
@@ -92,7 +92,7 @@ let encode
       ; synopsis
       ; description
       ; depends
-      ; doc_depends = doc_lib_dep, doc_pkg_dep
+      ; doc_depends
       ; conflicts
       ; depopts
       ; info
@@ -113,15 +113,7 @@ let encode
         ; field_o "synopsis" string synopsis
         ; field_o "description" string description
         ; field_l "depends" Package_dependency.encode depends
-        ; (let i () =
-             list
-               sexp
-               (record_fields
-                  [ field_l "packages" Package_dependency.encode doc_pkg_dep
-                  ; field_l "libraries" string doc_lib_dep
-                  ])
-           in
-           field "doc_depends" i ())
+        ; field_i "doc_depends" Package_doc_dependency.encode doc_depends
         ; field_l "conflicts" Package_dependency.encode conflicts
         ; field_l "depopts" Package_dependency.encode depopts
         ; field_o "version" Package_version.encode version
@@ -154,12 +146,6 @@ let decode =
         ; Pp.textf "- %s" (print_value loc2)
         ]
   in
-  let doc_depends_decode =
-    fields
-    @@ let+ lib_deps = field ~default:[] "libraries" (repeat string)
-       and+ pkg_deps = field ~default:[] "packages" (repeat Package_dependency.decode) in
-       lib_deps, pkg_deps
-  in
   fun ~dir ->
     fields
     @@ let* version = Syntax.get_exn Stanza.syntax in
@@ -170,7 +156,11 @@ let decode =
        and+ version =
          field_o "version" (Syntax.since Stanza.syntax (2, 5) >>> Package_version.decode)
        and+ depends = field ~default:[] "depends" (repeat Package_dependency.decode)
-       and+ doc_depends = field ~default:([], []) "doc_depends" doc_depends_decode
+       and+ doc_depends =
+         field
+           ~default:{ Package_doc_dependency.libraries = []; packages = [] }
+           "doc_depends"
+           Package_doc_dependency.decode
        and+ conflicts = field ~default:[] "conflicts" (repeat Package_dependency.decode)
        and+ depopts = field ~default:[] "depopts" (repeat Package_dependency.decode)
        and+ info = Package_info.decode ~since:(2, 0) ()
@@ -231,7 +221,7 @@ let to_dyn
       ; synopsis
       ; description
       ; depends
-      ; doc_depends = doc_lib_deps, doc_pkg_dep
+      ; doc_depends
       ; conflicts
       ; depopts
       ; info
@@ -251,10 +241,7 @@ let to_dyn
     ; "synopsis", option string synopsis
     ; "description", option string description
     ; "depends", list Package_dependency.to_dyn depends
-    ; ( "doc_depends"
-      , let x a = list string a in
-        let y b = list Package_dependency.to_dyn b in
-        pair x y (doc_lib_deps, doc_pkg_dep) )
+    ; "doc_depends", Package_doc_dependency.to_dyn doc_depends
     ; "conflicts", list Package_dependency.to_dyn conflicts
     ; "depopts", list Package_dependency.to_dyn depopts
     ; "info", Package_info.to_dyn info

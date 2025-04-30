@@ -10,7 +10,7 @@ let install_file ~(package : Package.Name.t) ~findlib_toolchain =
 
 let need_odoc_config (pkg : Package.t) =
   match Package.doc_depends pkg with
-  | [], [] -> false
+  | { packages = []; libraries = [] } -> false
   | _ -> true
 ;;
 
@@ -843,7 +843,9 @@ end = struct
   ;;
 
   let gen_odoc_config sctx (pkg : Package.t) =
-    let lib_deps, pkg_deps = Package.doc_depends pkg in
+    let { Dune_lang.Package_doc_dependency.libraries; packages } =
+      Package.doc_depends pkg
+    in
     let ctx = Super_context.context sctx |> Context.build_context in
     match Package_paths.odoc_config_file ctx pkg with
     | None -> Memo.return ()
@@ -854,8 +856,8 @@ end = struct
           (Action_builder.return
            @@ Format.asprintf
                 "(libraries %s)\n(packages %s)"
-                (String.concat ~sep:" " lib_deps)
-                (pkg_deps
+                (String.concat ~sep:" " libraries)
+                (packages
                  |> List.map ~f:(fun d ->
                    d.Package_dependency.name |> Dune_lang.Package_name.to_string)
                  |> String.concat ~sep:" "))
