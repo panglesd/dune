@@ -667,13 +667,21 @@ let check_mlds_no_dupes ~pkg ~mlds =
       ]
 ;;
 
+let mlds sctx pkg =
+  Packages.mlds sctx pkg
+  >>| List.filter_map ~f:(function
+    | { Dir_contents.path; parent_id = [] } -> Some path
+    | { parent_id = _ :: _; _ } ->
+      None (* Filter non-toplevel pages as we are currently not able to build them *))
+;;
+
 let odoc_artefacts sctx target =
   let ctx = Super_context.context sctx in
   let dir = Paths.odocs ctx target in
   match target with
   | Pkg pkg ->
     let+ mlds =
-      let+ mlds = Packages.mlds sctx pkg in
+      let+ mlds = mlds sctx pkg in
       let mlds = check_mlds_no_dupes ~pkg ~mlds in
       Filename.Map.update mlds "index" ~f:(function
         | None -> Some (Paths.gen_mld_dir ctx pkg ++ "index.mld")
@@ -921,7 +929,7 @@ let package_mlds =
       ~input:(module Super_context.As_memo_key.And_package_name)
       (fun (sctx, pkg) ->
          Rules.collect (fun () ->
-           let* mlds = Packages.mlds sctx pkg in
+           let* mlds = mlds sctx pkg in
            let mlds = check_mlds_no_dupes ~pkg ~mlds in
            let ctx = Super_context.context sctx in
            if Filename.Map.mem mlds "index"

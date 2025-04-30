@@ -1255,7 +1255,12 @@ let ext_package_mlds (ctx : Context.t) (pkg : Package.Name.t) =
 let pkg_mlds sctx pkg =
   let* pkgs = Dune_load.packages () in
   if Package.Name.Map.mem pkgs pkg
-  then Packages.mlds sctx pkg >>| List.map ~f:Path.build
+  then
+    Packages.mlds sctx pkg
+    >>| List.filter_map ~f:(function
+      | { Dir_contents.path; parent_id = [] } -> Some (Path.build path)
+      | { parent_id = _ :: _; _ } ->
+        None (* Filter non-toplevel pages as we are currently not able to build them *))
   else (
     let ctx = Super_context.context sctx in
     ext_package_mlds ctx pkg)

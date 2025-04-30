@@ -4,6 +4,7 @@ type t =
   { loc : Loc.t
   ; package : Package.t
   ; mld_files : Ordered_set_lang.t
+  ; path : string
   }
 
 include Stanza.S with type t := t

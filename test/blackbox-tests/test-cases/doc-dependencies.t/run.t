@@ -37,3 +37,15 @@ Now, let's check that it would install the correct `odoc-config.sexp` file
   $ cat _build/install/default/doc/foo/odoc-config.sexp
   (libraries brr brr.poke)
   (packages ppx_derivers brr)
+
+And install it!
+
+  $ cat _build/default/foo.install
+  lib: [
+    "_build/install/default/lib/foo/META"
+    "_build/install/default/lib/foo/dune-package"
+    "_build/install/default/lib/foo/opam"
+  ]
+  doc: [
+    "_build/install/default/doc/foo/odoc-config.sexp"
+  ]
