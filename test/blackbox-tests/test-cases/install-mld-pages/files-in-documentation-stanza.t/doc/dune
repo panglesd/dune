@@ -1,2 +1,0 @@
-(documentation
- (files (glob_files_rec *)))
