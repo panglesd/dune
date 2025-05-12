@@ -23,13 +23,8 @@ val foreign_sources : t -> Foreign_sources.t Memo.t
 
 val ocaml : t -> Ml_sources.t Memo.t
 
-type mld =
-  { path : Path.Build.t
-  ; parent_id : string list
-  }
-
 (** All mld files attached to this documentation stanza *)
-val mlds : t -> stanza:Documentation.t -> mld list Memo.t
+val mlds : t -> stanza:Documentation.t -> Doc_sources.mld list Memo.t
 
 val coq : t -> Coq_sources.t Memo.t
 

@@ -1258,7 +1258,7 @@ let pkg_mlds sctx pkg =
   then
     Packages.mlds sctx pkg
     >>| List.filter_map ~f:(function
-      | { Dir_contents.path; parent_id = [] } -> Some (Path.build path)
+      | { Doc_sources.path; parent_id = [] } -> Some (Path.build path)
       | { parent_id = _ :: _; _ } ->
         None (* Filter non-toplevel pages as we are currently not able to build them *))
   else (

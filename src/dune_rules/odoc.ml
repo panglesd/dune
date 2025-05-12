@@ -670,7 +670,7 @@ let check_mlds_no_dupes ~pkg ~mlds =
 let mlds sctx pkg =
   Packages.mlds sctx pkg
   >>| List.filter_map ~f:(function
-    | { Dir_contents.path; parent_id = [] } -> Some path
+    | { Doc_sources.path; parent_id = [] } -> Some path
     | { parent_id = _ :: _; _ } ->
       None (* Filter non-toplevel pages as we are currently not able to build them *))
 ;;

@@ -5,6 +5,7 @@ type t =
   ; package : Package.t
   ; mld_files : Ordered_set_lang.t
   ; path : string
+  ; files : Install_entry.File.t list
   }
 
 include Stanza.S with type t := t

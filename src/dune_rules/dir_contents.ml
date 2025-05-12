@@ -17,17 +17,12 @@ let loc_of_dune_file st_dir =
   |> Loc.in_file
 ;;
 
-type mld =
-  { path : Path.Build.t
-  ; parent_id : string list
-  }
-
 type t =
   { kind : kind
   ; dir : Path.Build.t
   ; text_files : Filename.Set.t
   ; foreign_sources : Foreign_sources.t Memo.Lazy.t
-  ; mlds : (Documentation.t * mld list) list Memo.Lazy.t
+  ; mlds : (Documentation.t * Doc_sources.mld list) list Memo.Lazy.t
   ; coq : Coq_sources.t Memo.Lazy.t
   ; ml : Ml_sources.t Memo.Lazy.t
   }
@@ -121,49 +116,6 @@ let mlds t ~(stanza : Documentation.t) =
         , Dyn.(list Loc.to_dyn_hum)
             (List.map map ~f:(fun ((d : Documentation.t), _) -> d.loc)) )
       ]
-;;
-
-let build_mlds_map stanzas ~dir ~files =
-  let mlds =
-    Memo.lazy_ (fun () ->
-      Filename.Set.fold files ~init:Filename.Map.empty ~f:(fun fn acc ->
-        (* TODO this doesn't handle [.foo.mld] correctly *)
-        match String.lsplit2 fn ~on:'.' with
-        | Some (s, "mld") -> Filename.Map.set acc s fn
-        | _ -> acc)
-      |> Memo.return)
-  in
-  Dune_file.find_stanzas stanzas Documentation.key
-  >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
-    let parent_id_prefix =
-      if doc.path = "" then [] else String.split_on_char ~sep:'/' doc.path
-    in
-    let+ mlds =
-      let+ mlds = Memo.Lazy.force mlds in
-      Ordered_set_lang.Unordered_string.eval
-        doc.mld_files
-        ~standard:mlds
-        ~key:Fun.id
-        ~parse:(fun ~loc s ->
-          match Filename.Map.find mlds s with
-          | Some s -> s
-          | None ->
-            User_error.raise
-              ~loc
-              [ Pp.textf
-                  "%s.mld doesn't exist in %s"
-                  s
-                  (Path.to_string_maybe_quoted
-                     (Path.drop_optional_build_context (Path.build dir)))
-              ])
-    in
-    let mlds =
-      mlds
-      |> Filename.Map.values
-      |> List.map ~f:(fun x ->
-        { path = Path.Build.relative dir x; parent_id = parent_id_prefix })
-    in
-    doc, mlds)
 ;;
 
 module rec Load : sig
@@ -297,12 +249,17 @@ end = struct
                     ~lookup_vlib
                     ~dirs)
           in
+          let mlds =
+            Memo.lazy_ (fun () ->
+              let* expander = Super_context.expander sctx ~dir in
+              Doc_sources.build_mlds_map d ~dir ~files expander)
+          in
           { Standalone_or_root.root =
               { kind = Standalone
               ; dir
               ; text_files = files
               ; ml
-              ; mlds = Memo.lazy_ (fun () -> build_mlds_map d ~dir ~files)
+              ; mlds
               ; foreign_sources =
                   Memo.lazy_ (fun () ->
                     let dune_version = Dune_project.dune_version project in
@@ -390,6 +347,11 @@ end = struct
              Memo.lazy_ (fun () ->
                stanzas >>| Coq_sources.of_dir ~dir ~dirs ~include_subdirs)
            in
+           let mlds =
+             Memo.lazy_ (fun () ->
+               let* expander = Super_context.expander sctx ~dir in
+               Doc_sources.build_mlds_map dune_file ~dir ~files expander)
+           in
            let subdirs =
              List.map subdirs ~f:(fun { Source_file_dir.dir; path_to_root = _; files } ->
                { kind = Group_part
@@ -397,7 +359,7 @@ end = struct
                ; text_files = files
                ; ml
                ; foreign_sources
-               ; mlds = Memo.lazy_ (fun () -> build_mlds_map dune_file ~dir ~files)
+               ; mlds
                ; coq
                })
            in
@@ -407,7 +369,7 @@ end = struct
              ; text_files = files
              ; ml
              ; foreign_sources
-             ; mlds = Memo.lazy_ (fun () -> build_mlds_map dune_file ~dir ~files)
+             ; mlds
              ; coq
              }
            in

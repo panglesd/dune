@@ -512,7 +512,7 @@ end = struct
                 (sprintf
                    "odoc-pages/%s"
                    (String.concat ~sep:"/"
-                    @@ mld.Dir_contents.parent_id
+                    @@ mld.Doc_sources.parent_id
                     @ [ Path.Build.basename mld.path ]))
               Section.Doc
               mld.path
