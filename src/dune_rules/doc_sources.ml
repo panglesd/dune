@@ -43,7 +43,7 @@ let from_mld_files mlds doc dir parent_id_prefix =
       ~standard:mlds
       ~key:Fun.id
       ~parse:(fun ~loc s ->
-        match Filename.Map.find mlds s with
+        match Filename.Map.find mlds (s ^ ".mld") with
         | Some s -> s
         | None ->
           User_error.raise
