@@ -508,12 +508,7 @@ end = struct
           >>| List.rev_map ~f:(fun mld ->
             Install.Entry.make
               ~kind:`File
-              ~dst:
-                (sprintf
-                   "odoc-pages/%s"
-                   (String.concat ~sep:"/"
-                    @@ mld.Doc_sources.parent_id
-                    @ [ Path.Build.basename mld.path ]))
+              ~dst:(sprintf "odoc-pages/%s" (Path.Local.to_string mld.Doc_sources.in_doc))
               Section.Doc
               mld.path
             |> Install.Entry.Sourced.create ~loc:stanza.loc)

@@ -3,36 +3,21 @@ open Memo.O
 
 type mld =
   { path : Path.Build.t
-  ; parent_id : string list
+  ; in_doc : Path.Local.t
   }
 
-let rec rem_prefix l1 l2 =
-  match l1, l2 with
-  | [], l2 -> l2
-  | _, [] -> assert false
-  | x :: l1, y :: l2 ->
-    assert (x = y);
-    rem_prefix l1 l2
-;;
-
-let rec remove_tail acc = function
-  | [] | [ _ ] -> List.rev acc
-  | h :: t -> remove_tail (h :: acc) t
-;;
-
-let of_file_bindings parent_id_prefix dir fbs =
+let of_file_bindings parent_id_prefix fbs =
   List.map fbs ~f:(fun file_binding ->
     let path = File_binding.Expanded.src file_binding in
     let parent_id =
       match File_binding.Expanded.dst file_binding with
-      | None ->
-        rem_prefix
-          (Path.Build.explode dir)
-          (path |> Path.Build.parent_exn |> Path.Build.explode)
-      | Some parent_id -> String.split_on_char ~sep:'/' parent_id |> remove_tail []
+      | None -> Path.Local.of_string (Path.Build.basename path)
+      | Some in_doc ->
+        let loc = File_binding.Expanded.src_loc file_binding in
+        Path.Local.parse_string_exn ~loc in_doc
     in
-    let parent_id = parent_id_prefix @ parent_id in
-    Path.Build.Map.singleton path { path; parent_id })
+    let in_doc = Path.Local.append parent_id_prefix parent_id in
+    { path; in_doc })
 ;;
 
 let from_mld_files mlds doc dir parent_id_prefix =
@@ -58,7 +43,8 @@ let from_mld_files mlds doc dir parent_id_prefix =
   mlds
   |> Filename.Map.map ~f:(fun x ->
     let path = Path.Build.relative dir x in
-    Path.Build.Map.singleton path { path; parent_id = parent_id_prefix })
+    let in_doc = Path.Local.relative parent_id_prefix x in
+    { path; in_doc })
   |> Filename.Map.values
 ;;
 
@@ -74,37 +60,15 @@ let build_mlds_map stanzas ~dir ~files expander =
   in
   Dune_file.find_stanzas stanzas Documentation.key
   >>= Memo.parallel_map ~f:(fun (doc : Documentation.t) ->
-    let parent_id_prefix =
-      if doc.path = "" then [] else String.split_on_char ~sep:'/' doc.path
-    in
+    let parent_id_prefix = Path.Local.parse_string_exn ~loc:doc.loc doc.path in
     let* from_mld_files = from_mld_files mlds doc dir parent_id_prefix in
     let+ from_files =
       let expand = Expander.No_deps.expand expander ~mode:Single in
       let+ file_bindings =
         Install_entry.File.to_file_bindings_expanded doc.files ~expand ~dir
       in
-      of_file_bindings parent_id_prefix dir file_bindings
+      of_file_bindings parent_id_prefix file_bindings
     in
-    let mlds =
-      Path.Build.Map.union_all
-        ~f:(fun p v1 v2 ->
-          if v1 = v2
-          then Some v1
-          else (
-            let installed_as v =
-              String.concat ~sep:"/" (v.parent_id @ [ Path.Build.basename v.path ])
-            in
-            User_error.raise
-              ~loc:doc.loc
-              [ Pp.textf
-                  "%s is used in docs both as %s and as %s"
-                  (Path.to_string_maybe_quoted
-                     (Path.drop_optional_build_context (Path.build p)))
-                  (installed_as v1)
-                  (installed_as v2)
-              ]))
-        (List.concat [ from_mld_files; from_files ])
-      |> Path.Build.Map.values
-    in
+    let mlds = List.concat [ from_mld_files; from_files ] in
     doc, mlds)
 ;;
