@@ -6,8 +6,11 @@ One mechanism to install mld pages in subdirectory is to use the "path" field of
 the documentation stanza:
 
   $ cat dune
-  cat: dune: No such file or directory
-  [1]
+  (documentation
+   (source_trees doc/))
+  
+  (documentation
+   (source_trees (doc2/ as .)))
 
 Here, the mld pages in tutorial/ will be installed in
 <page_root>/tutorial/tuto1/ while the ones in doc/ will be installed in
@@ -16,24 +19,13 @@ Here, the mld pages in tutorial/ will be installed in
 Let's verify that:
 
   $ dune build @install
-  Dst is Some ./img1.png
-  Dst is Some ./img2.png
-  Dst is Some examples/example1/index.mld
-  Dst is Some examples/example2/index.mld
-  Dst is Some examples/index.mld
-  Dst is Some examples/summary.mld
-  Dst is Some tutorial/tuto1.mld
-  Dst is Some tutorial/tuto2.mld
-  Dst is Some index.mld
   $ ls -F _build/install/default/doc/testing_mld/odoc-pages
+  doc/
   examples/
-  img1.png@
-  img2.png@
-  pkgname.mld@
+  index.mld@
   tutorial/
   $ ls _build/install/default/doc/testing_mld/odoc-pages/tutorial/
   tuto1.mld
-  tuto2.mld
 
   $ cat _build/default/testing_mld.install
   lib: [
@@ -41,13 +33,16 @@ Let's verify that:
     "_build/install/default/lib/testing_mld/dune-package"
   ]
   doc: [
-    "_build/install/default/doc/testing_mld/odoc-pages/img1.png" {"odoc-pages/./img1.png"}
-    "_build/install/default/doc/testing_mld/odoc-pages/img2.png" {"odoc-pages/./img2.png"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/examples/example1/index.mld" {"odoc-pages/doc/examples/example1/index.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/examples/example2/index.mld" {"odoc-pages/doc/examples/example2/index.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/examples/index.mld" {"odoc-pages/doc/examples/index.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/examples/summary.mld" {"odoc-pages/doc/examples/summary.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/index.mld" {"odoc-pages/doc/index.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/doc/tutorial/tuto1.mld" {"odoc-pages/doc/tutorial/tuto1.mld"}
     "_build/install/default/doc/testing_mld/odoc-pages/examples/example1/index.mld" {"odoc-pages/examples/example1/index.mld"}
     "_build/install/default/doc/testing_mld/odoc-pages/examples/example2/index.mld" {"odoc-pages/examples/example2/index.mld"}
     "_build/install/default/doc/testing_mld/odoc-pages/examples/index.mld" {"odoc-pages/examples/index.mld"}
     "_build/install/default/doc/testing_mld/odoc-pages/examples/summary.mld" {"odoc-pages/examples/summary.mld"}
-    "_build/install/default/doc/testing_mld/odoc-pages/pkgname.mld" {"odoc-pages/pkgname.mld"}
+    "_build/install/default/doc/testing_mld/odoc-pages/index.mld" {"odoc-pages/index.mld"}
     "_build/install/default/doc/testing_mld/odoc-pages/tutorial/tuto1.mld" {"odoc-pages/tutorial/tuto1.mld"}
-    "_build/install/default/doc/testing_mld/odoc-pages/tutorial/tuto2.mld" {"odoc-pages/tutorial/tuto2.mld"}
   ]

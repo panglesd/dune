@@ -1,0 +1,8 @@
+(documentation
+ (mld_files)
+ (files
+  (glob_files (assets/* with_prefix .))
+  (glob_files_rec examples/*)
+  (glob_files
+   (tuto*.mld with_prefix tutorial))
+  (pkgname.mld as index.mld)))

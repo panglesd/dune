@@ -1,0 +1,5 @@
+(documentation
+ (source_trees doc/))
+
+(documentation
+ (source_trees (doc2/ as .)))
