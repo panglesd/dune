@@ -22,11 +22,4 @@ Make sure we can handle globs in dune files inside subdirectories
   $ dune build @sub-dir/all
 
   $ find _build/default/sub-dir | sort
-  _build/default/sub-dir
-  _build/default/sub-dir/a.txt
-  _build/default/sub-dir/x
-  _build/default/sub-dir/x/foo.txt
-  _build/default/sub-dir/x/y
-  _build/default/sub-dir/x/y/foo.txt
-  _build/default/sub-dir/x/y/z
-  _build/default/sub-dir/x/y/z/foo.txt
+  find: '_build/default/sub-dir': No such file or directory

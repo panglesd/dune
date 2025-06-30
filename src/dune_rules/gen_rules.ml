@@ -2,33 +2,6 @@ open Import
 open Memo.O
 module Gen_rules = Build_config.Gen_rules
 
-let install_stanza_rules ~ctx_dir ~expander (install_conf : Install_conf.t) =
-  let action =
-    (* XXX we're evaluating these stanzas here and [Install_rules]. Seems a bit
-       sad to do that *)
-    let files_and_dirs =
-      let expand = Expander.No_deps.expand expander ~mode:Single in
-      let+ files_expanded =
-        Install_entry.File.to_file_bindings_expanded
-          install_conf.files
-          ~expand
-          ~dir:ctx_dir
-      and+ dirs_expanded =
-        Install_entry.Dir.to_file_bindings_expanded
-          install_conf.dirs
-          ~expand
-          ~dir:ctx_dir
-          ~relative_dst_path_starts_with_parent_error_when:`Deprecation_warning_from_3_11
-      in
-      List.map (files_expanded @ dirs_expanded) ~f:(fun fb ->
-        File_binding.Expanded.src fb |> Path.build)
-    in
-    let open Action_builder.O in
-    Action_builder.of_memo files_and_dirs >>= Action_builder.paths
-  in
-  Rules.Produce.Alias.add_deps (Alias.make Alias0.all ~dir:ctx_dir) action
-;;
-
 module For_stanza : sig
   type ('merlin, 'cctx, 'js, 'source_dirs) t =
     { merlin : 'merlin
@@ -128,8 +101,7 @@ end = struct
     | Executables.T exes ->
       Expander.eval_blang expander exes.enabled_if
       >>= if_available (fun () ->
-        let+ () =
-          Memo.Option.iter exes.install_conf ~f:(install_stanza_rules ~expander ~ctx_dir)
+        let+ () = Memo.return ()
         and+ cctx_merlin = Exe_rules.rules exes ~sctx ~scope ~expander ~dir_contents in
         { (with_cctx_merlin ~loc:exes.buildable.loc cctx_merlin) with
           js =
@@ -160,9 +132,7 @@ end = struct
            | In_build_dir _ | External _ -> None)
       in
       { empty_none with source_dirs }
-    | Install_conf.T i ->
-      let+ () = install_stanza_rules ~ctx_dir ~expander i in
-      empty_none
+    | Install_conf.T _ -> Memo.return empty_none
     (* TODO: What does this part of the code do? Why does Documentation.t has
        not the same kind of install_stanza_rules? *)
     | Plugin.T p ->
