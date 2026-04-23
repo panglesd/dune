@@ -11,6 +11,15 @@ val search_db
   -> Path.Build.t list
   -> Path.Build.t Memo.t
 
+(** [search_db_marshal sctx ~dir odocls] is like [search_db] but produces a
+    marshal format database instead of JavaScript. *)
+val search_db_marshal
+  :  Super_context.t
+  -> dir:Path.Build.t
+  -> external_odocls:Path.Build.t list
+  -> Path.Build.t list
+  -> Path.Build.t Memo.t
+
 val sherlodoc_dot_js : Super_context.t -> dir:Path.Build.t -> unit Memo.t
 
 val odoc_args
