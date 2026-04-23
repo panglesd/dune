@@ -4,6 +4,7 @@ open Memo.O
 module Paths = struct
   let db_dot_js ~dir = Path.Build.relative dir "db.js"
   let sherlodoc_dot_js ~dir = Path.Build.relative dir "sherlodoc.js"
+  let db_marshal ~dir = Path.Build.relative dir "db.marshal"
 end
 
 let resolve_sherlodoc sctx ~dir =
@@ -25,6 +26,26 @@ let add_index_db_rule sctx ~dir ~external_odocls odocls =
         ; A "--format=js"
         ; A "--db"
         ; Target (Paths.db_dot_js ~dir)
+        ]
+  in
+  Super_context.add_rule sctx ~dir action
+;;
+
+let add_index_marshal_rule sctx ~dir ~external_odocls odocls =
+  let program = resolve_sherlodoc sctx ~dir in
+  let action =
+    Command.run_dyn_prog
+      ~dir:(Path.build dir)
+      program
+      Command.Args.
+        [ A "index"
+        ; Deps (List.map ~f:Path.build external_odocls)
+        ; S (List.map ~f:(fun ext -> S [ A "--favoured"; Dep (Path.build ext) ]) odocls)
+        ; A "--favoured-prefixes"
+        ; A {|""|}
+        ; A "--format=marshal"
+        ; A "--db"
+        ; Target (Paths.db_marshal ~dir)
         ]
   in
   Super_context.add_rule sctx ~dir action
@@ -73,4 +94,9 @@ let odoc_args sctx ~search_db ~dir_sherlodoc_dot_js ~html_root =
 let search_db sctx ~dir ~external_odocls odocls =
   let+ () = add_index_db_rule sctx ~dir ~external_odocls odocls in
   Paths.db_dot_js ~dir
+;;
+
+let search_db_marshal sctx ~dir ~external_odocls odocls =
+  let+ () = add_index_marshal_rule sctx ~dir ~external_odocls odocls in
+  Paths.db_marshal ~dir
 ;;
