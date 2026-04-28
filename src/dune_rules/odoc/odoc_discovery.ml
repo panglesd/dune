@@ -3,6 +3,17 @@ open Memo.O
 
 let ( ++ ) = Path.Build.relative
 
+let libs_of_pkg (ctx : Context.t) ~pkg =
+  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
+    Scope.DB.lib_entries_of_package (Context.name ctx) pkg
+  in
+  List.filter_map libraries ~f:(fun lib ->
+    let lib_t = Lib.Local.to_lib lib in
+    match Lib.info lib_t |> Lib_info.implements with
+    | None -> Some lib_t
+    | Some _ -> None)
+;;
+
 let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   let* packages = Dune_load.packages () in
   if Package.Name.Map.mem packages pkg
@@ -158,15 +169,10 @@ let discover_private_lib_artifacts sctx ctx ~lib_name ~project
 let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
   : (Odoc_artifact.t list * string list) Memo.t
   =
-  let* { Scope.DB.Lib_entry.Set.libraries; _ } =
-    Scope.DB.lib_entries_of_package (Context.name ctx) pkg
-  in
+  let* all_libs = libs_of_pkg ctx ~pkg in
   let libs =
-    List.filter_map libraries ~f:(fun lib ->
-      let lib_t = Lib.Local.to_lib lib in
-      match Lib.info lib_t |> Lib_info.implements with
-      | None -> Some lib_t
-      | Some _ -> None)
+    List.filter_map all_libs ~f:(fun lib ->
+      Option.map (Lib.Local.of_lib lib) ~f:Lib.Local.to_lib)
   in
   let* mld_infos = get_local_mld_infos sctx ~pkg in
   let* base_artifacts, lib_subdirs =

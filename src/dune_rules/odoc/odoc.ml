@@ -533,17 +533,6 @@ let setup_css_rule sctx =
   setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx)
 ;;
 
-let libs_of_pkg ctx ~pkg =
-  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
-    Scope.DB.lib_entries_of_package ctx pkg
-  in
-  (* Filter out all implementations of virtual libraries *)
-  List.filter_map libraries ~f:(fun lib ->
-    match Lib.Local.to_lib lib |> Lib.info |> Lib_info.implements with
-    | None -> Some lib
-    | Some _ -> None)
-;;
-
 (* Compute requires for linking an artifact.
    - Modules in a library: the library's transitive closure plus sibling libs
      in the same package (allowing cross-references between siblings).
@@ -559,8 +548,7 @@ let compute_link_requires sctx ~artifact =
     (match Lib_info.package (Lib.info lib) with
      | None -> Memo.return (Resolve.map closure ~f:(fun libs -> lib :: libs))
      | Some pkg ->
-       let+ pkg_libs = libs_of_pkg (Context.name ctx) ~pkg in
-       let pkg_libs = List.map pkg_libs ~f:Lib.Local.to_lib in
+       let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
        Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs))
   | Page ({ pkg_libs; _ }, Pkg _) ->
     if List.is_empty pkg_libs
@@ -1106,10 +1094,9 @@ let gen_rules sctx ~dir rest =
   in
   let handle_mlds_pkg pkg_name =
     let pkg = Package.Name.of_string pkg_name in
-    let* all_libs = libs_of_pkg (Context.name ctx) ~pkg in
+    let* all_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
     let lib_subdirs =
-      List.map all_libs ~f:(fun lib ->
-        Lib.name (Lib.Local.to_lib lib) |> Lib_name.to_string)
+      List.map all_libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string)
     in
     let rules = Rules.collect_unit (fun () -> handle_mlds_dir sctx ~pkg_name) in
     Memo.return
