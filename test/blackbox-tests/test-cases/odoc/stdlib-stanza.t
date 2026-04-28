@@ -76,6 +76,7 @@ Bar is compiled
   $ find _build/default -name '*.odoc' | sort -n
   _build/default/_doc/_odoc/l/l/l.odoc
   _build/default/_doc/_odoc/l/l/l__Bar.odoc
+  _build/default/_doc/_odoc/l/l/page-index.odoc
   _build/default/_doc/_odoc/l/page-index.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalFormat.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalFormatBasics.odoc
@@ -152,6 +153,7 @@ Bar is compiled
 Bar is not linked
   $ find _build/default -name '*.odocl' | sort -n
   _build/default/_doc/_odocls/l/l/l.odocl
+  _build/default/_doc/_odocls/l/l/page-index.odocl
   _build/default/_doc/_odocls/l/page-index.odocl
 
 No html is generated for Bar
@@ -160,3 +162,4 @@ No html is generated for Bar
   _build/default/_doc/_html/index.html
   _build/default/_doc/_html/l/index.html
   _build/default/_doc/_html/l/l/L/index.html
+  _build/default/_doc/_html/l/l/index.html

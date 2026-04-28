@@ -14,4 +14,5 @@ val odocl_root : Context.t -> Path.Build.t
 val sherlodoc_root : Context.t -> Path.Build.t
 val odocl : Context.t -> 'a Odoc_target.t -> Path.Build.t
 val gen_mld_dir : Context.t -> Package.Name.t -> Path.Build.t
+val lib_index_mld : Context.t -> Package.Name.t -> Lib_name.t -> Path.Build.t
 val odoc_support : Context.t -> Path.Build.t

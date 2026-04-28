@@ -50,4 +50,6 @@ let odocl : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
 ;;
 
 let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
+let lib_mld_dir ctx pkg lib_name = gen_mld_dir ctx pkg ++ Lib_name.to_string lib_name
+let lib_index_mld ctx pkg lib_name = lib_mld_dir ctx pkg lib_name ++ "index.mld"
 let odoc_support ctx = output_root ctx Html ++ odoc_support_dirname

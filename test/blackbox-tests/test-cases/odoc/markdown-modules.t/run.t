@@ -66,6 +66,7 @@ Test that markdown generation includes all modules following naming conventions.
   _build/default/_doc/_markdown/mylib/mylib/Mylib-Main_nested_deep.md
   _build/default/_doc/_markdown/mylib/mylib/Mylib-Main_sub.md
   _build/default/_doc/_markdown/mylib/mylib/Mylib.md
+  _build/default/_doc/_markdown/mylib/mylib/index.md
 
   $ cat _build/default/_doc/_markdown/mylib/Mylib.md
   cat: _build/default/_doc/_markdown/mylib/Mylib.md: No such file or directory

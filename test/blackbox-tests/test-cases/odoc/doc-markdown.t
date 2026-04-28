@@ -99,6 +99,7 @@ Build markdown documentation:
   _build/default/_doc/_markdown/mylib/index.md
   _build/default/_doc/_markdown/mylib/mylib/Mylib-SubModule.md
   _build/default/_doc/_markdown/mylib/mylib/Mylib.md
+  _build/default/_doc/_markdown/mylib/mylib/index.md
 
 Check the top-level index contains markdown:
 

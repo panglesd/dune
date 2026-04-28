@@ -114,12 +114,15 @@ Test markdown with multiple packages and dependencies
 
   $ find _build/default/_doc/_markdown -name "*.md" | sort
   _build/default/_doc/_markdown/app_lib/app_lib/App_lib.md
+  _build/default/_doc/_markdown/app_lib/app_lib/index.md
   _build/default/_doc/_markdown/app_lib/index.md
   _build/default/_doc/_markdown/core_lib/core_lib/Core_lib.md
+  _build/default/_doc/_markdown/core_lib/core_lib/index.md
   _build/default/_doc/_markdown/core_lib/index.md
   _build/default/_doc/_markdown/index.md
   _build/default/_doc/_markdown/utils_lib/index.md
   _build/default/_doc/_markdown/utils_lib/utils_lib/Utils_lib.md
+  _build/default/_doc/_markdown/utils_lib/utils_lib/index.md
 
   $ cat _build/default/_doc/_markdown/index.md
   # OCaml Package Documentation
