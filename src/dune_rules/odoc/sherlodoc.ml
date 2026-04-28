@@ -45,7 +45,7 @@ let is_installed sctx ~dir =
   Action_builder.map ~f:Result.is_ok (resolve_sherlodoc sctx ~dir)
 ;;
 
-let odoc_args sctx ~search_db ~dir_sherlodoc_dot_js =
+let odoc_args sctx ~search_db ~dir_sherlodoc_dot_js ~html_root =
   Command.Args.Dyn
     (let open Action_builder.O in
      let+ is_installed = is_installed sctx ~dir:dir_sherlodoc_dot_js in
@@ -54,11 +54,18 @@ let odoc_args sctx ~search_db ~dir_sherlodoc_dot_js =
        let sherlodoc_js =
          Path.build @@ Paths.sherlodoc_dot_js ~dir:dir_sherlodoc_dot_js
        in
+       (* Compute relative paths from html_root (the -o directory).
+          odoc will then compute relative paths from each HTML file to these URIs. *)
+       let search_db_uri =
+         Path.reach (Path.build search_db) ~from:(Path.build html_root)
+       in
+       let sherlodoc_js_uri = Path.reach sherlodoc_js ~from:(Path.build html_root) in
        Command.Args.S
-         [ A "--search-uri"
-         ; Dep (Path.build search_db)
+         [ Hidden_deps (Dep.Set.of_files [ Path.build search_db; sherlodoc_js ])
          ; A "--search-uri"
-         ; Dep sherlodoc_js
+         ; A search_db_uri
+         ; A "--search-uri"
+         ; A sherlodoc_js_uri
          ])
      else Command.Args.empty)
 ;;
