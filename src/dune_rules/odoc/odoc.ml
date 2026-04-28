@@ -116,7 +116,15 @@ end = struct
            (match Lib.Local.of_lib lib with
             | None -> acc
             | Some local_lib ->
-              let dir = Paths.odocs ctx (Target.Lib local_lib) in
+              let lib_t = Lib.Local.to_lib local_lib in
+              let target =
+                match Lib_info.package info with
+                | Some pkg -> Target.Lib (pkg, lib_t)
+                | None ->
+                  let lib_unique_name = Odoc_scope.lib_unique_name local_lib in
+                  Target.Private_lib (lib_unique_name, lib_t)
+              in
+              let dir = Paths.odocs ctx target in
               Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir)))))
   ;;
 
@@ -236,7 +244,17 @@ let get_lib_paths ctx ~stdlib_opt requires =
   List.filter_map libs ~f:(fun lib ->
     match Lib.Local.of_lib lib with
     | None -> None
-    | Some local_lib -> Some (lib, Paths.odocs ctx (Target.Lib local_lib)))
+    | Some local_lib ->
+      let lib_t = Lib.Local.to_lib local_lib in
+      let lib_info = Lib.info lib_t in
+      let target =
+        match Lib_info.package lib_info with
+        | Some pkg -> Target.Lib (pkg, lib_t)
+        | None ->
+          let lib_unique_name = Odoc_scope.lib_unique_name local_lib in
+          Target.Private_lib (lib_unique_name, lib_t)
+      in
+      Some (lib, Paths.odocs ctx target))
 ;;
 
 let stdlib_lib ctx =
@@ -397,13 +415,10 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                       ])
                ; Command.Args.A "--enable-missing-root-warning"
                ; (match Artifact.get_kind artifact with
-                  | Module (_, Lib local_lib) ->
-                    let tag =
-                      match Lib_info.package (Lib.Local.info local_lib) with
-                      | Some pkg -> Package.Name.to_string pkg
-                      | None -> "__private_lib__"
-                    in
-                    Command.Args.As [ "--warnings-tag"; tag ]
+                  | Module (_, Lib (pkg, _)) ->
+                    Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ]
+                  | Module (_, Private_lib _) ->
+                    Command.Args.As [ "--warnings-tag"; "__private_lib__" ]
                   | Page (_, Pkg pkg) ->
                     Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ])
                ; Command.Args.Dep source_file
@@ -538,14 +553,13 @@ let compute_link_requires sctx ~artifact =
   let ctx = Super_context.context sctx in
   let closure libs = Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml in
   match Artifact.get_kind artifact with
-  | Module (_, Lib local_lib) ->
-    let lib = Lib.Local.to_lib local_lib in
+  | Module (_, Lib (pkg, lib)) ->
     let* closure = closure [ lib ] in
-    (match Lib_info.package (Lib.info lib) with
-     | None -> Memo.return (Resolve.map closure ~f:(fun libs -> lib :: libs))
-     | Some pkg ->
-       let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
-       Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs))
+    let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
+    Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs)
+  | Module (_, Private_lib (_, lib)) ->
+    let+ closure = closure [ lib ] in
+    Resolve.map closure ~f:(fun libs -> lib :: libs)
   | Page ({ pkg_libs; _ }, Pkg _) ->
     if List.is_empty pkg_libs
     then Memo.return (Resolve.return [])
@@ -712,10 +726,10 @@ let generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format 
   let* () = Dep.add_file_deps pkg_alias artifact_paths in
   Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
     match Artifact.get_kind artifact with
-    | Module (_, (Lib _ as target)) ->
+    | Module (_, ((Lib _ | Private_lib _) as target)) ->
       let lib_alias = Dep.format_alias output_format ctx target in
       Dep.add_file_deps lib_alias [ output_file artifact ]
-    | Page _ -> Memo.return ())
+    | Module _ | Page _ -> Memo.return ())
 ;;
 
 let default_index ~pkg ~lib_artifacts =
@@ -1025,7 +1039,9 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
       (* Create target for this private library and add its HTML to doc-private.
          Dependencies are handled transitively through the odoc pipeline. *)
       let local_lib = Lib.Local.of_lib_exn lib in
-      let html_alias = Dep.format_alias Html ctx (Target.Lib local_lib) in
+      let lib_unique_name = Odoc_scope.lib_unique_name local_lib in
+      let target = Target.Private_lib (lib_unique_name, lib) in
+      let html_alias = Dep.format_alias Html ctx target in
       Rules.Produce.Alias.add_deps
         (Alias.make ~dir Alias0.private_doc)
         (Action_builder.deps

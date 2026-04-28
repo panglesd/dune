@@ -11,5 +11,6 @@ type mod_ =
   }
 
 type _ t =
-  | Lib : Lib.Local.t -> mod_ t
+  | Lib : Package.Name.t * Lib.t -> mod_ t
+  | Private_lib : string * Lib.t -> mod_ t
   | Pkg : Package.Name.t -> page t

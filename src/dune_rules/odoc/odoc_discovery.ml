@@ -36,13 +36,13 @@ let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   else Memo.return []
 ;;
 
-let create_artifact_module ~local_lib ~module_ ~cmti_obj_dir =
+let create_artifact_module ~target ~local_lib ~module_ ~cmti_obj_dir =
   let mod_ =
     { Odoc_target.visible = Module.visibility module_ = Visibility.Public
     ; module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none
     }
   in
-  let kind = Odoc_artifact.Module (mod_, Odoc_target.Lib local_lib) in
+  let kind = Odoc_artifact.Module (mod_, target) in
   let obj_dir =
     match cmti_obj_dir with
     | Some d -> d
@@ -52,11 +52,15 @@ let create_artifact_module ~local_lib ~module_ ~cmti_obj_dir =
   Odoc_artifact.create ~kind ~source:(Local_source source_file)
 ;;
 
-let discover_local_lib_artifacts sctx _ctx ~local_lib : Odoc_artifact.t list Memo.t =
+let discover_local_lib_artifacts sctx _ctx ~lib_name ~local_lib
+  : Odoc_artifact.t list Memo.t
+  =
   let* all_modules =
     Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
   in
   let modules = Modules.fold all_modules ~init:[] ~f:(fun m acc -> m :: acc) in
+  let info = Lib.Local.info local_lib in
+  let pkg = Lib_info.package info in
   let lib_t = Lib.Local.to_lib local_lib in
   let* vlib_obj_dir =
     match Lib.implements lib_t with
@@ -67,6 +71,23 @@ let discover_local_lib_artifacts sctx _ctx ~local_lib : Odoc_artifact.t list Mem
        | Some local_vlib -> Some (Lib.Local.obj_dir local_vlib)
        | None -> None)
   in
+  let target =
+    match pkg with
+    | None ->
+      (* Private library - use lib_unique_name for directory structure *)
+      let status = Lib_info.status info in
+      let lib_unique_name =
+        match status with
+        | Lib_info.Status.Private (project, _) ->
+          Odoc_scope.Scope_key.to_string lib_name project
+        | _ ->
+          Lib_name.to_string lib_name (* Fallback, shouldn't happen for private libs *)
+      in
+      Odoc_target.Private_lib (lib_unique_name, lib_t)
+    | Some pkg ->
+      (* Library with package - use pkg/lib directory structure *)
+      Odoc_target.Lib (pkg, lib_t)
+  in
   let artifacts =
     List.map modules ~f:(fun module_ ->
       let cmti_obj_dir =
@@ -74,7 +95,7 @@ let discover_local_lib_artifacts sctx _ctx ~local_lib : Odoc_artifact.t list Mem
         | Some _ when Module.file module_ ~ml_kind:Intf <> None -> vlib_obj_dir
         | _ -> None
       in
-      create_artifact_module ~local_lib ~module_ ~cmti_obj_dir)
+      create_artifact_module ~target ~local_lib ~module_ ~cmti_obj_dir)
   in
   Memo.return artifacts
 ;;
@@ -102,10 +123,11 @@ let create_pkg_index_artifact ctx ~pkg ~pkg_libs ~content =
 
 let discover_all_lib_artifacts sctx ctx ~libs =
   Memo.List.filter_map libs ~f:(fun lib ->
+    let lib_name = Lib.name lib in
     match Lib.Local.of_lib lib with
     | None -> Memo.return None
     | Some local_lib ->
-      let+ artifacts = discover_local_lib_artifacts sctx ctx ~local_lib in
+      let+ artifacts = discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib in
       Some (lib, artifacts))
 ;;
 
@@ -172,7 +194,7 @@ let discover_private_lib_artifacts sctx ctx ~lib_name ~project
   match lib_opt with
   | None -> Memo.return ([], [])
   | Some local_lib ->
-    let+ module_artifacts = discover_local_lib_artifacts sctx ctx ~local_lib in
+    let+ module_artifacts = discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib in
     module_artifacts, []
 ;;
 
@@ -190,8 +212,9 @@ let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
   in
   let* impl_artifacts =
     let* impl_libs = vlib_impl_libs_of_local_pkg ctx ~pkg in
-    Memo.List.concat_map impl_libs ~f:(fun local_lib ->
-      discover_local_lib_artifacts sctx ctx ~local_lib)
+    Memo.List.concat_map impl_libs ~f:(fun impl_local_lib ->
+      let lib_name = Lib.name (Lib.Local.to_lib impl_local_lib) in
+      discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib:impl_local_lib)
   in
   Memo.return (base_artifacts @ impl_artifacts, lib_subdirs)
 ;;

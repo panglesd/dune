@@ -34,19 +34,20 @@ let generated_content t =
 
 let pkg t =
   match t.kind with
-  | Module (_, Lib local_lib) -> Lib_info.package (Lib.Local.info local_lib)
+  | Module (_, Lib (pkg, _)) -> Some pkg
+  | Module (_, Private_lib _) -> None
   | Page (_, Pkg pkg) -> Some pkg
 ;;
 
 let lib t =
   match t.kind with
-  | Module (_, Lib local_lib) -> Some (Lib.Local.to_lib local_lib)
+  | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Some lib
   | Page _ -> None
 ;;
 
 let lib_name t =
   match t.kind with
-  | Module (_, Lib local_lib) -> Lib.name (Lib.Local.to_lib local_lib)
+  | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
   | Page (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
 ;;
 
@@ -147,12 +148,9 @@ let hidden t =
 let parent_id t =
   let base_id =
     match t.kind with
-    | Module (_, Lib local_lib) ->
-      let lib = Lib.Local.to_lib local_lib in
-      (match Lib_info.package (Lib.info lib) with
-       | Some pkg ->
-         sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
-       | None -> Odoc_scope.lib_unique_name local_lib)
+    | Module (_, Lib (pkg, lib)) ->
+      sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
+    | Module (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
     | Page (_, Pkg pkg) -> Package.Name.to_string pkg
   in
   match t.kind with
