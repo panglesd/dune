@@ -563,6 +563,7 @@ let with_package_artifacts sctx ~pkg_or_lib_name ~f =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
+      ~default_index
       ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let rules = f ~ctx ~pkg ~all_artifacts in
@@ -616,6 +617,7 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
         Odoc_discovery.discover_package_artifacts
           sctx
           ctx
+          ~default_index
           ~pkg_or_lib_unique_name:pkg_name
       in
       let pages = page_artifacts all_artifacts in
@@ -674,6 +676,7 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
+      ~default_index
       ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let all_lib_names =
@@ -782,13 +785,15 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
 let handle_mlds_dir sctx ~pkg_name =
   let ctx = Super_context.context sctx in
   let* _all_artifacts, _lib_subdirs, gen_index, _pkg =
-    Odoc_discovery.discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_name
+    Odoc_discovery.discover_package_artifacts
+      sctx
+      ctx
+      ~default_index
+      ~pkg_or_lib_unique_name:pkg_name
   in
   match gen_index with
   | None -> Memo.return ()
-  | Some (path, lib_artifacts) ->
-    let pkg = Package.Name.of_string pkg_name in
-    add_rule sctx (Action_builder.write_file path (default_index ~pkg ~lib_artifacts))
+  | Some (path, content) -> add_rule sctx (Action_builder.write_file path content)
 ;;
 
 let handle_output_root sctx ~output_formats =
