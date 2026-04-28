@@ -32,6 +32,6 @@ In release mode, no error:
   (cd _build/default/_doc && odoc compile -o _odoc/pkg/foo_doc/page-foo.odoc --pkg foo_doc ../foo_doc/foo.mld)
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Warning: End of text is not allowed in '[...]' (code).
-  (cd _build/default/_doc && odoc compile -I ../foo_lib/.foo.objs/byte -I _odoc/pkg/foo_lib -o ../foo_lib/.foo.objs/byte/foo.odoc --pkg foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
+  (cd _build/default/_doc && odoc compile -I ../foo_lib/.foo.objs/byte -o ../foo_lib/.foo.objs/byte/foo.odoc --pkg foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
