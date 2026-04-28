@@ -12,6 +12,7 @@ type t =
   ; mlds_of_pkg : (Path.t * string) list Package.Name.Map.t
   ; module_files_of_lib : Path.t Module_name.Map.t Lib_name.Map.t
   ; config_of_pkg : Odoc_config.t Package.Name.Map.t
+  ; assets_of_pkg : Path.t list Package.Name.Map.t
   }
 
 let empty =
@@ -24,6 +25,7 @@ let empty =
   ; mlds_of_pkg = Package.Name.Map.empty
   ; module_files_of_lib = Lib_name.Map.empty
   ; config_of_pkg = Package.Name.Map.empty
+  ; assets_of_pkg = Package.Name.Map.empty
   }
 ;;
 
@@ -42,6 +44,28 @@ let mlds_of_dune_package (dpkg : Dune_package.t) =
             then Some (Path.relative doc_path str, str)
             else None
           | Directory -> None)
+      | _ -> [])
+;;
+
+(* Asset files installed by a package: non-[.mld] files under
+   [odoc-pages/] and any files under [odoc-assets/]. *)
+let assets_of_dune_package (dpkg : Dune_package.t) =
+  match Section.Map.find dpkg.sections Doc with
+  | None -> []
+  | Some doc_path ->
+    List.concat_map dpkg.files ~f:(fun (section, files) ->
+      match section with
+      | Dune_section.Doc ->
+        List.filter_map files ~f:(fun (entry : Dune_package.path) ->
+          match entry.kind with
+          | Directory -> None
+          | File ->
+            let str = Install.Entry.Dst.to_string entry.dst in
+            (match String.split str ~on:'/' with
+             | "odoc-pages" :: _ :: _ when not (String.ends_with str ~suffix:".mld") ->
+               Some (Path.relative doc_path str)
+             | "odoc-assets" :: _ :: _ -> Some (Path.relative doc_path str)
+             | _ -> None))
       | _ -> [])
 ;;
 
@@ -158,21 +182,29 @@ let build (ctx : Context.t) =
              in
              { maps with loc_of_lib; loc_of_pkg; libs_of_loc; pkg_of_lib; libs_of_pkg }))
   in
-  let* mlds_of_pkg, config_of_pkg =
+  let* mlds_of_pkg, assets_of_pkg, config_of_pkg =
     Package.Name.Map.foldi
       maps.libs_of_pkg
-      ~init:(Memo.return (Package.Name.Map.empty, Package.Name.Map.empty))
+      ~init:
+        (Memo.return
+           (Package.Name.Map.empty, Package.Name.Map.empty, Package.Name.Map.empty))
       ~f:(fun pkg _libs acc ->
-        let* mlds_acc, configs_acc = acc in
+        let* mlds_acc, assets_acc, configs_acc = acc in
         Findlib.find_root_package findlib pkg
         >>| function
-        | Error _ -> mlds_acc, configs_acc
+        | Error _ -> mlds_acc, assets_acc, configs_acc
         | Ok dpkg ->
           let mlds_acc =
             let mlds = mlds_of_dune_package dpkg in
             if List.is_empty mlds
             then mlds_acc
             else Package.Name.Map.set mlds_acc pkg mlds
+          in
+          let assets_acc =
+            let assets = assets_of_dune_package dpkg in
+            if List.is_empty assets
+            then assets_acc
+            else Package.Name.Map.set assets_acc pkg assets
           in
           let configs_acc =
             match Section.Map.find dpkg.sections Doc with
@@ -185,7 +217,7 @@ let build (ctx : Context.t) =
               in
               Package.Name.Map.set configs_acc pkg (Odoc_config.load cfg_path)
           in
-          mlds_acc, configs_acc)
+          mlds_acc, assets_acc, configs_acc)
   in
   (* Build module_files_of_lib: scan each installed lib's src_dir. *)
   let* module_files_of_lib =
@@ -204,7 +236,7 @@ let build (ctx : Context.t) =
           then acc
           else Lib_name.Map.set acc lib_name files)
   in
-  Memo.return { maps with mlds_of_pkg; module_files_of_lib; config_of_pkg }
+  Memo.return { maps with mlds_of_pkg; module_files_of_lib; config_of_pkg; assets_of_pkg }
 ;;
 
 let create =
@@ -228,6 +260,10 @@ let libraries_of_package t pkg =
 
 let mlds_of_package t pkg =
   Package.Name.Map.find t.mlds_of_pkg pkg |> Option.value ~default:[]
+;;
+
+let assets_of_package t pkg =
+  Package.Name.Map.find t.assets_of_pkg pkg |> Option.value ~default:[]
 ;;
 
 let module_source_file t ~lib ~module_name =
