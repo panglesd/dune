@@ -6,8 +6,4 @@ val discover_package_artifacts
   -> default_index:
        (pkg:Package.Name.t -> lib_artifacts:(Lib.t * Odoc_artifact.t list) list -> string)
   -> pkg_or_lib_unique_name:string
-  -> (Odoc_artifact.t list
-     * string list
-     * (Path.Build.t * string) option
-     * Package.Name.t option)
-       Memo.t
+  -> (Odoc_artifact.t list * string list * (Path.Build.t * string) option) Memo.t
