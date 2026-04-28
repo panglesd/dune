@@ -402,6 +402,7 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                       ; Command.Args.Target (Artifact.odoc_file ctx artifact)
                       ; Command.Args.As [ "--pkg"; Package.Name.to_string pkg ]
                       ])
+               ; Command.Args.A "--enable-missing-root-warning"
                ; (match Artifact.get_kind artifact with
                   | Module (_, Lib local_lib) ->
                     let tag =
