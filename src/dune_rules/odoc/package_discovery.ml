@@ -243,6 +243,24 @@ let module_source_file t ~lib ~module_name =
   Module_name.Map.find lib_modules mod_name
 ;;
 
+let module_install_file t ~lib ~module_name ~ext =
+  let lib_name = Lib.name lib in
+  match Lib_name.Map.find t.module_files_of_lib lib_name with
+  | None -> None
+  | Some _ ->
+    let src_dir = Lib_info.src_dir (Lib.info lib) in
+    let candidate = Path.relative src_dir (String.uncapitalize_ascii module_name ^ ext) in
+    if Sys.file_exists (Path.to_string candidate) then Some candidate else None
+;;
+
+let module_cmt_file t ~lib ~module_name =
+  module_install_file t ~lib ~module_name ~ext:".cmt"
+;;
+
+let module_ml_file t ~lib ~module_name =
+  module_install_file t ~lib ~module_name ~ext:".ml"
+;;
+
 let findlib_paths t = t.findlib_paths
 let location_of_package t pkg = Package.Name.Map.find t.loc_of_pkg pkg
 let location_of_library t lib = Lib_name.Map.find t.loc_of_lib lib
