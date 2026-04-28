@@ -11,6 +11,7 @@ type t =
   ; libs_of_pkg : Lib.t list Package.Name.Map.t
   ; mlds_of_pkg : (Path.t * string) list Package.Name.Map.t
   ; module_files_of_lib : Path.t Module_name.Map.t Lib_name.Map.t
+  ; config_of_pkg : Odoc_config.t Package.Name.Map.t
   }
 
 let empty =
@@ -22,6 +23,7 @@ let empty =
   ; libs_of_pkg = Package.Name.Map.empty
   ; mlds_of_pkg = Package.Name.Map.empty
   ; module_files_of_lib = Lib_name.Map.empty
+  ; config_of_pkg = Package.Name.Map.empty
   }
 ;;
 
@@ -156,18 +158,34 @@ let build (ctx : Context.t) =
              in
              { maps with loc_of_lib; loc_of_pkg; libs_of_loc; pkg_of_lib; libs_of_pkg }))
   in
-  let* mlds_of_pkg =
+  let* mlds_of_pkg, config_of_pkg =
     Package.Name.Map.foldi
       maps.libs_of_pkg
-      ~init:(Memo.return Package.Name.Map.empty)
+      ~init:(Memo.return (Package.Name.Map.empty, Package.Name.Map.empty))
       ~f:(fun pkg _libs acc ->
-        let* acc = acc in
+        let* mlds_acc, configs_acc = acc in
         Findlib.find_root_package findlib pkg
         >>| function
-        | Error _ -> acc
+        | Error _ -> mlds_acc, configs_acc
         | Ok dpkg ->
-          let mlds = mlds_of_dune_package dpkg in
-          if List.is_empty mlds then acc else Package.Name.Map.set acc pkg mlds)
+          let mlds_acc =
+            let mlds = mlds_of_dune_package dpkg in
+            if List.is_empty mlds
+            then mlds_acc
+            else Package.Name.Map.set mlds_acc pkg mlds
+          in
+          let configs_acc =
+            match Section.Map.find dpkg.sections Doc with
+            | None -> configs_acc
+            | Some doc_path ->
+              let cfg_path =
+                Path.relative
+                  doc_path
+                  (sprintf "%s/odoc-config.sexp" (Package.Name.to_string pkg))
+              in
+              Package.Name.Map.set configs_acc pkg (Odoc_config.load cfg_path)
+          in
+          mlds_acc, configs_acc)
   in
   (* Build module_files_of_lib: scan each installed lib's src_dir. *)
   let* module_files_of_lib =
@@ -186,7 +204,7 @@ let build (ctx : Context.t) =
           then acc
           else Lib_name.Map.set acc lib_name files)
   in
-  Memo.return { maps with mlds_of_pkg; module_files_of_lib }
+  Memo.return { maps with mlds_of_pkg; module_files_of_lib; config_of_pkg }
 ;;
 
 let create =
@@ -229,3 +247,7 @@ let findlib_paths t = t.findlib_paths
 let location_of_package t pkg = Package.Name.Map.find t.loc_of_pkg pkg
 let location_of_library t lib = Lib_name.Map.find t.loc_of_lib lib
 let libs_of_location t = t.libs_of_loc
+
+let config_of_package t pkg =
+  Package.Name.Map.find t.config_of_pkg pkg |> Option.value ~default:Odoc_config.empty
+;;
