@@ -39,8 +39,8 @@ module Output_format = struct
     | Html, Doc_mode.Full -> Alias0.doc_full
     | Json, Doc_mode.Local_only -> Alias0.doc_json
     | Json, Doc_mode.Full -> Alias0.doc_json_full
-    | Markdown, Doc_mode.Local_only -> Alias0.doc_markdown
-    | Markdown, Doc_mode.Full -> Alias0.doc_markdown_full
+    | Markdown, Doc_mode.Local_only -> Alias0.doc_md
+    | Markdown, Doc_mode.Full -> Alias0.doc_md_full
   ;;
 
   let alias t ~mode ~dir = Alias.make (alias_name t mode) ~dir
