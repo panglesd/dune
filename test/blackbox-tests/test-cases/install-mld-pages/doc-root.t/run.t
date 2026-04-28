@@ -61,10 +61,26 @@ resist building the doc to check what happens: currently, only top-level mld
 files are included in the doc generation.
 
   $ dune build @doc
-  Warning: Dune does not yet support building documentation for assets, and
-  mlds in a non-flat hierarchy. Ignoring examples/example1/index.mld,
-  examples/example2/index.mld, examples/index.mld, examples/summary.mld,
-  tutorial/tuto1.mld.
+  File "_doc/_html/testing_mld/examples/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_html/testing_mld/examples/index.html
+  File "_doc/_html/testing_mld/examples/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_html/testing_mld/examples/summary.html
+  File "_doc/_html/testing_mld/examples/example1/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_html/testing_mld/examples/example1/index.html
+  File "_doc/_html/testing_mld/examples/example2/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_html/testing_mld/examples/example2/index.html
+  File "_doc/_html/testing_mld/tutorial/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_html/testing_mld/tutorial/tuto1.html
+  [1]
   $ ls _build/default/_doc/_html/testing_mld
   db.js
+  examples
   index.html
+  summary.html
+  tuto1.html
+  tutorial

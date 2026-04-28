@@ -42,11 +42,9 @@ resist building the doc to check what happens: currently, only top-level mld
 files are included in the doc generation.
 
   $ dune build @doc
-  Warning: Dune does not yet support building documentation for assets, and
-  mlds in a non-flat hierarchy. Ignoring examples/example1/index.mld,
-  examples/example2/index.mld, examples/index.mld, examples/summary.mld,
-  img1.png, img2.png, tutorial/tuto1.mld, tutorial/tuto2.mld.
+  File "_doc/_odoc/pkg/testing_mld/_unknown_", line 1, characters 0-0:
+  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
+  [1]
   $ ls _build/default/_doc/_html/testing_mld
-  db.js
-  index.html
-  notes.html
+  ls: cannot access '_build/default/_doc/_html/testing_mld': No such file or directory
+  [2]

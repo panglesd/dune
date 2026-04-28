@@ -2,7 +2,6 @@ open Import
 open Memo.O
 
 let ( ++ ) = Path.Build.relative
-let mld_ext = Filename.Extension.of_string_exn ".mld"
 
 let module_artifact ~local_lib module_ =
   let mod_ =
@@ -44,10 +43,14 @@ let discover_all_lib_artifacts sctx ~libs =
 
 let check_mlds_no_dupes ~pkg ~mlds =
   match
-    List.map mlds ~f:(fun ((_path, name) as mld) -> name, mld) |> String.Map.of_list
+    List.map mlds ~f:(fun (mld : Doc_sources.mld) ->
+      let in_doc_str = Path.Local.to_string mld.in_doc in
+      let name = Filename.remove_extension in_doc_str |> Filename.to_string in
+      name, mld.path)
+    |> String.Map.of_list
   with
   | Ok _ -> ()
-  | Error (_, (p1, _), (p2, _)) ->
+  | Error (_, p1, p2) ->
     User_error.raise
       [ Pp.textf
           "Package %s has two mld's with the same basename %s, %s"
@@ -57,48 +60,14 @@ let check_mlds_no_dupes ~pkg ~mlds =
       ]
 ;;
 
-let mlds sctx pkg =
-  let+ mlds = Packages.mlds sctx pkg in
-  List.partition_map mlds ~f:(fun (mld : Doc_sources.mld) ->
-    match Path.Local.explode mld.in_doc with
-    | [ name ] ->
-      let ext = Filename.extension name in
-      if Filename.Extension.Or_empty.check ext mld_ext
-      then Left (mld.path, Filename.remove_extension name |> Filename.to_string)
-      else Right mld
-    | _ -> Right mld)
-;;
-
-let report_warnings warnings =
-  match warnings with
-  | [] -> ()
-  | _ :: _ ->
-    let l =
-      warnings
-      |> List.map ~f:(fun (mld : Doc_sources.mld) -> Path.Local.to_string mld.in_doc)
-      |> List.sort ~compare:String.compare
-      |> String.concat ~sep:", "
-    in
-    User_warning.emit
-      [ Pp.textf
-          "Dune does not yet support building documentation for assets, and mlds in a \
-           non-flat hierarchy. Ignoring %s."
-          l
-      ]
-;;
-
-let get_local_mld_infos =
-  let memo =
-    Memo.create
-      "odoc-package-mlds"
-      ~input:(module Super_context.As_memo_key.And_package_name)
-      (fun (sctx, pkg) ->
-         let+ flat, dropped = mlds sctx pkg in
-         report_warnings dropped;
-         check_mlds_no_dupes ~pkg ~mlds:flat;
-         List.map flat ~f:(fun (path, name) -> Odoc_artifact.Local_source path, name))
-  in
-  fun sctx ~pkg -> Memo.exec memo (sctx, pkg)
+let get_local_mld_infos sctx ~pkg =
+  let+ source_mlds = Packages.mlds sctx pkg in
+  check_mlds_no_dupes ~pkg ~mlds:source_mlds;
+  List.map source_mlds ~f:(fun (mld : Doc_sources.mld) ->
+    let in_doc_str = Path.Local.to_string mld.in_doc in
+    let name = Filename.remove_extension in_doc_str |> Filename.to_string in
+    let source = Odoc_artifact.Local_source mld.path in
+    source, name)
 ;;
 
 let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index =
