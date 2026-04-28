@@ -305,93 +305,69 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
      Action_builder.with_no_targets deps >>> run_odoc)
 ;;
 
-let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
-  (* Using the proper package name doesn't actually work since odoc assumes that
-     a package contains only 1 library *)
-  let pkg_or_lnu = pkg_or_lnu local_lib in
-  let sctx = Compilation_context.super_context cctx in
+let generate_output_action sctx ~artifact ?search_db ~output_format () =
   let ctx = Super_context.context sctx in
-  let info = Lib.Local.info local_lib in
-  let obj_dir = Compilation_context.obj_dir cctx in
-  let modules = Compilation_context.modules cctx in
-  let* includes =
-    let+ requires = Compilation_context.requires_compile cctx in
-    let package = Lib_info.package info in
-    let odoc_include_flags =
-      Command.Args.memo (odoc_include_flags ctx package requires)
-    in
-    Dep.deps ctx package requires, odoc_include_flags
-  in
-  modules
-  |> Modules.With_vlib.drop_vlib
-  |> Modules.fold ~init:[] ~f:(fun m acc ->
-    let compiled =
-      let for_ = Compilation_context.for_ cctx in
-      compile_module
-        sctx
-        ~includes
-        ~dep_graphs:(Compilation_context.dep_graphs cctx)
-        ~obj_dir
-        ~pkg_or_lnu
-        ~mode:for_
-        m
-    in
-    compiled :: acc)
-  |> Memo.all_concurrently
-  >>| Path.Set.of_list_map ~f:(fun (_, p) -> Path.build p)
-  >>= Dep.setup_deps ctx (Lib local_lib)
-;;
-
-let setup_generate sctx ~search_db odoc_file out =
-  let ctx = Super_context.context sctx in
-  let odoc_support_path = Paths.odoc_support ctx in
-  let command, output_dir, args =
-    match out with
-    | Output_format.Markdown ->
-      ( "markdown-generate"
-      , Paths.output_root ctx Markdown
-      , [ Command.Args.A "-o"
-        ; Command.Args.Path (Path.build (Paths.output_root ctx Markdown))
-        ; Command.Args.Dep (Path.build (Artifact.odocl_file ctx odoc_file))
-        ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
-        ] )
+  let doc_root = Paths.root ctx in
+  let output_root = Paths.output_root ctx output_format in
+  let output_root_rel = Path.reach (Path.build output_root) ~from:(Path.build doc_root) in
+  let subcommand, html_args =
+    match (output_format : Output_format.t) with
+    | Markdown -> "markdown-generate", Command.Args.empty
     | Html | Json ->
+      let html_root = Paths.output_root ctx Html in
+      let odoc_support_path = Paths.odoc_support ctx in
+      let odoc_support_uri =
+        Path.reach (Path.build odoc_support_path) ~from:(Path.build html_root)
+      in
       let search_args =
         match search_db with
-        | None -> Command.Args.empty
         | Some search_db ->
-          Sherlodoc.odoc_args
-            sctx
-            ~search_db
-            ~dir_sherlodoc_dot_js:(Paths.output_root ctx Html)
+          Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:html_root
+        | None -> Command.Args.empty
       in
-      ( "html-generate"
-      , Paths.output_root ctx Html
-      , [ search_args
-        ; Command.Args.A "-o"
-        ; Command.Args.Path (Path.build (Paths.output_root ctx Html))
-        ; Command.Args.A "--support-uri"
-        ; Command.Args.Path (Path.build odoc_support_path)
-        ; Command.Args.A "--theme-uri"
-        ; Command.Args.Path (Path.build odoc_support_path)
-        ; Command.Args.Dep (Path.build (Artifact.odocl_file ctx odoc_file))
-        ; Output_format.args out
-        ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
-        ] )
+      let args =
+        Command.Args.S
+          [ Hidden_deps (Dune_engine.Dep.Set.of_files [ Path.build odoc_support_path ])
+          ; search_args
+          ; A "--support-uri"
+          ; A odoc_support_uri
+          ; A "--theme-uri"
+          ; A odoc_support_uri
+          ; Output_format.args output_format
+          ]
+      in
+      "html-generate", args
   in
-  let run_odoc =
-    run_odoc sctx ~dir:(Path.build output_dir) command ~quiet:false ~flags_for:None args
-  in
-  add_rule sctx run_odoc
+  let odocl_dep = Command.Args.Dep (Path.build (Artifact.odocl_file ctx artifact)) in
+  run_odoc
+    sctx
+    ~dir:(Path.build doc_root)
+    subcommand
+    ~quiet:false
+    ~flags_for:None
+    [ A "-o"; A output_root_rel; odocl_dep; html_args ]
 ;;
 
-let setup_generate_html_and_json sctx ~search_db odoc_file =
-  let* () = setup_generate sctx ~search_db:(Some search_db) odoc_file Html in
-  setup_generate sctx ~search_db:(Some search_db) odoc_file Json
+let generate_html_artifact sctx ~artifact ?search_db ~output_format () =
+  let ctx = Super_context.context sctx in
+  match Artifact.get_kind artifact with
+  | Module _ | Page _ ->
+    let action = generate_output_action sctx ~artifact ?search_db ~output_format () in
+    let rule =
+      Action_builder.With_targets.add
+        ~file_targets:[ Artifact.output_file ctx output_format artifact ]
+        action
+    in
+    add_rule sctx rule
 ;;
 
-let setup_generate_markdown sctx odoc_file =
-  setup_generate sctx ~search_db:None odoc_file Markdown
+let setup_generate_html_and_json sctx ~search_db artifact =
+  let* () = generate_html_artifact sctx ~artifact ~search_db ~output_format:Html () in
+  generate_html_artifact sctx ~artifact ~search_db ~output_format:Json ()
+;;
+
+let setup_generate_markdown sctx artifact =
+  generate_html_artifact sctx ~artifact ~output_format:Markdown ()
 ;;
 
 let setup_css_rule sctx =
@@ -635,6 +611,43 @@ let add_format_alias_deps ctx format target artifacts =
   Rules.Produce.Alias.add_deps
     (Dep.format_alias format ctx target)
     (Action_builder.paths (out_files ctx format artifacts))
+;;
+
+let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
+  (* Using the proper package name doesn't actually work since odoc assumes that
+     a package contains only 1 library *)
+  let pkg_or_lnu = pkg_or_lnu local_lib in
+  let sctx = Compilation_context.super_context cctx in
+  let ctx = Super_context.context sctx in
+  let info = Lib.Local.info local_lib in
+  let obj_dir = Compilation_context.obj_dir cctx in
+  let modules = Compilation_context.modules cctx in
+  let* includes =
+    let+ requires = Compilation_context.requires_compile cctx in
+    let package = Lib_info.package info in
+    let odoc_include_flags =
+      Command.Args.memo (odoc_include_flags ctx package requires)
+    in
+    Dep.deps ctx package requires, odoc_include_flags
+  in
+  modules
+  |> Modules.With_vlib.drop_vlib
+  |> Modules.fold ~init:[] ~f:(fun m acc ->
+    let compiled =
+      let for_ = Compilation_context.for_ cctx in
+      compile_module
+        sctx
+        ~includes
+        ~dep_graphs:(Compilation_context.dep_graphs cctx)
+        ~obj_dir
+        ~pkg_or_lnu
+        ~mode:for_
+        m
+    in
+    compiled :: acc)
+  |> Memo.all_concurrently
+  >>| Path.Set.of_list_map ~f:(fun (_, p) -> Path.build p)
+  >>= Dep.setup_deps ctx (Lib local_lib)
 ;;
 
 let setup_lib_odocl_rules_def =
