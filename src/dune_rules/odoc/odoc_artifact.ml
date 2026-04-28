@@ -127,7 +127,8 @@ let parent_id t =
     | Module (_, Lib local_lib) ->
       let lib = Lib.Local.to_lib local_lib in
       (match Lib_info.package (Lib.info lib) with
-       | Some pkg -> Package.Name.to_string pkg
+       | Some pkg ->
+         sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
        | None -> Odoc_scope.lib_unique_name local_lib)
     | Page (_, Pkg pkg) -> Package.Name.to_string pkg
   in

@@ -15,29 +15,36 @@ let output_subdir = function
 let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
-let pkg_or_lnu local_lib =
+let lib_dir base local_lib =
   let lib = Lib.Local.to_lib local_lib in
   match Lib_info.package (Lib.info lib) with
-  | Some pkg -> Package.Name.to_string pkg
-  | None -> Odoc_scope.lib_unique_name local_lib
-;;
-
-let add_pkg_lnu : type a. Path.Build.t -> a Odoc_target.t -> Path.Build.t =
-  fun base -> function
-  | Odoc_target.Lib local_lib -> base ++ pkg_or_lnu local_lib
-  | Odoc_target.Pkg pkg -> base ++ Package.Name.to_string pkg
+  | Some pkg -> base ++ Package.Name.to_string pkg ++ Lib_name.to_string (Lib.name lib)
+  | None -> base ++ Odoc_scope.lib_unique_name local_lib
 ;;
 
 let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
-  | Odoc_target.Lib local_lib -> add_pkg_lnu (root ctx ++ "_odoc") (Lib local_lib)
+  | Odoc_target.Lib local_lib -> lib_dir (root ctx ++ "_odoc") local_lib
   | Odoc_target.Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
 ;;
 
 let output_root ctx format = root ctx ++ output_subdir format
 let odocl_root ctx = root ctx ++ "_odocls"
 let sherlodoc_root ctx = root ctx ++ "_sherlodoc"
-let output ctx format target = add_pkg_lnu (output_root ctx format) target
-let odocl ctx target = add_pkg_lnu (odocl_root ctx) target
+
+let output : type a. Context.t -> output_format -> a Odoc_target.t -> Path.Build.t =
+  fun ctx format target ->
+  let base = output_root ctx format in
+  match target with
+  | Lib local_lib -> lib_dir base local_lib
+  | Pkg pkg -> base ++ Package.Name.to_string pkg
+;;
+
+let odocl : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
+  fun ctx -> function
+  | Lib local_lib -> lib_dir (odocl_root ctx) local_lib
+  | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
+;;
+
 let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
 let odoc_support ctx = output_root ctx Html ++ odoc_support_dirname

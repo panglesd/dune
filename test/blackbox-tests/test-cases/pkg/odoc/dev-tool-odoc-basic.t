@@ -31,6 +31,4 @@ a lockdir containing an "ocaml" lockfile.
   File "_doc/_odoc/pkg/foo/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/pkg/foo/page-index.odoc
-  File "_doc/_odocls/foo/_unknown_", line 1, characters 0-0:
-  Error: No rule found for alias _doc/_odoc/foo/.odoc-all
   [1]
