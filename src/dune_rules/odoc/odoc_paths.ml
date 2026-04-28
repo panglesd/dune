@@ -16,16 +16,12 @@ let output_subdir = function
 let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
-let lib_dir base local_lib =
-  let lib = Lib.Local.to_lib local_lib in
-  match Lib_info.package (Lib.info lib) with
-  | Some pkg -> base ++ Package.Name.to_string pkg ++ Lib_name.to_string (Lib.name lib)
-  | None -> base ++ Odoc_scope.lib_unique_name local_lib
-;;
-
 let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
-  | Odoc_target.Lib local_lib -> lib_dir (root ctx ++ "_odoc") local_lib
+  | Odoc_target.Lib (pkg, lib) ->
+    let lib_name = Lib.name lib in
+    root ctx ++ "_odoc" ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
+  | Odoc_target.Private_lib (lib_unique_name, _) -> root ctx ++ "_odoc" ++ lib_unique_name
   | Odoc_target.Pkg pkg -> root ctx ++ "_odoc" ++ Package.Name.to_string pkg
 ;;
 
@@ -37,13 +33,19 @@ let output : type a. Context.t -> output_format -> a Odoc_target.t -> Path.Build
   fun ctx format target ->
   let base = output_root ctx format in
   match target with
-  | Lib local_lib -> lib_dir base local_lib
+  | Lib (pkg, lib) ->
+    let lib_name = Lib.name lib in
+    base ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
+  | Private_lib (lib_unique_name, _) -> base ++ lib_unique_name
   | Pkg pkg -> base ++ Package.Name.to_string pkg
 ;;
 
 let odocl : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
-  | Lib local_lib -> lib_dir (odocl_root ctx) local_lib
+  | Lib (pkg, lib) ->
+    let lib_name = Lib.name lib in
+    odocl_root ctx ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
+  | Private_lib (lib_unique_name, _) -> odocl_root ctx ++ lib_unique_name
   | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
 ;;
 
