@@ -755,6 +755,26 @@ let odoc_artefacts : type a. _ -> a Target.t -> _ =
       module_artifact ~local_lib m :: acc)
 ;;
 
+let out_file ctx (output : Output_format.t) artifact =
+  Path.build (Artifact.output_file ctx output artifact)
+;;
+
+let out_files ctx (output : Output_format.t) artifacts =
+  let extra_files =
+    match output with
+    | Html -> [ Path.build (Paths.odoc_support ctx) ]
+    | Json | Markdown -> []
+  in
+  Path.build (Output_format.toplevel_index_path output ctx)
+  :: List.rev_append extra_files (List.map artifacts ~f:(out_file ctx output))
+;;
+
+let add_format_alias_deps ctx format target artifacts =
+  Rules.Produce.Alias.add_deps
+    (Dep.format_alias format ctx target)
+    (Action_builder.paths (out_files ctx format artifacts))
+;;
+
 let setup_lib_odocl_rules_def =
   let module Input = struct
     module Super_context = Super_context.As_memo_key
@@ -833,26 +853,6 @@ let setup_pkg_odocl_rules_def =
 
 let setup_pkg_odocl_rules sctx ~pkg ~for_ : unit Memo.t =
   Memo.With_implicit_output.exec setup_pkg_odocl_rules_def (sctx, pkg, for_)
-;;
-
-let out_file ctx (output : Output_format.t) artifact =
-  Path.build (Artifact.output_file ctx output artifact)
-;;
-
-let out_files ctx (output : Output_format.t) artifacts =
-  let extra_files =
-    match output with
-    | Html -> [ Path.build (Paths.odoc_support ctx) ]
-    | Json | Markdown -> []
-  in
-  Path.build (Output_format.toplevel_index_path output ctx)
-  :: List.rev_append extra_files (List.map artifacts ~f:(out_file ctx output))
-;;
-
-let add_format_alias_deps ctx format target artifacts =
-  Rules.Produce.Alias.add_deps
-    (Dep.format_alias format ctx target)
-    (Action_builder.paths (out_files ctx format artifacts))
 ;;
 
 let setup_lib_html_rules_def =
