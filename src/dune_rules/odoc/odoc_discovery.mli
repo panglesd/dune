@@ -1,5 +1,7 @@
 open Import
 
+val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
+
 val discover_package_artifacts
   :  Super_context.t
   -> Context.t
