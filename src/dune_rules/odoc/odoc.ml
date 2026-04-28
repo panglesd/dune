@@ -5,6 +5,7 @@ module Gen_rules = Build_config.Gen_rules
 let ( ++ ) = Path.Build.relative
 
 module Target = Odoc_target
+module Scope_id = Odoc_scope.Scope_id
 
 type odoc_output =
   | Odoc
@@ -696,16 +697,24 @@ let setup_toplevel_index_deps sctx output =
   Rules.Produce.Alias.add_deps (alias_of_dir root) (Action_builder.deps deps)
 ;;
 
-let lib_dir_path ctx ~output ~pkg ~lib_name =
+let lib_dir_path ctx ~output ~scope_id ~lib_name =
   let subdir =
     match output with
     | Odoc -> "_odoc"
     | Odocls -> "_odocls"
   in
-  Paths.root ctx ++ subdir ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
+  let base = Paths.root ctx ++ subdir in
+  match scope_id with
+  | Scope_id.Private_lib _ ->
+    (* Private library: unique_name already identifies the library *)
+    base ++ Scope_id.to_string scope_id
+  | Scope_id.Package pkg ->
+    (* Package library: path is pkg/lib *)
+    base ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
 ;;
 
-let generate_html_for_package sctx ~ctx ~pkg ~all_artifacts ~output_format () =
+let generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format () =
+  let pkg = Scope_id.as_package_name scope_id in
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
@@ -758,15 +767,9 @@ let default_index ~pkg ~lib_artifacts =
   Buffer.contents b
 ;;
 
-let is_private_lib_name s = String.contains s '@'
-
 let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
-  let pkg =
-    if is_private_lib_name pkg_or_lib_name
-    then None
-    else Some (Package.Name.of_string pkg_or_lib_name)
-  in
+  let* scope_id = Scope_id.of_string pkg_or_lib_name in
   let+ all_artifacts, lib_subdirs, _gen_index =
     Odoc_discovery.discover_package_artifacts
       sctx
@@ -777,7 +780,7 @@ let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let all_lib_names =
     List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
   in
-  let rules = f ~ctx ~pkg ~all_artifacts ~all_lib_names in
+  let rules = f ~ctx ~scope_id ~all_artifacts ~all_lib_names in
   Build_config.Gen_rules.make
     ~build_dir_only_sub_dirs:
       (Build_config.Gen_rules.Build_only_sub_dirs.singleton
@@ -792,7 +795,7 @@ let handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name =
     sctx
     ~dir
     ~pkg_or_lib_name
-    ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
+    ~f:(fun ~ctx ~scope_id ~all_artifacts ~all_lib_names ->
       Log.info
         (sprintf
            "handle_odoc_artifacts(%s): %d artifacts, %d libs: %s"
@@ -831,25 +834,25 @@ let handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name =
               Dep.setup_deps ctx target (Path.Set.singleton odoc_file)
             | Page (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
         in
-        match pkg with
-        | None -> Memo.return ()
-        | Some pkg ->
-          let lib_names_with_artifacts =
-            List.filter_map all_artifacts ~f:(fun a ->
-              Option.map (Artifact.lib a) ~f:Lib.name)
-            |> Lib_name.Set.of_list
-          in
-          let* lib_alias_dirs =
-            Lib_name.Set.to_list all_lib_names
-            |> Memo.List.filter_map ~f:(fun lib_name ->
-              let lib_dir = lib_dir_path ctx ~output:Odoc ~pkg ~lib_name in
-              if Lib_name.Set.mem lib_names_with_artifacts lib_name
-              then Memo.return (Some lib_dir)
-              else (
-                let alias = Dep.odoc_all_alias ~dir:lib_dir in
-                let+ () = Dep.add_file_deps alias [] in
-                Some lib_dir))
-          in
+        let lib_names_with_artifacts =
+          List.filter_map all_artifacts ~f:(fun a ->
+            Option.map (Artifact.lib a) ~f:Lib.name)
+          |> Lib_name.Set.of_list
+        in
+        let* lib_alias_dirs =
+          Lib_name.Set.to_list all_lib_names
+          |> Memo.List.filter_map ~f:(fun lib_name ->
+            if Lib_name.Set.mem lib_names_with_artifacts lib_name
+            then Memo.return (Some (lib_dir_path ctx ~output:Odoc ~scope_id ~lib_name))
+            else (
+              let lib_dir = lib_dir_path ctx ~output:Odoc ~scope_id ~lib_name in
+              let alias = Dep.odoc_all_alias ~dir:lib_dir in
+              let+ () = Dep.add_file_deps alias [] in
+              Some lib_dir))
+        in
+        match scope_id with
+        | Scope_id.Private_lib _ -> Memo.return ()
+        | Scope_id.Package pkg ->
           let pkg_dir = Paths.root ctx ++ "_odoc" ++ Package.Name.to_string pkg in
           let pkg_alias = Dep.odoc_all_alias ~dir:pkg_dir in
           Dep.add_odoc_all_deps pkg_alias ~dirs:lib_alias_dirs))
@@ -860,7 +863,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
     sctx
     ~dir
     ~pkg_or_lib_name
-    ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
+    ~f:(fun ~ctx ~scope_id ~all_artifacts ~all_lib_names ->
       Rules.collect_unit (fun () ->
         let visible_artifacts =
           List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
@@ -869,41 +872,41 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
           Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
             link_artifact sctx ~artifact)
         in
-        match pkg with
-        | None -> Memo.return ()
-        | Some pkg ->
-          let visible_lib_artifacts =
-            List.filter visible_artifacts ~f:(fun a ->
-              match Artifact.get_kind a with
-              | Module _ -> true
-              | Page _ -> false)
-          in
-          let* () =
-            Memo.parallel_iter visible_lib_artifacts ~f:(fun artifact ->
-              match Artifact.lib artifact with
-              | Some lib ->
-                let lib_name = Lib.name lib in
-                let lib_dir = lib_dir_path ctx ~output:Odocls ~pkg ~lib_name in
-                let lib_alias = Dep.odoc_all_alias ~dir:lib_dir in
-                let odocl_file = Path.build (Artifact.odocl_file ctx artifact) in
-                Dep.add_file_deps lib_alias [ odocl_file ]
-              | None -> Memo.return ())
-          in
-          let lib_names_with_artifacts =
-            List.filter_map visible_lib_artifacts ~f:(fun a ->
-              Option.map (Artifact.lib a) ~f:Lib.name)
-            |> Lib_name.Set.of_list
-          in
-          let* () =
-            Lib_name.Set.to_list all_lib_names
-            |> Memo.parallel_iter ~f:(fun lib_name ->
-              if Lib_name.Set.mem lib_names_with_artifacts lib_name
-              then Memo.return ()
-              else (
-                let lib_dir = lib_dir_path ctx ~output:Odocls ~pkg ~lib_name in
-                let lib_alias = Dep.odoc_all_alias ~dir:lib_dir in
-                Dep.add_file_deps lib_alias []))
-          in
+        let visible_lib_artifacts =
+          List.filter visible_artifacts ~f:(fun a ->
+            match Artifact.get_kind a with
+            | Module _ -> true
+            | Page _ -> false)
+        in
+        let* () =
+          Memo.parallel_iter visible_lib_artifacts ~f:(fun artifact ->
+            match Artifact.lib artifact with
+            | Some lib ->
+              let lib_name = Lib.name lib in
+              let lib_dir = lib_dir_path ctx ~output:Odocls ~scope_id ~lib_name in
+              let lib_alias = Dep.odoc_all_alias ~dir:lib_dir in
+              let odocl_file = Path.build (Artifact.odocl_file ctx artifact) in
+              Dep.add_file_deps lib_alias [ odocl_file ]
+            | None -> Memo.return ())
+        in
+        let lib_names_with_artifacts =
+          List.filter_map visible_lib_artifacts ~f:(fun a ->
+            Option.map (Artifact.lib a) ~f:Lib.name)
+          |> Lib_name.Set.of_list
+        in
+        let* () =
+          Lib_name.Set.to_list all_lib_names
+          |> Memo.parallel_iter ~f:(fun lib_name ->
+            if Lib_name.Set.mem lib_names_with_artifacts lib_name
+            then Memo.return ()
+            else (
+              let lib_dir = lib_dir_path ctx ~output:Odocls ~scope_id ~lib_name in
+              let lib_alias = Dep.odoc_all_alias ~dir:lib_dir in
+              Dep.add_file_deps lib_alias []))
+        in
+        match scope_id with
+        | Scope_id.Private_lib _ -> Memo.return ()
+        | Scope_id.Package pkg ->
           let pkg_dir = Paths.odocl_root ctx ++ Package.Name.to_string pkg in
           let pkg_alias = Dep.odoc_all_alias ~dir:pkg_dir in
           let all_odocl_paths =
@@ -915,7 +918,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
 
 let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
   let ctx = Super_context.context sctx in
-  let pkg = Package.Name.of_string pkg_or_lib_name in
+  let* scope_id = Scope_id.of_string pkg_or_lib_name in
   let* all_artifacts, lib_subdirs, _gen_index =
     Odoc_discovery.discover_package_artifacts
       sctx
@@ -947,7 +950,7 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
   let other_formats = List.filter Output_format.all ~f:(fun f -> f <> output_format) in
   let rules =
     Rules.collect_unit (fun () ->
-      generate_html_for_package sctx ~ctx ~pkg ~all_artifacts ~output_format ()
+      generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format ()
       >>> Memo.parallel_iter other_formats ~f:(fun other_format ->
         let other_alias = Output_format.alias other_format ~dir in
         Rules.Produce.Alias.add_deps other_alias (Action_builder.return ())

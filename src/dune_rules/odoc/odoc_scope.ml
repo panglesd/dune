@@ -33,20 +33,43 @@ let find_project_by_key =
     String.Map.find_exn map key
 ;;
 
-module Scope_key : sig
-  val of_string : Context_name.t -> string -> (Lib_name.t * Lib.DB.t) Memo.t
-  val to_string : Lib_name.t -> Dune_project.t -> string
-end = struct
-  let of_string context s =
+module Scope_id = struct
+  type t =
+    | Package of Package.Name.t
+    | Private_lib of
+        { unique_name : string
+        ; lib_name : Lib_name.t
+        ; project : Dune_project.t
+        }
+
+  let of_string s =
     match String.rsplit2 s ~on:'@' with
-    | None ->
-      let+ public_libs = Scope.DB.public_libs context in
-      Lib_name.parse_string_exn (Loc.none, s), public_libs
+    | None -> Memo.return (Package (Package.Name.of_string s))
     | Some (lib, key) ->
-      let+ scope = find_project_by_key key >>= Scope.DB.find_by_project context in
-      Lib_name.parse_string_exn (Loc.none, lib), Scope.libs scope
+      let+ project = find_project_by_key key in
+      let lib_name = Lib_name.parse_string_exn (Loc.none, lib) in
+      Private_lib { unique_name = s; lib_name; project }
   ;;
 
+  let to_string = function
+    | Package pkg -> Package.Name.to_string pkg
+    | Private_lib { unique_name; _ } -> unique_name
+  ;;
+
+  let is_private_lib = function
+    | Package _ -> false
+    | Private_lib _ -> true
+  ;;
+
+  let as_package_name = function
+    | Package pkg -> pkg
+    | Private_lib { unique_name; _ } -> Package.Name.of_string unique_name
+  ;;
+end
+
+module Scope_key : sig
+  val to_string : Lib_name.t -> Dune_project.t -> string
+end = struct
   let to_string lib project =
     let key = file_key project in
     sprintf "%s@%s" (Lib_name.to_string lib) key
