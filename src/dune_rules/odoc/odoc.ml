@@ -526,15 +526,14 @@ let generate_html_for_package sctx ~ctx ~pkg ~search_db ~all_artifacts ~output_f
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
       generate_html_artifact sctx ~artifact ?search_db ~output_format ())
   in
-  let toplevel = Path.build (Output_format.toplevel_index_path output_format ctx) in
-  let artifact_paths = toplevel :: List.map visible_artifacts ~f:output_file in
+  let artifact_paths = List.map visible_artifacts ~f:output_file in
   let pkg_alias = Dep.format_alias output_format ctx (Pkg pkg) in
   let* () = Dep.add_file_deps pkg_alias artifact_paths in
   Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
     match Artifact.get_kind artifact with
     | Module (_, (Lib _ as target)) ->
       let lib_alias = Dep.format_alias output_format ctx target in
-      Dep.add_file_deps lib_alias [ toplevel; output_file artifact ]
+      Dep.add_file_deps lib_alias [ output_file artifact ]
     | Page _ -> Memo.return ())
 ;;
 
@@ -747,23 +746,30 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
 
 let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.t) =
   let ctx = Super_context.context sctx in
-  let name = Package.name pkg in
   let alias =
     let pkg_dir = Package.dir pkg in
     let dir = Path.Build.append_source (Context.build_dir ctx) pkg_dir in
     Output_format.alias output ~dir
   in
-  let* libs = libs_of_pkg (Context.name ctx) ~pkg:name in
-  let deps =
-    let pkg_alias = Dep.format_alias output ctx (Target.Pkg name) in
-    let lib_aliases =
-      List.map libs ~f:(fun l -> Dep.format_alias output ctx (Target.Lib l))
+  let deps_action =
+    let open Action_builder.O in
+    let* dep_set =
+      Action_builder.of_memo
+        (let open Memo.O in
+         let+ workspace_pkgs = get_workspace_packages () in
+         let pkg_aliases =
+           List.map workspace_pkgs ~f:(fun p ->
+             Dep.format_alias output ctx (Target.Pkg p))
+         in
+         let toplevel_alias =
+           Output_format.alias output ~dir:(Paths.output_root ctx output)
+         in
+         toplevel_alias :: pkg_aliases
+         |> Dune_engine.Dep.Set.of_list_map ~f:Dune_engine.Dep.alias)
     in
-    pkg_alias :: lib_aliases
-    |> Dune_engine.Dep.Set.of_list_map ~f:Dune_engine.Dep.alias
-    |> Action_builder.deps
+    Action_builder.deps dep_set
   in
-  Rules.Produce.Alias.add_deps alias deps
+  Rules.Produce.Alias.add_deps alias deps_action
 ;;
 
 let setup_package_aliases sctx (pkg : Package.t) =
