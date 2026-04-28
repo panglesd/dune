@@ -511,7 +511,31 @@ let module_artifact ~local_lib module_ =
   Artifact.create ~kind ~source:(Local_source source_file)
 ;;
 
+let discover_local_lib_artifacts sctx ~local_lib =
+  let+ all_modules =
+    Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
+  in
+  let modules = Modules.fold all_modules ~init:[] ~f:(fun m acc -> m :: acc) in
+  List.map modules ~f:(module_artifact ~local_lib)
+;;
+
+let discover_pkg_mld_artifacts ~pkg ~mld_infos =
+  let target = Target.Pkg pkg in
+  List.map mld_infos ~f:(fun (source, name) ->
+    let kind = Artifact.Page ({ Target.name }, target) in
+    Artifact.create ~kind ~source)
+;;
+
 let auto_index_path ctx pkg = Paths.gen_mld_dir ctx pkg ++ "index.mld"
+
+let discover_all_lib_artifacts sctx ~libs =
+  Memo.List.filter_map libs ~f:(fun lib ->
+    match Lib.Local.of_lib lib with
+    | None -> Memo.return None
+    | Some local_lib ->
+      let+ artifacts = discover_local_lib_artifacts sctx ~local_lib in
+      Some (lib, artifacts))
+;;
 
 let check_mlds_no_dupes ~pkg ~mlds =
   match
@@ -572,16 +596,12 @@ let odoc_artefacts : type a. _ -> a Target.t -> _ =
           Some (auto_index_path ctx pkg, "index")
         | Some _ as s -> s)
     in
-    String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
-      Artifact.create
-        ~kind:(Artifact.Page ({ Target.name }, Target.Pkg pkg))
-        ~source:(Local_source path))
-  | Lib local_lib ->
-    let+ all_modules =
-      Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
+    let mld_infos =
+      String.Map.values mlds
+      |> List.map ~f:(fun (path, name) -> Artifact.Local_source path, name)
     in
-    Modules.fold all_modules ~init:[] ~f:(fun m acc ->
-      module_artifact ~local_lib m :: acc)
+    discover_pkg_mld_artifacts ~pkg ~mld_infos
+  | Lib local_lib -> discover_local_lib_artifacts sctx ~local_lib
 ;;
 
 let out_file ctx (output : Output_format.t) artifact =
@@ -900,11 +920,8 @@ let package_mlds =
              let ctx = Super_context.context sctx in
              let path = auto_index_path ctx pkg in
              let* libs = libs_of_pkg (Context.name ctx) ~pkg in
-             let* lib_artifacts =
-               Memo.parallel_map libs ~f:(fun lib ->
-                 let+ artifacts = odoc_artefacts sctx (Lib lib) in
-                 Lib.Local.to_lib lib, artifacts)
-             in
+             let libs = List.map libs ~f:Lib.Local.to_lib in
+             let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
              let+ () =
                add_rule
                  sctx
