@@ -408,9 +408,31 @@ let toplevel_index_artifact ctx =
   let output_path = Odoc_paths.toplevel_index_mld ctx in
   let page = { Odoc_target.name = "index"; pkg_libs = [] } in
   let kind = Odoc_artifact.Page (page, Odoc_target.Toplevel) in
+  (* Check for a custom index.mld from dune-project (documentation (index ...)) *)
+  let* projects = Dune_load.projects () in
+  let root_project =
+    List.find projects ~f:(fun p ->
+      Path.Source.equal (Dune_project.root p) Path.Source.root)
+  in
+  let custom_index =
+    match root_project with
+    | Some project -> Dune_project.documentation_index project
+    | None -> None
+  in
+  let* source =
+    match custom_index with
+    | Some custom_path ->
+      (* User provided a custom index.mld - read its content *)
+      let source_path = Path.Source.relative Path.Source.root custom_path in
+      let+ content = Build_system.read_file (Path.source source_path) in
+      Odoc_artifact.Generated { content; output_path }
+    | None ->
+      (* Generate the index content as before *)
+      let+ items = Toplevel_index.get_items ctx in
+      let content = Toplevel_index.mld_content items in
+      Odoc_artifact.Generated { content; output_path }
+  in
   let* items = Toplevel_index.get_items ctx in
-  let content = Toplevel_index.mld_content items in
-  let source = Odoc_artifact.Generated { content; output_path } in
   let package_names =
     List.map items ~f:(fun (Toplevel_index.Package { name; _ }) ->
       Package.Name.of_string name)
