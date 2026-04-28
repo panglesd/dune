@@ -488,39 +488,24 @@ let setup_toplevel_index_deps sctx output =
   Rules.Produce.Alias.add_deps (alias_of_dir root) (Action_builder.deps deps)
 ;;
 
-let out_file ctx (output : Output_format.t) artifact =
-  Path.build (Artifact.output_file ctx output artifact)
-;;
-
-let out_files ctx (output : Output_format.t) artifacts =
-  let extra_files =
-    match output with
-    | Html -> [ Path.build (Paths.odoc_support ctx) ]
-    | Json | Markdown -> []
-  in
-  Path.build (Output_format.toplevel_index_path output ctx)
-  :: List.rev_append extra_files (List.map artifacts ~f:(out_file ctx output))
-;;
-
-let add_format_alias_deps ctx format target artifacts =
-  Rules.Produce.Alias.add_deps
-    (Dep.format_alias format ctx target)
-    (Action_builder.paths (out_files ctx format artifacts))
-;;
-
 let generate_html_for_package sctx ~ctx ~pkg ~search_db ~all_artifacts ~output_format () =
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
+  let output_file a = Path.build (Artifact.output_file ctx output_format a) in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
       generate_html_artifact sctx ~artifact ?search_db ~output_format ())
   in
-  let* () = add_format_alias_deps ctx output_format (Pkg pkg) visible_artifacts in
+  let toplevel = Path.build (Output_format.toplevel_index_path output_format ctx) in
+  let artifact_paths = toplevel :: List.map visible_artifacts ~f:output_file in
+  let pkg_alias = Dep.format_alias output_format ctx (Pkg pkg) in
+  let* () = Dep.add_file_deps pkg_alias artifact_paths in
   Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
     match Artifact.get_kind artifact with
     | Module (_, (Lib _ as target)) ->
-      add_format_alias_deps ctx output_format target [ artifact ]
+      let lib_alias = Dep.format_alias output_format ctx target in
+      Dep.add_file_deps lib_alias [ toplevel; output_file artifact ]
     | Page _ -> Memo.return ())
 ;;
 
