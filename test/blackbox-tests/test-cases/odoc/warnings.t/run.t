@@ -19,10 +19,12 @@ Same for documentation in mli files:
 These packages are in a nested env, the option is disabled, should success with warning printed:
 
   $ dune build --only-packages=bar_doc,bar_lib @doc
-  File "../../../../sub_env/bar_doc/bar.mld", line 4, characters 0-0:
-  Warning: End of text is not allowed in '[...]' (code).
   File "sub_env/bar_lib/bar.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
+  File "../../../../sub_env/bar_doc/bar.mld", line 4, characters 0-0:
+  Error: End of text is not allowed in '[...]' (code).
+  ERROR: Warnings have been generated.
+  [1]
 
 In release mode, no error:
 

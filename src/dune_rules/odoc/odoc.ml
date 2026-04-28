@@ -250,33 +250,6 @@ end = struct
   ;;
 end
 
-let odoc_ext = ".odoc"
-
-module Mld : sig
-  type t
-
-  val create : path:Path.Build.t -> name:string -> t
-  val odoc_file : doc_dir:Path.Build.t -> t -> Path.Build.t
-  val odoc_input : t -> Path.Build.t
-end = struct
-  (** The [(documentation (files ...))] stanza allows with the [as] keyword to
-      distinguish the input file and the path in the documentation. Here we do
-      not support layered hierarchy, but we do support changing the name (hence
-      the two fields) *)
-  type t =
-    { path : Path.Build.t
-    ; name : string (** The name of the mld compilation unit (without extension) *)
-    }
-
-  let create ~path ~name = { path; name }
-
-  let odoc_file ~doc_dir { name; _ } =
-    Path.Build.relative doc_dir (sprintf "page-%s%s" name odoc_ext)
-  ;;
-
-  let odoc_input { path; _ } = path
-end
-
 module Flags = struct
   type warnings = Dune_env.Odoc.warnings =
     | Fatal
@@ -413,21 +386,19 @@ let compile_module
   m, odoc_file
 ;;
 
-let compile_mld sctx (m : Mld.t) ~includes ~doc_dir ~pkg =
-  let odoc_file = Mld.odoc_file m ~doc_dir in
-  let odoc_input = Mld.odoc_input m in
+let compile_mld sctx ~path ~name ~doc_dir ~pkg =
+  let odoc_file = doc_dir ++ sprintf "page-%s.odoc" name in
   let run_odoc =
     run_odoc
       sctx
       ~dir:(Path.build doc_dir)
       "compile"
       ~quiet:false
-      ~flags_for:(Some odoc_input)
-      [ Command.Args.dyn includes
-      ; As [ "--pkg"; Package.Name.to_string pkg ]
+      ~flags_for:(Some odoc_file)
+      [ As [ "--pkg"; Package.Name.to_string pkg ]
       ; A "-o"
       ; Target odoc_file
-      ; Dep (Path.build odoc_input)
+      ; Dep (Path.build path)
       ]
   in
   let+ () = add_rule sctx run_odoc in
@@ -1086,12 +1057,7 @@ let setup_package_odoc_rules sctx ~pkg =
   let* odocs =
     String.Map.values mlds
     |> Memo.parallel_map ~f:(fun (path, name) ->
-      compile_mld
-        sctx
-        (Mld.create ~path ~name)
-        ~pkg
-        ~doc_dir:(Paths.odocs ctx (Pkg pkg))
-        ~includes:(Action_builder.return []))
+      compile_mld sctx ~path ~name ~doc_dir:(Paths.odocs ctx (Pkg pkg)) ~pkg)
   in
   Path.Set.of_list_map ~f:Path.build odocs |> Dep.setup_deps ctx (Pkg pkg)
 ;;
