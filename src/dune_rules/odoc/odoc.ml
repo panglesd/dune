@@ -387,11 +387,50 @@ let setup_css_rule sctx =
   setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx)
 ;;
 
+let libs_of_pkg ctx ~pkg =
+  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
+    Scope.DB.lib_entries_of_package ctx pkg
+  in
+  (* Filter out all implementations of virtual libraries *)
+  List.filter_map libraries ~f:(fun lib ->
+    match Lib.Local.to_lib lib |> Lib.info |> Lib_info.implements with
+    | None -> Some lib
+    | Some _ -> None)
+;;
+
 (* Compute requires for linking an artifact.
    - Modules in a library: the library's transitive closure plus sibling libs
      in the same package (allowing cross-references between siblings).
    - Private libraries (no package): just the library's transitive closure.
    - Pages in a package: libs in the package plus their transitive deps. *)
+let compute_link_requires sctx ~artifact =
+  let ctx = Super_context.context sctx in
+  let closure libs = Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml in
+  match Artifact.get_kind artifact with
+  | Module (_, Lib local_lib) ->
+    let lib = Lib.Local.to_lib local_lib in
+    let* closure = closure [ lib ] in
+    (match Lib_info.package (Lib.info lib) with
+     | None -> Memo.return (Resolve.map closure ~f:(fun libs -> lib :: libs))
+     | Some pkg ->
+       let+ pkg_libs = libs_of_pkg (Context.name ctx) ~pkg in
+       let pkg_libs = List.map pkg_libs ~f:Lib.Local.to_lib in
+       Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs))
+  | Page (_, Pkg pkg) ->
+    let* pkg_libs = libs_of_pkg (Context.name ctx) ~pkg in
+    let pkg_libs = List.map pkg_libs ~f:Lib.Local.to_lib in
+    if List.is_empty pkg_libs
+    then Memo.return (Resolve.return [])
+    else
+      let+ closure = closure pkg_libs in
+      Resolve.map closure ~f:(fun closure_libs -> pkg_libs @ closure_libs)
+;;
+
+let link_artifact sctx ~artifact =
+  let* requires = compute_link_requires sctx ~artifact in
+  link_odoc_rules sctx artifact ~requires
+;;
+
 let sp = Printf.sprintf
 
 module Toplevel_index = struct
@@ -499,17 +538,6 @@ let setup_toplevel_index_rule sctx output =
   let ctx = Super_context.context sctx in
   let path = Output_format.toplevel_index_path output ctx in
   add_rule sctx (Action_builder.write_file path content)
-;;
-
-let libs_of_pkg ctx ~pkg =
-  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
-    Scope.DB.lib_entries_of_package ctx pkg
-  in
-  (* Filter out all implementations of virtual libraries *)
-  List.filter_map libraries ~f:(fun lib ->
-    match Lib.Local.to_lib lib |> Lib.info |> Lib_info.implements with
-    | None -> Some lib
-    | Some _ -> None)
 ;;
 
 let setup_toplevel_index_deps sctx output =
@@ -666,18 +694,9 @@ let handle_odocl_artifacts sctx ~pkg_or_lib_name =
       let visible_artifacts =
         List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
       in
-      let libs =
-        List.filter_map all_artifacts ~f:Artifact.lib
-        |> List.sort_uniq ~compare:(fun a b -> Lib_name.compare (Lib.name a) (Lib.name b))
-      in
-      let* requires =
-        if List.is_empty libs
-        then Memo.return (Resolve.return [])
-        else Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml
-      in
       let* () =
         Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-          link_odoc_rules sctx artifact ~requires)
+          link_artifact sctx ~artifact)
       in
       match pkg with
       | None -> Memo.return ()
