@@ -191,7 +191,16 @@ let run_odoc sctx ?dir command ~quiet ~flags_for args =
     | None -> Action_builder.return Command.Args.empty
     | Some path -> odoc_base_flags quiet path
   in
-  let deps = Action_builder.env_var "ODOC_SYNTAX" in
+  (* Depend on ODOC_SYNTAX env var and the odoc binary itself.
+     The binary dependency ensures rules rebuild when odoc is updated. *)
+  let deps =
+    let open Action_builder.O in
+    let* () = Action_builder.env_var "ODOC_SYNTAX" in
+    let* prog_result = program in
+    match prog_result with
+    | Ok path -> Action_builder.path path
+    | Error _ -> Action_builder.return ()
+  in
   let open Action_builder.With_targets.O in
   let run =
     Action_builder.with_no_targets deps
