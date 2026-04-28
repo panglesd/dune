@@ -7,11 +7,13 @@ Build documentation:
   $ dune build @doc
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
+  File "fun.mli", line 92, characters 3-8:
+  Warning: 'const' is deprecated, use 'constructor' instead.
   File "scanf.mli", line 86, character 0 to line 88, character 1:
   Warning: Alert unsynchronized_access not expected here.
-  File "array.mli", line 433, character 1 to line 439, character 2:
+  File "array.mli", line 449, character 1 to line 455, character 2:
   Warning: Code blocks should be indented at the opening `{`.
-  File "arrayLabels.mli", line 433, character 1 to line 439, character 2:
+  File "arrayLabels.mli", line 449, character 1 to line 455, character 2:
   Warning: Code blocks should be indented at the opening `{`.
   File "buffer.mli", line 35, character 0 to line 37, character 1:
   Warning: Alert unsynchronized_access not expected here.
@@ -35,17 +37,17 @@ Build documentation:
   Warning: Alert unsynchronized_access not expected here.
   File "stack.mli", line 23, character 0 to line 25, character 1:
   Warning: Alert unsynchronized_access not expected here.
-  File "format.mli", line 362, character 3 to line 368, character 5:
+  File "format.mli", line 363, character 3 to line 369, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "format.mli", line 371, character 3 to line 374, character 5:
+  File "format.mli", line 372, character 3 to line 375, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "format.mli", line 1538, character 2 to line 1542, character 6:
+  File "format.mli", line 1575, character 2 to line 1579, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "ephemeron.mli", line 70, character 0 to line 72, character 1:
   Warning: Alert unsynchronized_access not expected here.
   File "moreLabels.mli", line 64, character 2 to line 66, character 3:
   Warning: Alert unsynchronized_access not expected here.
-  File "gc.mli", line 429, character 3 to line 438, character 5:
+  File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
   File "src/astring.mli", line 229, characters 39-62:
   Warning: '@raise' should begin on its own line.
@@ -65,19 +67,19 @@ Build documentation:
   Warning: '@raise' should begin on its own line.
   File "src/astring.mli", line 1065, characters 48-71:
   Warning: '@raise' should begin on its own line.
-  File "utils/config.mli", line 251, characters 24-29:
+  File "utils/config.mli", line 284, characters 24-29:
   Warning: Unknown tag '@FILE'.
-  File "utils/config_boot.mli", line 251, characters 24-29:
+  File "utils/config_boot.mli", line 284, characters 24-29:
   Warning: Unknown tag '@FILE'.
-  File "utils/config_main.mli", line 251, characters 24-29:
+  File "utils/config_main.mli", line 284, characters 24-29:
   Warning: Unknown tag '@FILE'.
-  File "driver/main_args.mli", line 278, characters 27-34:
+  File "driver/main_args.mli", line 284, characters 27-34:
   Warning: '{c,opt}': bad markup.
   Suggestion: did you mean '{!c,opt}' or '[c,opt]'?
-  File "driver/main_args.mli", line 279, characters 22-29:
+  File "driver/main_args.mli", line 285, characters 22-29:
   Warning: '{c,opt}': bad markup.
   Suggestion: did you mean '{!c,opt}' or '[c,opt]'?
-  File "otherlibs/unix/unix.mli", line 1590, characters 65-78:
+  File "otherlibs/unix/unix.mli", line 1604, characters 65-78:
   Warning: '@since' should begin on its own line.
   File "src/fpath.mli", line 468, characters 43-66:
   Warning: '@raise' should begin on its own line.
@@ -93,11 +95,11 @@ Build documentation:
   Warning: '@raise' should begin on its own line.
   File "src/fpath.mli", line 533, characters 46-69:
   Warning: '@raise' should begin on its own line.
-  File "unixLabels.mli", line 1590, characters 65-78:
+  File "unixLabels.mli", line 1604, characters 65-78:
   Warning: '@since' should begin on its own line.
   File "typing/shape.mli", line 50, characters 0-0:
   Warning: End of text is not allowed in '{{:...} ...}' (external link).
-  File "parsing/parsetree.mli", line 648, characters 40-41:
+  File "parsing/parsetree.mli", line 674, characters 40-41:
   Warning: '.' is not allowed in '{ul ...}' (bulleted list).
   Suggestion: move '.' into a list item, '{li ...}' or '{- ...}'.
   File "parsing/ast_mapper.mli", line 29, character 2 to line 43, character 35:
@@ -116,7 +118,7 @@ Build documentation:
   Warning: Failed to resolve reference /testpkg/index Path '/testpkg/index' not found
   File "typing/types.mli", line 16, characters 4-48:
   Warning: '{0': heading level should be lower than top heading level '0'.
-  File "typing/types.mli", line 308, character 17 to line 314, character 48:
+  File "typing/types.mli", line 318, character 17 to line 324, character 48:
   Warning: '{ row_fields = [("X", _)];
                      row_more   =
                        Tvariant { row_fields = [("Y", _)];
@@ -137,10 +139,10 @@ Build documentation:
                                     Tvariant { row_fields = [];
                                                row_more   = _;
                                                _ ]'?
-  File "typing/types.mli", line 315, characters 34-35:
+  File "typing/types.mli", line 325, characters 34-35:
   Warning: Unpaired '}' (end of markup).
   Suggestion: try '\}'.
-  File "typing/types.mli", line 317, characters 17-18:
+  File "typing/types.mli", line 327, characters 17-18:
   Warning: Unpaired '}' (end of markup).
   Suggestion: try '\}'.
   File "implem/tyxml.ml", line 5, character 4 to line 6, character 100:
@@ -180,25 +182,25 @@ Build documentation:
   Suggestion: did you mean '{! pat_desc  = Tpat_any
               ; pat_extra = (Tpat_unpack, _, _) :: ... }' or '[ pat_desc  = Tpat_any
               ; pat_extra = (Tpat_unpack, _, _) :: ... ]'?
-  File "typing/typedtree.mli", line 117, characters 12-33:
+  File "typing/typedtree.mli", line 124, characters 12-33:
   Warning: '{ l1=P1; ...; ln=Pn }': bad markup.
   Suggestion: did you mean '{! l1=P1; ...; ln=Pn }' or '[ l1=P1; ...; ln=Pn ]'?
-  File "typing/typedtree.mli", line 118, characters 12-35:
+  File "typing/typedtree.mli", line 125, characters 12-35:
   Warning: '{ l1=P1; ...; ln=Pn; _}': bad markup.
   Suggestion: did you mean '{! l1=P1; ...; ln=Pn; _}' or '[ l1=P1; ...; ln=Pn; _]'?
-  File "typing/typedtree.mli", line 244, characters 12-33:
+  File "typing/typedtree.mli", line 258, characters 12-33:
   Warning: '{ l1=P1; ...; ln=Pn }': bad markup.
   Suggestion: did you mean '{! l1=P1; ...; ln=Pn }' or '[ l1=P1; ...; ln=Pn ]'?
-  File "typing/typedtree.mli", line 245, characters 12-41:
+  File "typing/typedtree.mli", line 259, characters 12-41:
   Warning: '{ E0 with l1=P1; ...; ln=Pn }': bad markup.
   Suggestion: did you mean '{! E0 with l1=P1; ...; ln=Pn }' or '[ E0 with l1=P1; ...; ln=Pn ]'?
-  File "typing/typedtree.mli", line 249, characters 27-45:
+  File "typing/typedtree.mli", line 263, characters 27-45:
   Warning: '{ l1: t1; l2: t2 }': bad markup.
   Suggestion: did you mean '{! l1: t1; l2: t2 }' or '[ l1: t1; l2: t2 ]'?
-  File "typing/typedtree.mli", line 250, characters 12-29:
+  File "typing/typedtree.mli", line 264, characters 12-29:
   Warning: '{ E0 with t2=P2 }': bad markup.
   Suggestion: did you mean '{! E0 with t2=P2 }' or '[ E0 with t2=P2 ]'?
-  File "typing/typedtree.mli", line 252, character 14 to line 253, character 47:
+  File "typing/typedtree.mli", line 266, character 14 to line 267, character 47:
   Warning: '{ fields = [| l1, Kept t1; l2 Override P2 |]; representation;
                   extended_expression = Some E0 }': bad markup.
   Suggestion: did you mean '{! fields = [| l1, Kept t1; l2 Override P2 |]; representation;
@@ -278,7 +280,7 @@ Build documentation:
          dst.offset <- dst';
          map_dps dst 1 f fx
       |]'?
-  File "typing/patterns.mli", line 101, characters 27-28:
+  File "typing/patterns.mli", line 102, characters 27-28:
   Warning: Unpaired ']' (end of code).
   Suggestion: try '\]'.
   File "lib/html_sigs.mli", line 141, character 6 to line 144, character 8:
@@ -294,7 +296,7 @@ Build documentation:
   File "lib/html_f.mli", line 24, characters 4-85:
   Warning: '{%...%}' (raw markup) needs a target language.
   Suggestion: try '{%html:...%}'.
-  File "middle_end/flambda/flambda.mli", line 391, character 27 to line 393, character 41:
+  File "middle_end/flambda/flambda.mli", line 392, character 27 to line 394, character 41:
   Warning: '{ f x ->
               let applied_function = Symbol f_closure in
               Apply (applied_function, x) }': bad markup.
@@ -307,8 +309,6 @@ Build documentation:
   Warning: Blank line is not allowed in '[...]' (code).
   File "driver/optcompile.mli", line 25, characters 27-28:
   Warning: Paragraph should begin on its own line.
-  File "_mlds/testpkg/index.mld", line 4, characters 0-30:
-  Warning: Failed to resolve reference /testpkg.lib/Testlib Path '/testpkg.lib/Testlib' not found
   File "testlib.mli", line 5, characters 8-56:
   Warning: Failed to resolve reference /odoc/odoc_for_authors Path '/odoc/odoc_for_authors' not found
 

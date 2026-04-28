@@ -47,8 +47,6 @@ This test generates documentation for non-hidden modules only for a library:
   Warning: Code blocks should be indented at the opening `{`.
   File "_index/index.mld", line 3, characters 2-25:
   Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
-  File "_mlds/foo/index.mld", line 4, characters 0-18:
-  Warning: Failed to resolve reference /foo/Foo Path '/foo/Foo' not found
 
  Hidden modules should be compiled
   $ find _build/default -name '*.odoc' | sort -n

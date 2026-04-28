@@ -82,8 +82,6 @@ Test markdown generation with package documentation (.mld files)
   Warning: Code blocks should be indented at the opening `{`.
   File "_index/index.mld", line 3, characters 2-33:
   Warning: Failed to resolve reference /example/index Path '/example/index' not found
-  File "_mlds/example/index.mld", line 4, characters 0-26:
-  Warning: Failed to resolve reference /example/Example Path '/example/Example' not found
 
   $ find _build/default/_doc/_markdown -name '*.md' | sort
   _build/default/_doc/_markdown/example/example/Example.md
