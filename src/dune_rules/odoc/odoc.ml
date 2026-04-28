@@ -173,9 +173,11 @@ let odoc_program sctx dir =
       ~hint:"opam install odoc"
 ;;
 
-let run_odoc sctx ~dir command ~quiet ~flags_for args =
-  let build_dir = Super_context.context sctx |> Context.build_dir in
+let run_odoc sctx ?dir command ~quiet ~flags_for args =
+  let ctx = Super_context.context sctx in
+  let build_dir = Context.build_dir ctx in
   let program = odoc_program sctx build_dir in
+  let dir = Path.build (Option.value dir ~default:(Paths.root ctx)) in
   let base_flags =
     let open Action_builder.O in
     let* () = Action_builder.return () in
@@ -185,78 +187,15 @@ let run_odoc sctx ~dir command ~quiet ~flags_for args =
   in
   let deps = Action_builder.env_var "ODOC_SYNTAX" in
   let open Action_builder.With_targets.O in
-  Action_builder.with_no_targets deps
-  >>> Command.run_dyn_prog ~dir program [ A command; Dyn base_flags; S args ]
-;;
-
-let module_deps (m : Module.t) ~obj_dir ~(dep_graphs : Dep_graph.Ml_kind.t) =
-  Action_builder.dyn_paths_unit
-    (let open Action_builder.O in
-     let+ deps =
-       if Module.has m ~ml_kind:Intf
-       then Dep_graph.deps_of dep_graphs.intf m
-       else
-         (* When a module has no .mli, use the dependencies for the .ml *)
-         Dep_graph.deps_of dep_graphs.impl m
-     in
-     List.map deps ~f:(fun m -> Path.build (Obj_dir.Module.odoc obj_dir m)))
-;;
-
-let compile_module
-      sctx
-      ~obj_dir
-      (m : Module.t)
-      ~includes:(file_deps, iflags)
-      ~dep_graphs
-      ~pkg_or_lnu
-  =
-  let odoc_file = Obj_dir.Module.odoc obj_dir m in
-  let+ () =
-    let action_with_targets =
-      let doc_dir = Path.build (Obj_dir.odoc_dir obj_dir) in
-      let run_odoc =
-        run_odoc
-          sctx
-          ~dir:doc_dir
-          "compile"
-          ~quiet:false
-          ~flags_for:(Some odoc_file)
-          [ A "-I"
-          ; Path doc_dir
-          ; iflags
-          ; As [ "--pkg"; pkg_or_lnu ]
-          ; A "-o"
-          ; Target odoc_file
-          ; Dep (Path.build (Obj_dir.Module.cmti_file ~cm_kind:(Ocaml Cmi) obj_dir m))
-          ]
-      in
-      let open Action_builder.With_targets.O in
-      Action_builder.with_no_targets file_deps
-      >>> Action_builder.with_no_targets (module_deps m ~obj_dir ~dep_graphs)
-      >>> run_odoc
-    in
-    add_rule sctx action_with_targets
+  let run =
+    Action_builder.with_no_targets deps
+    >>> Command.run_dyn_prog ~dir program [ A command; Dyn base_flags; S args ]
   in
-  m, odoc_file
-;;
-
-let compile_mld sctx ~path ~name ~doc_dir ~pkg =
-  let odoc_file = doc_dir ++ sprintf "page-%s.odoc" name in
-  let run_odoc =
-    run_odoc
-      sctx
-      ~dir:(Path.build doc_dir)
-      "compile"
-      ~quiet:false
-      ~flags_for:(Some odoc_file)
-      [ As [ "--pkg"; Package.Name.to_string pkg ]
-      ; A "-o"
-      ; Target odoc_file
-      ; Dep (Path.build path)
-      ]
-  in
-  let+ () = add_rule sctx run_odoc in
-  odoc_file
+  if quiet
+  then
+    Action_builder.With_targets.map run ~f:(fun action ->
+      Action.Full.map action ~f:Action.ignore_outputs)
+  else run
 ;;
 
 let odoc_include_flags ctx pkg requires =
@@ -279,19 +218,56 @@ let odoc_include_flags ctx pkg requires =
           [ Command.Args.A "-I"; Path dir ])))
 ;;
 
+let compile_artifact sctx ~artifact ~module_deps ~requires =
+  let ctx = Super_context.context sctx in
+  let source_file = Artifact.source_file artifact in
+  let include_flags, lib_deps, pkg_arg =
+    match Artifact.get_kind artifact with
+    | Module (_, Lib local_lib) ->
+      let pkg = Lib_info.package (Lib.Local.info local_lib) in
+      let self_dir = Path.build (Paths.odocs ctx (Target.Lib local_lib)) in
+      let flags =
+        Command.Args.S [ A "-I"; Path self_dir; odoc_include_flags ctx pkg requires ]
+      in
+      flags, Dep.deps ctx pkg requires, Command.Args.As [ "--pkg"; pkg_or_lnu local_lib ]
+    | Page (_, Pkg pkg) ->
+      ( Command.Args.empty
+      , Action_builder.return ()
+      , Command.Args.As [ "--pkg"; Package.Name.to_string pkg ] )
+  in
+  let run_odoc =
+    let open Action_builder.With_targets.O in
+    Action_builder.with_no_targets module_deps
+    >>> Action_builder.with_no_targets lib_deps
+    >>> Action_builder.With_targets.add
+          ~file_targets:[ Artifact.odoc_file ctx artifact ]
+          (run_odoc
+             sctx
+             "compile"
+             ~quiet:false
+             ~flags_for:(Some (Artifact.odoc_file ctx artifact))
+             [ include_flags
+             ; Command.Args.A "-o"
+             ; Command.Args.Target (Artifact.odoc_file ctx artifact)
+             ; pkg_arg
+             ; Command.Args.Dep source_file
+             ])
+  in
+  add_rule sctx run_odoc
+;;
+
 let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let ctx = Super_context.context sctx in
   let pkg = Artifact.pkg odoc_file in
   let deps = Dep.deps ctx pkg requires in
-  let dir = Path.build (Path.Build.parent_exn (Artifact.odocl_file ctx odoc_file)) in
+  let include_flags = odoc_include_flags ctx pkg requires in
   let run_odoc =
     run_odoc
       sctx
-      ~dir
       "link"
       ~quiet:false
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
-      [ odoc_include_flags ctx pkg requires
+      [ include_flags
       ; A "-o"
       ; Target (Artifact.odocl_file ctx odoc_file)
       ; Dep (Path.build (Artifact.odoc_file ctx odoc_file))
@@ -339,7 +315,6 @@ let generate_output_action sctx ~artifact ?search_db ~output_format () =
   let odocl_dep = Command.Args.Dep (Path.build (Artifact.odocl_file ctx artifact)) in
   run_odoc
     sctx
-    ~dir:(Path.build doc_root)
     subcommand
     ~quiet:false
     ~flags_for:None
@@ -375,7 +350,7 @@ let setup_css_rule sctx =
     let cmd =
       run_odoc
         sctx
-        ~dir:(Path.build (Context.build_dir ctx))
+        ~dir:(Context.build_dir ctx)
         "support-files"
         ~quiet:false
         ~flags_for:None
@@ -632,38 +607,35 @@ let add_format_alias_deps ctx format target artifacts =
 ;;
 
 let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
-  (* Using the proper package name doesn't actually work since odoc assumes that
-     a package contains only 1 library *)
-  let pkg_or_lnu = pkg_or_lnu local_lib in
   let sctx = Compilation_context.super_context cctx in
   let ctx = Super_context.context sctx in
-  let info = Lib.Local.info local_lib in
   let obj_dir = Compilation_context.obj_dir cctx in
-  let modules = Compilation_context.modules cctx in
-  let* includes =
-    let+ requires = Compilation_context.requires_compile cctx in
-    let package = Lib_info.package info in
-    let odoc_include_flags =
-      Command.Args.memo (odoc_include_flags ctx package requires)
-    in
-    Dep.deps ctx package requires, odoc_include_flags
+  let dep_graphs = Compilation_context.dep_graphs cctx in
+  let modules = Compilation_context.modules cctx |> Modules.With_vlib.drop_vlib in
+  let* requires = Compilation_context.requires_compile cctx in
+  let module_deps_for m =
+    Action_builder.dyn_paths_unit
+      (let open Action_builder.O in
+       let+ deps =
+         if Module.has m ~ml_kind:Intf
+         then Dep_graph.deps_of dep_graphs.intf m
+         else Dep_graph.deps_of dep_graphs.impl m
+       in
+       List.map deps ~f:(fun m -> Path.build (Obj_dir.Module.odoc obj_dir m)))
   in
-  modules
-  |> Modules.With_vlib.drop_vlib
-  |> Modules.fold ~init:[] ~f:(fun m acc ->
-    let compiled =
-      compile_module
-        sctx
-        ~includes
-        ~dep_graphs:(Compilation_context.dep_graphs cctx)
-        ~obj_dir
-        ~pkg_or_lnu
-        m
-    in
-    compiled :: acc)
-  |> Memo.all_concurrently
-  >>| Path.Set.of_list_map ~f:(fun (_, p) -> Path.build p)
-  >>= Dep.setup_deps ctx (Lib local_lib)
+  let module_artifacts =
+    Modules.fold modules ~init:[] ~f:(fun m acc ->
+      (m, module_artifact ~local_lib m) :: acc)
+  in
+  let* () =
+    Memo.parallel_iter module_artifacts ~f:(fun (m, artifact) ->
+      compile_artifact sctx ~artifact ~module_deps:(module_deps_for m) ~requires)
+  in
+  let odoc_files =
+    Path.Set.of_list_map module_artifacts ~f:(fun (_, a) ->
+      Path.build (Artifact.odoc_file ctx a))
+  in
+  Dep.setup_deps ctx (Lib local_lib) odoc_files
 ;;
 
 let setup_lib_odocl_rules_def =
@@ -940,16 +912,27 @@ let package_mlds =
 ;;
 
 let setup_package_odoc_rules sctx ~pkg =
-  let* mlds = package_mlds sctx ~pkg >>| fst in
-  let ctx = Super_context.context sctx in
   (* CR-someday jeremiedimino: it is weird that we drop the [Package.t] and go
      back to a package name here. Need to try and change that one day. *)
-  let* odocs =
-    String.Map.values mlds
-    |> Memo.parallel_map ~f:(fun (path, name) ->
-      compile_mld sctx ~path ~name ~doc_dir:(Paths.odocs ctx (Pkg pkg)) ~pkg)
+  let* mlds, _rules = package_mlds sctx ~pkg in
+  let pages =
+    let mld_infos =
+      String.Map.values mlds
+      |> List.map ~f:(fun (path, name) -> Artifact.Local_source path, name)
+    in
+    discover_pkg_mld_artifacts ~pkg ~mld_infos
   in
-  Path.Set.of_list_map ~f:Path.build odocs |> Dep.setup_deps ctx (Pkg pkg)
+  let* () =
+    Memo.parallel_iter pages ~f:(fun artifact ->
+      compile_artifact
+        sctx
+        ~artifact
+        ~module_deps:(Action_builder.return ())
+        ~requires:(Resolve.return []))
+  in
+  let ctx = Super_context.context sctx in
+  Path.Set.of_list_map pages ~f:(fun a -> Path.build (Artifact.odoc_file ctx a))
+  |> Dep.setup_deps ctx (Pkg pkg)
 ;;
 
 let gen_project_rules sctx project =

@@ -14,7 +14,7 @@ val report_warnings : Doc_sources.mld list -> unit
 
 val run_odoc
   :  Super_context.t
-  -> dir:Path.t
+  -> ?dir:Path.Build.t
   -> string
   -> quiet:bool
   -> flags_for:Path.Build.t option

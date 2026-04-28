@@ -756,7 +756,7 @@ let compile_module
         in
         Odoc.run_odoc
           sctx
-          ~dir:(Path.build (Paths.root ctx ~all))
+          ~dir:(Paths.root ctx ~all)
           "compile"
           ~flags_for:(Some odoc_file)
           ~quiet
@@ -843,7 +843,7 @@ let compile_mld sctx a ~parent_opt ~quiet ~is_index ~children =
     in
     Odoc.run_odoc
       sctx
-      ~dir:(Path.build (Paths.root ctx ~all:true))
+      ~dir:(Paths.root ctx ~all:true)
       "compile"
       ~flags_for:(Some odoc_file)
       ~quiet
@@ -881,7 +881,7 @@ let link_odoc_rules sctx ~all (artifacts : Artifact.t list) ~quiet ~package ~lib
     let run_odoc =
       Odoc.run_odoc
         sctx
-        ~dir:(Path.build (Paths.root ctx ~all:true))
+        ~dir:(Paths.root ctx ~all:true)
         "link"
         ~quiet
         ~flags_for:(Some (Artifact.odoc_file a))
@@ -915,7 +915,7 @@ let html_generate sctx all ~search_db (a : Artifact.t) =
   let run_odoc =
     Odoc.run_odoc
       sctx
-      ~dir:(Path.build (Paths.root ctx ~all:true))
+      ~dir:(Paths.root ctx ~all:true)
       "html-generate"
       ~quiet:false
       ~flags_for:None
@@ -1840,7 +1840,7 @@ let setup_css_rule sctx ~all =
     let cmd =
       Odoc.run_odoc
         sctx
-        ~dir:(Path.build (Paths.root ctx ~all:true))
+        ~dir:(Paths.root ctx ~all:true)
         "support-files"
         ~quiet:false
         ~flags_for:None
