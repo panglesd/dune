@@ -29,6 +29,7 @@ val extra_libs : t -> Lib.t list Memo.t
 val extra_packages : t -> Package.Name.t list Memo.t
 val hidden : t -> bool
 val parent_id : t -> string
+val should_suppress_output : t -> bool Memo.t
 
 val create
   :  kind:kind
