@@ -476,39 +476,6 @@ let libs_of_pkg ctx ~pkg =
     | Some _ -> None)
 ;;
 
-let default_index ~pkg ~lib_artifacts =
-  let b = Buffer.create 512 in
-  Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
-  List.sort lib_artifacts ~compare:(fun (x, _) (y, _) ->
-    Lib_name.compare (Lib.name x) (Lib.name y))
-  |> List.iter ~f:(fun (lib, artifacts) ->
-    let modules =
-      List.filter_map artifacts ~f:(fun artifact ->
-        if Artifact.hidden artifact
-        then None
-        else (
-          match Artifact.get_kind artifact with
-          | Module ({ visible = true; module_name; _ }, _) -> Some module_name
-          | _ -> None))
-    in
-    Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string (Lib.name lib));
-    Buffer.add_string
-      b
-      (match modules with
-       | [ x ] ->
-         Printf.sprintf
-           "The entry point of this library is the module:\n{!module-%s}.\n"
-           (Module_name.to_string x)
-       | _ ->
-         Printf.sprintf
-           "This library exposes the following toplevel modules:\n{!modules:%s}\n"
-           (modules
-            |> List.sort ~compare:Module_name.compare
-            |> List.map ~f:Module_name.to_string
-            |> String.concat ~sep:" ")));
-  Buffer.contents b
-;;
-
 let module_artifact ~local_lib module_ =
   let mod_ =
     { Target.visible = Module.visibility module_ = Visibility.Public
@@ -593,37 +560,29 @@ let mlds sctx pkg =
     | _ -> Right mld)
 ;;
 
-let package_mlds =
+let get_local_mld_infos =
   let memo =
     Memo.create
       "odoc-package-mlds"
       ~input:(module Super_context.As_memo_key.And_package_name)
       (fun (sctx, pkg) ->
-         Rules.collect (fun () ->
-           let* flat, dropped = mlds sctx pkg in
-           report_warnings dropped;
-           let mlds = check_mlds_no_dupes ~pkg ~mlds:flat in
-           if String.Map.mem mlds "index"
-           then Memo.return mlds
-           else (
-             let ctx = Super_context.context sctx in
-             let path = auto_index_path ctx pkg in
-             let* libs = libs_of_pkg (Context.name ctx) ~pkg in
-             let libs = List.map libs ~f:Lib.Local.to_lib in
-             let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
-             let+ () =
-               add_rule
-                 sctx
-                 (Action_builder.write_file path (default_index ~pkg ~lib_artifacts))
-             in
-             String.Map.set mlds "index" (path, "index"))))
+         let+ flat, dropped = mlds sctx pkg in
+         report_warnings dropped;
+         check_mlds_no_dupes ~pkg ~mlds:flat)
   in
   fun sctx ~pkg -> Memo.exec memo (sctx, pkg)
 ;;
 
-let discover_pkg_artifacts_common sctx ~pkg ~libs ~mld_infos =
+let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
   let lib_subdirs = List.map libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string) in
-  let+ lib_artifacts = discover_all_lib_artifacts sctx ~libs in
+  let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
+  let mld_infos, gen_index =
+    if String.Map.mem mld_infos "index"
+    then mld_infos, None
+    else (
+      let path = auto_index_path ctx pkg in
+      String.Map.set mld_infos "index" (path, "index"), Some (path, lib_artifacts))
+  in
   let mld_artifacts =
     let mld_infos =
       String.Map.values mld_infos
@@ -632,15 +591,23 @@ let discover_pkg_artifacts_common sctx ~pkg ~libs ~mld_infos =
     discover_pkg_mld_artifacts ~pkg ~mld_infos
   in
   let all_module_artifacts = List.concat_map lib_artifacts ~f:snd in
-  mld_artifacts @ all_module_artifacts, lib_subdirs
+  let all_artifacts = mld_artifacts @ all_module_artifacts in
+  Memo.return (all_artifacts, lib_subdirs, gen_index)
 ;;
 
-let discover_local_pkg_artifacts sctx ~pkg =
-  let ctx = Super_context.context sctx in
-  let* libs = libs_of_pkg (Context.name ctx) ~pkg in
-  let libs = List.map libs ~f:Lib.Local.to_lib in
-  let* mld_infos, _rules = package_mlds sctx ~pkg in
-  discover_pkg_artifacts_common sctx ~pkg ~libs ~mld_infos
+let discover_local_pkg_artifacts sctx ctx ~pkg =
+  let* { Scope.DB.Lib_entry.Set.libraries; _ } =
+    Scope.DB.lib_entries_of_package (Context.name ctx) pkg
+  in
+  let libs =
+    List.filter_map libraries ~f:(fun lib ->
+      let lib_t = Lib.Local.to_lib lib in
+      match Lib.info lib_t |> Lib_info.implements with
+      | None -> Some lib_t
+      | Some _ -> None)
+  in
+  let* mld_infos = get_local_mld_infos sctx ~pkg in
+  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos
 ;;
 
 let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name =
@@ -654,11 +621,11 @@ let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name =
   match lib_opt with
   | Some local_lib when Option.is_none (Lib_info.package (Lib.Local.info local_lib)) ->
     let+ module_artifacts = discover_local_lib_artifacts sctx ~local_lib in
-    module_artifacts, [], None
+    module_artifacts, [], None, None
   | _ ->
     let pkg = Package.Name.of_string pkg_or_lib_unique_name in
-    let+ artifacts, lib_subdirs = discover_local_pkg_artifacts sctx ~pkg in
-    artifacts, lib_subdirs, Some pkg
+    let+ artifacts, lib_subdirs, gen_index = discover_local_pkg_artifacts sctx ctx ~pkg in
+    artifacts, lib_subdirs, gen_index, Some pkg
 ;;
 
 let setup_toplevel_index_deps sctx output =
@@ -710,9 +677,42 @@ let generate_html_for_package sctx ~ctx ~pkg ~search_db ~all_artifacts ~output_f
     | Page _ -> Memo.return ())
 ;;
 
+let default_index ~pkg ~lib_artifacts =
+  let b = Buffer.create 512 in
+  Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
+  List.sort lib_artifacts ~compare:(fun (x, _) (y, _) ->
+    Lib_name.compare (Lib.name x) (Lib.name y))
+  |> List.iter ~f:(fun (lib, artifacts) ->
+    let modules =
+      List.filter_map artifacts ~f:(fun artifact ->
+        if Odoc_artifact.hidden artifact
+        then None
+        else (
+          match Odoc_artifact.get_kind artifact with
+          | Module ({ visible = true; module_name; _ }, _) -> Some module_name
+          | _ -> None))
+    in
+    Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string (Lib.name lib));
+    Buffer.add_string
+      b
+      (match modules with
+       | [ x ] ->
+         Printf.sprintf
+           "The entry point of this library is the module:\n{!module-%s}.\n"
+           (Module_name.to_string x)
+       | _ ->
+         Printf.sprintf
+           "This library exposes the following toplevel modules:\n{!modules:%s}\n"
+           (modules
+            |> List.sort ~compare:Module_name.compare
+            |> List.map ~f:Module_name.to_string
+            |> String.concat ~sep:" ")));
+  Buffer.contents b
+;;
+
 let with_package_artifacts sctx ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
-  let+ all_artifacts, _lib_subdirs, pkg =
+  let+ all_artifacts, _lib_subdirs, _gen_index, pkg =
     discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let rules = f ~ctx ~pkg ~all_artifacts in
@@ -762,7 +762,7 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
   let ctx = Super_context.context sctx in
   let rules =
     Rules.collect_unit (fun () ->
-      let* all_artifacts, _lib_subdirs, _pkg =
+      let* all_artifacts, _lib_subdirs, _gen_index, _pkg =
         discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_name
       in
       let pages = page_artifacts all_artifacts in
@@ -817,7 +817,7 @@ let handle_odocl_artifacts sctx ~pkg_or_lib_name =
 let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
   let ctx = Super_context.context sctx in
   let pkg = Package.Name.of_string pkg_or_lib_name in
-  let* all_artifacts, lib_subdirs, _pkg =
+  let* all_artifacts, lib_subdirs, _gen_index, _pkg =
     discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let all_lib_names =
@@ -924,9 +924,15 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
 ;;
 
 let handle_mlds_dir sctx ~pkg_name =
-  let pkg = Package.Name.of_string pkg_name in
-  let* _mlds, rules = package_mlds sctx ~pkg in
-  Rules.produce rules
+  let ctx = Super_context.context sctx in
+  let* _all_artifacts, _lib_subdirs, gen_index, _pkg =
+    discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_name
+  in
+  match gen_index with
+  | None -> Memo.return ()
+  | Some (path, lib_artifacts) ->
+    let pkg = Package.Name.of_string pkg_name in
+    add_rule sctx (Action_builder.write_file path (default_index ~pkg ~lib_artifacts))
 ;;
 
 let handle_output_root sctx ~output_formats =
