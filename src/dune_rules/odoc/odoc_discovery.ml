@@ -43,6 +43,106 @@ let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   else Memo.return []
 ;;
 
+let sp = Printf.sprintf
+
+module Toplevel_index = struct
+  type item =
+    { name : string
+    ; version : Package_version.t option
+    ; link : string
+    }
+
+  let of_packages packages output_format =
+    Package.Name.Map.to_list_map packages ~f:(fun name package ->
+      let name = Package.Name.to_string name in
+      let extension =
+        match (output_format : Odoc_paths.output_format) with
+        | Markdown -> "md"
+        | Html | Json -> "html"
+      in
+      { name; version = Package.version package; link = sp "%s/index.%s" name extension })
+  ;;
+
+  let html_list_items t =
+    List.map t ~f:(fun { name; version; link } ->
+      let link = sp {|<a href="%s">%s</a>|} link name in
+      let version_suffix =
+        match version with
+        | None -> ""
+        | Some v -> sp {| <span class="version">%s</span>|} (Package_version.to_string v)
+      in
+      sp "<li>%s%s</li>" link version_suffix)
+    |> String.concat ~sep:"\n      "
+  ;;
+
+  let html t =
+    sp
+      {|<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>index</title>
+    <link rel="stylesheet" href="./%s/odoc.css"/>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  </head>
+  <body>
+    <main class="content">
+      <div class="by-name">
+      <h2>OCaml package documentation</h2>
+      <ol>
+      %s
+      </ol>
+      </div>
+    </main>
+  </body>
+</html>|}
+      Odoc_paths.odoc_support_dirname
+      (html_list_items t)
+  ;;
+
+  let string_to_json s = `String s
+  let list_to_json ~f l = `List (List.map ~f l)
+
+  let option_to_json ~f = function
+    | None -> `Null
+    | Some x -> f x
+  ;;
+
+  let item_to_json { name; version; link } =
+    `Assoc
+      [ "name", string_to_json name
+      ; ( "version"
+        , Option.map ~f:Package_version.to_string version
+          |> option_to_json ~f:string_to_json )
+      ; "link", string_to_json link
+      ]
+  ;;
+
+  (** This format is public API. *)
+  let to_json items = `Assoc [ "packages", list_to_json items ~f:item_to_json ]
+
+  let json t = Json.to_string (to_json t)
+
+  let markdown t =
+    let b = Buffer.create 256 in
+    Buffer.add_string b "# OCaml Package Documentation\n\n";
+    List.iter t ~f:(fun { name; version; link } ->
+      Buffer.add_string b (sp "- [%s](%s)" name link);
+      (match version with
+       | None -> ()
+       | Some v -> Buffer.add_string b (sp " (version %s)" (Package_version.to_string v)));
+      Buffer.add_char b '\n');
+    Buffer.contents b
+  ;;
+
+  let content (output : Odoc_paths.output_format) t =
+    match output with
+    | Html -> html t
+    | Json -> json t
+    | Markdown -> markdown t
+  ;;
+end
+
 let library_index_content_from_artifacts ~lib_name ~artifacts =
   let b = Buffer.create 256 in
   Printf.bprintf b "@toc_status hidden\n";

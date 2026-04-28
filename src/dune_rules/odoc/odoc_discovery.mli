@@ -3,6 +3,17 @@ open Import
 val get_workspace_packages : unit -> Package.Name.t list Memo.t
 val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
 
+module Toplevel_index : sig
+  type item =
+    { name : string
+    ; version : Package_version.t option
+    ; link : string
+    }
+
+  val of_packages : Package.t Package.Name.Map.t -> Odoc_paths.output_format -> item list
+  val content : Odoc_paths.output_format -> item list -> string
+end
+
 val discover_package_artifacts
   :  Super_context.t
   -> Context.t
