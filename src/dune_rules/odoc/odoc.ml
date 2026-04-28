@@ -173,22 +173,28 @@ module Flags = struct
     | Fatal
     | Nonfatal
 
+  type sidebar = Dune_env.Odoc.sidebar =
+    | Global
+    | Per_package
+
   type support = Dune_env.Odoc.support =
     | Root
     | Per_package
 
   type t =
     { warnings : warnings
+    ; sidebar : sidebar
     ; support : support
     }
 
-  let default = { warnings = Nonfatal; support = Root }
+  let default = { warnings = Nonfatal; sidebar = Global; support = Root }
 
   let get_memo ~dir =
     Env_stanza_db.value ~default ~dir ~f:(fun config ->
       let warnings = Option.value config.odoc.warnings ~default:default.warnings in
+      let sidebar = Option.value config.odoc.sidebar ~default:default.sidebar in
       let support = Option.value config.odoc.support ~default:default.support in
-      Memo.return (Some { warnings; support }))
+      Memo.return (Some { warnings; sidebar; support }))
   ;;
 
   let get ~dir = get_memo ~dir |> Action_builder.of_memo
@@ -647,6 +653,7 @@ let generate_output_action
       sctx
       ~artifact
       ?search_db
+      ~sidebar_file
       ?(remap_file : Path.Build.t option = None)
       ~mode
       ~output_format
@@ -697,6 +704,9 @@ let generate_output_action
           ; (match remap_file with
              | None -> S []
              | Some rf -> S [ A "--remap-file"; Dep (Path.build rf) ])
+          ; (match sidebar_file with
+             | Some sf -> S [ A "--sidebar"; Dep (Path.build sf) ]
+             | None -> S [])
           ; Output_format.args output_format
           ]
       in
@@ -716,6 +726,7 @@ let generate_html_artifact
       sctx
       ~artifact
       ?search_db
+      ~sidebar_file
       ?(remap_file : Path.Build.t option)
       ?(mode = Doc_mode.Local_only)
       ~output_format
@@ -730,6 +741,7 @@ let generate_html_artifact
         sctx
         ~artifact
         ?search_db
+        ~sidebar_file
         ~remap_file
         ~mode
         ~output_format
@@ -849,24 +861,53 @@ let generate_global_search_db sctx ~mode =
   Sherlodoc.search_db sctx ~dir ~external_odocls:[] all_odocl_files
 ;;
 
-(* Generate the toplevel index artifact in the given format. For HTML/Full
-   mode, attach the global search database; otherwise go straight to the
-   common single-artifact entry. *)
+(* Generate the toplevel index artifact in the given format.
+   HTML has extra machinery for search_db + sidebar_file; JSON/Markdown just
+   go through the common single-artifact entry. *)
 let setup_toplevel_index sctx mode format =
   let ctx = Super_context.context sctx in
   let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
   match (format : Output_format.t) with
-  | Markdown -> generate_html_artifact sctx ~artifact ~mode ~output_format:Markdown ()
-  | Json -> generate_html_artifact sctx ~artifact ~mode ~output_format:Json ()
+  | Markdown ->
+    generate_html_artifact
+      sctx
+      ~artifact
+      ~sidebar_file:None
+      ~mode
+      ~output_format:Markdown
+      ()
+  | Json ->
+    generate_html_artifact sctx ~artifact ~sidebar_file:None ~mode ~output_format:Json ()
   | Html ->
+    let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+    let use_global =
+      match flags.sidebar with
+      | Flags.Global -> true
+      | Flags.Per_package -> false
+    in
+    (* Create search_db and sidebar only for global mode.
+       Skip search db entirely for Local_only to avoid expensive sherlodoc generation. *)
     let* search_db =
       match mode with
       | Doc_mode.Local_only -> Memo.return None
       | Doc_mode.Full ->
-        let+ db = generate_global_search_db sctx ~mode in
-        Some db
+        if use_global
+        then
+          let+ db = generate_global_search_db sctx ~mode in
+          Some db
+        else Memo.return None
     in
-    generate_html_artifact sctx ~artifact ?search_db ~mode ~output_format:Html ()
+    let sidebar_file =
+      if use_global then Some (Paths.sidebar_file ctx mode Paths.Global) else None
+    in
+    generate_html_artifact
+      sctx
+      ~artifact
+      ?search_db
+      ~sidebar_file
+      ~mode
+      ~output_format:Html
+      ()
 ;;
 
 let setup_toplevel_index_deps sctx mode output =
@@ -902,6 +943,131 @@ let lib_dir_path ctx ~output ~scope_id ~lib_name =
     base ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
 ;;
 
+let generate_index sctx ~mode ~scope ~packages ~odocl_files =
+  let ctx = Super_context.context sctx in
+  let index_file = Paths.index_file ctx mode scope in
+  let open Command.Args in
+  let odocl_file_args =
+    List.map odocl_files ~f:(fun odocl_file -> Dep (Path.build odocl_file))
+  in
+  let action =
+    let open Action_builder.With_targets.O in
+    Action_builder.with_no_targets
+      (Action_builder.all_unit
+         (List.map packages ~f:(fun pkg ->
+            let odocl_dir = Paths.odocl ctx (Pkg pkg) in
+            let pkg_alias = Dep.odoc_all_alias ~dir:odocl_dir in
+            Action_builder.dep (Dune_engine.Dep.alias pkg_alias))))
+    >>> run_odoc
+          sctx
+          "compile-index"
+          ~quiet:false
+          ~flags_for:None
+          ([ A "-o"; Target index_file ] @ odocl_file_args)
+  in
+  let* () = add_rule sctx action in
+  Memo.return index_file
+;;
+
+type sidebar_variant =
+  | Binary
+  | Json of Output_format.t
+
+let generate_sidebar sctx ~mode ~scope ~index_file variant =
+  let ctx = Super_context.context sctx in
+  let target, prepend_args =
+    match variant with
+    | Binary -> Paths.sidebar_file ctx mode scope, []
+    | Json output_format ->
+      Paths.sidebar_json ctx mode scope output_format, [ Command.Args.A "--json" ]
+  in
+  let sidebar_dir =
+    match mode with
+    | Doc_mode.Local_only -> "_sidebar"
+    | Doc_mode.Full -> "_sidebar_full"
+  in
+  let index_relative_path =
+    match scope with
+    | Paths.Global -> sprintf "%s/index.odoc-index" sidebar_dir
+    | Paths.Per_package pkg ->
+      sprintf "%s/%s/index.odoc-index" sidebar_dir (Package.Name.to_string pkg)
+  in
+  let action =
+    let open Action_builder.With_targets.O in
+    Action_builder.with_no_targets (Action_builder.path (Path.build index_file))
+    >>> run_odoc
+          sctx
+          "sidebar-generate"
+          ~quiet:false
+          ~flags_for:None
+          (prepend_args @ [ Command.Args.A "-o"; Target target; A index_relative_path ])
+  in
+  add_rule sctx action
+;;
+
+let handle_sidebar_artifacts sctx ~mode pkg_or_lib_name =
+  let ctx = Super_context.context sctx in
+  let rules =
+    Rules.collect_unit (fun () ->
+      let pkg = Package.Name.of_string pkg_or_lib_name in
+      let scope = Paths.Per_package pkg in
+      let* all_artifacts, _lib_subdirs =
+        Odoc_discovery.discover_package_artifacts
+          sctx
+          ctx
+          ~pkg_or_lib_unique_name:pkg_or_lib_name
+      in
+      let odocl_files =
+        List.filter_map all_artifacts ~f:(fun artifact ->
+          if Artifact.hidden artifact
+          then None
+          else Some (Artifact.odocl_file ctx artifact))
+      in
+      let* index_file = generate_index sctx ~mode ~scope ~packages:[ pkg ] ~odocl_files in
+      generate_sidebar sctx ~mode ~scope ~index_file Binary)
+  in
+  Memo.return (Build_config.Gen_rules.make rules)
+;;
+
+let generate_global_sidebar sctx ~mode =
+  let* real_pkgs, all_odocl_files =
+    Odoc_discovery.collect_all_visible_odocls sctx ~mode ()
+  in
+  let* index_file =
+    generate_index
+      sctx
+      ~mode
+      ~scope:Paths.Global
+      ~packages:real_pkgs
+      ~odocl_files:all_odocl_files
+  in
+  generate_sidebar sctx ~mode ~scope:Paths.Global ~index_file Binary
+;;
+
+let handle_sidebar_root sctx ~dir ~mode =
+  let ctx = Super_context.context sctx in
+  let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+  let* workspace_pkgs = get_workspace_packages () in
+  let pkg_subdirs = List.map workspace_pkgs ~f:Package.Name.to_string in
+  let* private_local_libs = Odoc_discovery.get_private_libraries ctx in
+  let private_lib_subdirs =
+    List.map private_local_libs ~f:(fun local_lib -> Odoc_scope.lib_unique_name local_lib)
+  in
+  let all_subdirs = pkg_subdirs @ private_lib_subdirs in
+  let rules =
+    match flags.sidebar with
+    | Flags.Global -> Rules.collect_unit (fun () -> generate_global_sidebar sctx ~mode)
+    | Flags.Per_package -> Memo.return Rules.empty
+  in
+  Memo.return
+    (Build_config.Gen_rules.make
+       ~build_dir_only_sub_dirs:
+         (Build_config.Gen_rules.Build_only_sub_dirs.singleton
+            ~dir
+            (Subdir_set.of_list all_subdirs))
+       rules)
+;;
+
 let handle_remap_artifacts sctx =
   let ctx = Super_context.context sctx in
   let rules =
@@ -924,23 +1090,49 @@ let generate_html_for_package
       ~ctx
       ~scope_id
       ~all_artifacts
-      ~dir:_
+      ~dir
       ~mode
       ~output_format
       ()
   =
   let pkg = Scope_id.as_package_name scope_id in
   let pkg_name = Scope_id.to_string scope_id in
+  let* flags = Flags.get_memo ~dir in
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
   let output_file a = Path.build (Artifact.output_file ctx mode output_format a) in
+  let scope, should_generate_sidebar_json =
+    match flags.sidebar with
+    | Flags.Global -> Paths.Global, false
+    | Flags.Per_package -> Paths.Per_package pkg, true
+  in
+  let index_file = Paths.index_file ctx mode scope in
+  (* Generate sidebar.json when sidebar is per-package. *)
+  let* () =
+    if should_generate_sidebar_json
+    then generate_sidebar sctx ~mode ~scope ~index_file (Json output_format)
+    else Memo.return ()
+  in
+  (* [--sidebar]/remap/search-db are HTML-only (and the last two only in Full
+     mode); for Json/Markdown they stay [None]. *)
+  let sidebar_file =
+    match output_format with
+    | Html -> Some (Paths.sidebar_file ctx mode scope)
+    | Json | Markdown -> None
+  in
   let* search_db =
     match output_format, mode with
     | Json, _ | Markdown, _ | _, Doc_mode.Local_only -> Memo.return None
     | Html, Doc_mode.Full ->
-      let html_root = Paths.output_root ctx mode Html in
-      Memo.return (Some (Path.Build.relative html_root "db.js"))
+      (match flags.sidebar with
+       | Flags.Global ->
+         let html_root = Paths.output_root ctx mode Html in
+         Memo.return (Some (Path.Build.relative html_root "db.js"))
+       | Flags.Per_package ->
+         let odocls = List.map visible_artifacts ~f:(Artifact.odocl_file ctx) in
+         let+ db = Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls in
+         Some db)
   in
   let remap_file =
     match mode with
@@ -953,6 +1145,7 @@ let generate_html_for_package
         sctx
         ~artifact
         ?search_db
+        ~sidebar_file
         ?remap_file
         ~mode
         ~output_format
@@ -960,8 +1153,13 @@ let generate_html_for_package
         ())
   in
   let artifact_paths = List.map visible_artifacts ~f:output_file in
+  let all_paths =
+    if should_generate_sidebar_json
+    then Path.build (Paths.sidebar_json ctx mode scope output_format) :: artifact_paths
+    else artifact_paths
+  in
   let pkg_alias = Dep.format_alias output_format mode ctx (Pkg pkg) in
-  let* () = Dep.add_file_deps pkg_alias artifact_paths in
+  let* () = Dep.add_file_deps pkg_alias all_paths in
   Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
     match Artifact.get_kind artifact with
     | Module (_, ((Lib _ | Private_lib _) as target)) ->
@@ -1402,6 +1600,7 @@ let handle_output_root sctx ~mode ~output_format =
   in
   let rules =
     Rules.collect_unit (fun () ->
+      let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
       (match output_format with
        | Output_format.Html ->
          Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx mode Html)
@@ -1413,8 +1612,20 @@ let handle_output_root sctx ~mode ~output_format =
       let output_file = Artifact.output_file ctx mode output_format artifact in
       let alias = Dep.format_alias output_format mode ctx (Toplevel mode) in
       Dep.add_file_deps alias [ Path.build output_file ]
-      (* Add dependencies on all child directories so the alias builds
-         everything. *)
+      >>>
+      (* Generate global sidebar JSON if
+         configured *)
+      (match flags.sidebar, output_format with
+        | _, Output_format.Markdown -> Memo.return ()
+        | Flags.Global, _ ->
+          let index_file = Paths.index_file ctx mode Paths.Global in
+          let sidebar_json = Paths.sidebar_json ctx mode Paths.Global output_format in
+          generate_sidebar sctx ~mode ~scope:Paths.Global ~index_file (Json output_format)
+          >>> Dep.add_file_deps alias [ Path.build sidebar_json ]
+        | Flags.Per_package, _ -> Memo.return ())
+      (* Add dependencies on all child
+         directories so the alias builds
+         everything *)
       >>> setup_toplevel_index_deps sctx mode output_format)
   in
   Memo.return (Build_config.Gen_rules.make ~directory_targets rules)
@@ -1496,6 +1707,14 @@ let gen_rules sctx ~dir rest =
   (* Toplevel index (mld + compile + link) *)
   | [ "_index" ] -> toplevel_index_rules Doc_mode.Local_only
   | [ "_index_full" ] -> toplevel_index_rules Doc_mode.Full
+  (* Sidebars *)
+  | [ "_sidebar" ] -> handle_sidebar_root sctx ~dir ~mode:Doc_mode.Local_only
+  | [ "_sidebar"; pkg_or_lib_name ] ->
+    handle_sidebar_artifacts sctx ~mode:Doc_mode.Local_only pkg_or_lib_name
+  | [ "_sidebar_full" ] -> handle_sidebar_root sctx ~dir ~mode:Doc_mode.Full
+  | [ "_sidebar_full"; pkg_or_lib_name ] ->
+    handle_sidebar_artifacts sctx ~mode:Doc_mode.Full pkg_or_lib_name
+  | ("_sidebar" | "_sidebar_full") :: _ :: _ :: _ -> redirect ()
   (* Remap file and sherlodoc search DB *)
   | [ "_remap" ] -> handle_remap_artifacts sctx
   | [ "_sherlodoc" ] ->

@@ -48,12 +48,17 @@ module Odoc = struct
     | Fatal
     | Nonfatal
 
+  type sidebar =
+    | Global
+    | Per_package
+
   type support =
     | Root
     | Per_package
 
   type t =
     { warnings : warnings option
+    ; sidebar : sidebar option
     ; support : support option
     ; flags : Ordered_set_lang.Unexpanded.t
     ; link_flags : Ordered_set_lang.Unexpanded.t
@@ -62,6 +67,7 @@ module Odoc = struct
 
   let empty =
     { warnings = None
+    ; sidebar = None
     ; support = None
     ; flags = Ordered_set_lang.Unexpanded.standard
     ; link_flags = Ordered_set_lang.Unexpanded.standard
@@ -75,6 +81,12 @@ module Odoc = struct
     | (Fatal | Nonfatal), _ -> false
   ;;
 
+  let sidebar_equal x y =
+    match x, y with
+    | Global, Global | Per_package, Per_package -> true
+    | (Global | Per_package), _ -> false
+  ;;
+
   let support_equal x y =
     match x, y with
     | Root, Root | Per_package, Per_package -> true
@@ -83,6 +95,7 @@ module Odoc = struct
 
   let equal x y =
     Option.equal warnings_equal x.warnings y.warnings
+    && Option.equal sidebar_equal x.sidebar y.sidebar
     && Option.equal support_equal x.support y.support
     && Ordered_set_lang.Unexpanded.equal x.flags y.flags
     && Ordered_set_lang.Unexpanded.equal x.link_flags y.link_flags
@@ -90,16 +103,18 @@ module Odoc = struct
   ;;
 
   let warnings_decode = enum [ "fatal", Fatal; "nonfatal", Nonfatal ]
+  let sidebar_decode = enum [ "global", Global; "per-package", Per_package ]
   let support_decode = enum [ "root", Root; "per-package", Per_package ]
 
   let decode =
     fields
     @@ let+ warnings = field_o "warnings" warnings_decode
+       and+ sidebar = field_o "sidebar" sidebar_decode
        and+ support = field_o "support" support_decode
        and+ flags = Ordered_set_lang.Unexpanded.field "flags"
        and+ link_flags = Ordered_set_lang.Unexpanded.field "link_flags"
        and+ html_flags = Ordered_set_lang.Unexpanded.field "html_flags" in
-       { warnings; support; flags; link_flags; html_flags }
+       { warnings; sidebar; support; flags; link_flags; html_flags }
   ;;
 end
 
