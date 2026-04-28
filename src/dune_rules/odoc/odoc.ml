@@ -366,24 +366,32 @@ let generate_html_artifact sctx ~artifact ?search_db ~output_format () =
     add_rule sctx rule
 ;;
 
-let setup_css_rule sctx =
-  let ctx = Super_context.context sctx in
-  let dir = Paths.odoc_support ctx in
-  let run_odoc =
-    let cmd =
-      run_odoc
-        sctx
-        ~dir:(Context.build_dir ctx)
-        "support-files"
-        ~quiet:false
-        ~flags_for:None
-        [ A "-o"; Path (Path.build dir) ]
-    in
-    Action_builder.With_targets.add_directories ~directory_targets:[ dir ] cmd
+(* Run [odoc support-files -o <dir>] producing the CSS/JS/HTML assets in
+   [dir], registered as a directory target. *)
+let setup_support_files_rule sctx ~dir =
+  let cmd =
+    run_odoc
+      sctx
+      "support-files"
+      ~quiet:false
+      ~flags_for:None
+      [ A "-o"; Path (Path.build dir) ]
   in
-  add_rule sctx run_odoc
+  add_rule
+    sctx
+    (Action_builder.With_targets.add_directories ~directory_targets:[ dir ] cmd)
 ;;
 
+let setup_css_rule sctx =
+  let ctx = Super_context.context sctx in
+  setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx)
+;;
+
+(* Compute requires for linking an artifact.
+   - Modules in a library: the library's transitive closure plus sibling libs
+     in the same package (allowing cross-references between siblings).
+   - Private libraries (no package): just the library's transitive closure.
+   - Pages in a package: libs in the package plus their transitive deps. *)
 let sp = Printf.sprintf
 
 module Toplevel_index = struct
