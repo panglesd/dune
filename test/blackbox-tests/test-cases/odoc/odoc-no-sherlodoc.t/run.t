@@ -16,6 +16,7 @@ This test if `.odocl` files are generated
   _build/default/_doc/_odocls/bar/page-index.odocl
   _build/default/_doc/_odocls/foo/foo.odocl
   _build/default/_doc/_odocls/foo/foo2.odocl
+  _build/default/_doc/_odocls/foo/foo3.odocl
   _build/default/_doc/_odocls/foo/foo_byte.odocl
   _build/default/_doc/_odocls/foo/page-index.odocl
 

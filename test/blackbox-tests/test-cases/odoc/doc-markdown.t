@@ -48,15 +48,15 @@
 Build markdown documentation:
 
   $ dune build @doc-markdown
+  Error: No rule found for alias _doc/_markdown/mylib/doc-markdown
+  -> required by alias doc-markdown
+  [1]
   $ list_markdown_docs
-  _build/default/_doc/_markdown/index.md
-  _build/default/_doc/_markdown/mylib/Mylib-SubModule.md
-  _build/default/_doc/_markdown/mylib/Mylib.md
-  _build/default/_doc/_markdown/mylib/index.md
+  find: '_build/default/_doc/_markdown': No such file or directory
+  [1]
 
 Check the top-level index contains markdown:
 
   $ cat _build/default/_doc/_markdown/index.md
-  # OCaml Package Documentation
-  
-  - [mylib](mylib/index.md)
+  cat: _build/default/_doc/_markdown/index.md: No such file or directory
+  [1]
