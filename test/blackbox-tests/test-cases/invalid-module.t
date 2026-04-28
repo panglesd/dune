@@ -23,9 +23,6 @@ artifacts
   > EOF
   $ dune build
   Error: foo__Invalid-module corresponds to an invalid module name
-  -> required by _build/default/foo__.ml-gen
-  -> required by alias all
-  -> required by alias default
   [1]
 
 Invalid module may be used in executables

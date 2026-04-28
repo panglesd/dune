@@ -61,8 +61,5 @@ lexer with the invalid name.
 
   $ dune build foo.cma
   Error: foo__Bar__Lex-er corresponds to an invalid module name
-  -> required by _build/default/foo__Bar.ml-gen
-  -> required by _build/default/.foo.objs/byte/foo__Bar.cmo
-  -> required by _build/default/foo.cma
   [1]
 
