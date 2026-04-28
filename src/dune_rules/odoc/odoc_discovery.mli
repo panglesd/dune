@@ -1,6 +1,7 @@
 open Import
 
 val get_workspace_packages : unit -> Package.Name.t list Memo.t
+val is_local_package : Package.Name.t -> bool Memo.t
 val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
 val toplevel_index_artifact : Context.t -> Odoc_artifact.t Memo.t
 
