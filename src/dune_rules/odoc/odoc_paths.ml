@@ -8,7 +8,8 @@ type output_format =
   | Markdown
 
 let output_subdir = function
-  | Html | Json -> "_html"
+  | Html -> "_html"
+  | Json -> "_json"
   | Markdown -> "_markdown"
 ;;
 
