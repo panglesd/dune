@@ -3,7 +3,7 @@ open Memo.O
 
 let ( ++ ) = Path.Build.relative
 
-let module_artifact ~local_lib module_ =
+let create_artifact_module ~local_lib ~module_ =
   let mod_ =
     { Odoc_target.visible = Module.visibility module_ = Visibility.Public
     ; module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none
@@ -20,7 +20,7 @@ let discover_local_lib_artifacts sctx ~local_lib =
     Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
   in
   let modules = Modules.fold all_modules ~init:[] ~f:(fun m acc -> m :: acc) in
-  List.map modules ~f:(module_artifact ~local_lib)
+  List.map modules ~f:(fun module_ -> create_artifact_module ~local_lib ~module_)
 ;;
 
 let discover_pkg_mld_artifacts ~pkg ~mld_infos =
