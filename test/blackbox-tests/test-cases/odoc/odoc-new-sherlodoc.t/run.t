@@ -61,26 +61,12 @@ This test if the sherlodoc js files are generated
   /*   - --favored ../../odoc/local/foo/byte/foo_byte.odocl */
   /*   - --favored ../../index/local/foo/byte/page-byte.odocl */
   $ dune runtest
+  File "_index/index.mld", line 4, characters 2-25:
+  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
+  File "_index/index.mld", line 3, characters 2-25:
+  Warning: Failed to resolve reference /bar/index Path '/bar/index' not found
   <!DOCTYPE html>
-  <html xmlns="http://www.w3.org/1999/xhtml">
-    <head>
-      <title>index</title>
-      <link rel="stylesheet" href="./odoc.support/odoc.css"/>
-      <meta charset="utf-8"/>
-      <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-    </head>
-    <body>
-      <main class="content">
-        <div class="by-name">
-        <h2>OCaml package documentation</h2>
-        <ol>
-        <li><a href="bar/index.html">bar</a></li>
-        <li><a href="foo/index.html">foo</a></li>
-        </ol>
-        </div>
-      </main>
-    </body>
-  </html>
+  <html xmlns="http://www.w3.org/1999/xhtml"><head><title>index (index)</title><meta charset="utf-8"/><link rel="stylesheet" href="odoc.support/odoc.css"/><meta name="generator" content="odoc 3.1.0"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="odoc.support/highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"></nav><header class="odoc-preamble"><h1 id="ocaml-package-documentation"><a href="#ocaml-package-documentation" class="anchor"></a>OCaml package documentation</h1><ul><li><span class="xref-unresolved" title="/bar/index">bar</span></li><li><span class="xref-unresolved" title="/foo/index">foo</span></li></ul></header><div class="odoc-content"></div></body></html>
 
   $ dune build @foo-mld
   {0 foo index}

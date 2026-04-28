@@ -1,6 +1,8 @@
 This test generates documentation for non-hidden modules only for a library:
 
   $ dune build @doc
+  File "_index/index.mld", line 3, characters 2-25:
+  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -50,6 +52,7 @@ This test generates documentation for non-hidden modules only for a library:
 
  Hidden modules should be compiled
   $ find _build/default -name '*.odoc' | sort -n
+  _build/default/_doc/_index/page-index.odoc
   _build/default/_doc/_odoc/foo/foo/foo.odoc
   _build/default/_doc/_odoc/foo/foo/foo__.odoc
   _build/default/_doc/_odoc/foo/foo/foo__Bar.odoc
@@ -129,6 +132,7 @@ This test generates documentation for non-hidden modules only for a library:
 
  Hidden modules should not be linked
   $ find _build/default -name '*.odocl' | sort -n
+  _build/default/_doc/_index/page-index.odocl
   _build/default/_doc/_odocls/foo/foo/foo.odocl
   _build/default/_doc/_odocls/foo/foo/page-index.odocl
   _build/default/_doc/_odocls/foo/page-index.odocl

@@ -39,6 +39,7 @@ let pkg t =
   | Module (_, Lib (pkg, _)) -> Some pkg
   | Module (_, Private_lib _) -> None
   | Page (_, Pkg pkg) -> Some pkg
+  | Page (_, Toplevel) -> None
 ;;
 
 let lib t =
@@ -51,6 +52,7 @@ let lib_name t =
   match t.kind with
   | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
   | Page (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
+  | Page (_, Toplevel) -> Lib_name.of_string "index"
 ;;
 
 let odoc_dir ctx t =
@@ -155,6 +157,7 @@ let parent_id t =
       sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
     | Module (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
     | Page (_, Pkg pkg) -> Package.Name.to_string pkg
+    | Page (_, Toplevel) -> ""
   in
   match t.kind with
   | Module _ -> base_id

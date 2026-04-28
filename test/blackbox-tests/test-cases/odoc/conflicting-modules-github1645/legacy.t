@@ -27,6 +27,8 @@ built. See #1645.
 
   $ dune build @install
   $ dune build @doc
+  File "_index/index.mld", line 3, characters 2-21:
+  Warning: Failed to resolve reference /l/index Path '/l/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
