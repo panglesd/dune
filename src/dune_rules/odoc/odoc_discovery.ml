@@ -44,11 +44,10 @@ let discover_all_lib_artifacts sctx ~libs =
 
 let check_mlds_no_dupes ~pkg ~mlds =
   match
-    List.rev_map mlds ~f:(fun ((_path, mld_name) as mld) -> mld_name, mld)
-    |> Filename.Map.of_list
+    List.map mlds ~f:(fun ((_path, name) as mld) -> name, mld) |> String.Map.of_list
   with
-  | Ok m -> m
-  | Error (_, (p1, _name1), (p2, _name2)) ->
+  | Ok _ -> ()
+  | Error (_, (p1, _), (p2, _)) ->
     User_error.raise
       [ Pp.textf
           "Package %s has two mld's with the same basename %s, %s"
@@ -96,7 +95,8 @@ let get_local_mld_infos =
       (fun (sctx, pkg) ->
          let+ flat, dropped = mlds sctx pkg in
          report_warnings dropped;
-         check_mlds_no_dupes ~pkg ~mlds:flat)
+         check_mlds_no_dupes ~pkg ~mlds:flat;
+         List.map flat ~f:(fun (path, name) -> Odoc_artifact.Local_source path, name))
   in
   fun sctx ~pkg -> Memo.exec memo (sctx, pkg)
 ;;
@@ -104,21 +104,18 @@ let get_local_mld_infos =
 let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index =
   let lib_subdirs = List.map libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string) in
   let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
+  let has_pkg_index =
+    List.exists mld_infos ~f:(fun (_, name) -> String.equal name "index")
+  in
   let mld_infos, gen_index =
-    if String.Map.mem mld_infos "index"
+    if has_pkg_index
     then mld_infos, None
     else (
       let path = auto_index_path ctx pkg in
       let content = default_index ~pkg ~lib_artifacts in
-      String.Map.set mld_infos "index" (path, "index"), Some (path, content))
+      mld_infos @ [ Odoc_artifact.Local_source path, "index" ], Some (path, content))
   in
-  let mld_artifacts =
-    let mld_infos =
-      String.Map.values mld_infos
-      |> List.map ~f:(fun (path, name) -> Odoc_artifact.Local_source path, name)
-    in
-    discover_pkg_mld_artifacts ~pkg ~mld_infos
-  in
+  let mld_artifacts = discover_pkg_mld_artifacts ~pkg ~mld_infos in
   let all_module_artifacts = List.concat_map lib_artifacts ~f:snd in
   let all_artifacts = mld_artifacts @ all_module_artifacts in
   Memo.return (all_artifacts, lib_subdirs, gen_index)
