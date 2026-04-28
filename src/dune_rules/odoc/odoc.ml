@@ -494,7 +494,7 @@ let odoc_include_flags ctx pkg requires pkg_discovery =
 let compute_intra_library_module_deps sctx ~ctx ~artifact ~lib_artifacts_by_module =
   let source_file = Artifact.source_file artifact in
   match Artifact.get_kind artifact with
-  | Page _ -> Memo.return (Action_builder.return ())
+  | Page _ | Asset _ -> Memo.return (Action_builder.return ())
   | Module ({ module_name; _ }, _) ->
     let module_name_str = Module_name.to_string module_name in
     let output_dir = Artifact.odoc_dir ctx artifact in
@@ -521,7 +521,7 @@ let compute_intra_library_module_deps sctx ~ctx ~artifact ~lib_artifacts_by_modu
     let current_module_name =
       match Artifact.get_kind artifact with
       | Module ({ module_name; _ }, _) -> Some module_name
-      | Page _ -> None
+      | Page _ | Asset _ -> None
     in
     let dep_odoc_files =
       List.filter_map dep_modules ~f:(fun dep_module ->
@@ -532,9 +532,38 @@ let compute_intra_library_module_deps sctx ~ctx ~artifact ~lib_artifacts_by_modu
     Dune_engine.Dep.Set.of_files dep_odoc_files |> Action_builder.deps
 ;;
 
+let compile_asset_artifact sctx ~artifact =
+  let ctx = Super_context.context sctx in
+  let asset_name =
+    match Artifact.asset_name artifact with
+    | Some name -> name
+    | None -> Code_error.raise "compile_asset_artifact called on non-asset" []
+  in
+  let parent_id = Artifact.parent_id artifact in
+  let run_odoc =
+    Action_builder.With_targets.add
+      ~file_targets:[ Artifact.odoc_file ctx artifact ]
+      (run_odoc
+         sctx
+         "compile-asset"
+         ~quiet:false
+         ~flags_for:None
+         [ Command.Args.A "--output-dir"
+         ; Command.Args.A "_odoc"
+         ; Command.Args.A "--parent-id"
+         ; Command.Args.A parent_id
+         ; Command.Args.A "--name"
+         ; Command.Args.A asset_name
+         ])
+  in
+  add_rule sctx run_odoc
+;;
+
 let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names =
   let ctx = Super_context.context sctx in
+  (* Handle assets specially - they use compile-asset, not compile *)
   match Artifact.get_kind artifact with
+  | Asset _ -> compile_asset_artifact sctx ~artifact
   | Module _ | Page _ ->
     let source_file = Artifact.source_file artifact in
     let* module_deps =
@@ -582,7 +611,8 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                     Command.Args.As [ "--warnings-tag"; "__private_lib__" ]
                   | Page (_, Pkg pkg) ->
                     Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ]
-                  | Page (_, Toplevel _) -> Command.Args.S [])
+                  | Page (_, Toplevel _) -> Command.Args.S []
+                  | Asset _ -> Command.Args.S [])
                ; Dyn
                    (Action_builder.map cli_flags.compile ~f:(fun flags ->
                       Command.Args.As flags))
@@ -637,6 +667,37 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
     sctx
     (let open Action_builder.With_targets.O in
      Action_builder.with_no_targets deps >>> run_odoc)
+;;
+
+let generate_asset_artifact sctx ~artifact ~mode format =
+  let ctx = Super_context.context sctx in
+  match (format : Output_format.t) with
+  | Markdown -> Memo.return ()
+  | Json ->
+    let source_file = Artifact.source_file artifact in
+    let output_file = Artifact.output_file ctx mode Json artifact in
+    add_rule sctx (Action_builder.copy ~src:source_file ~dst:output_file)
+  | Html ->
+    let html_root = Paths.output_root ctx mode Html in
+    let doc_root = Paths.root ctx in
+    let html_root_rel = Path.reach (Path.build html_root) ~from:(Path.build doc_root) in
+    let source_file = Artifact.source_file artifact in
+    let odocl_file = Artifact.odocl_file ctx artifact in
+    let output_file = Artifact.output_file ctx mode Html artifact in
+    let run_odoc =
+      run_odoc
+        sctx
+        "html-generate-asset"
+        ~quiet:false
+        ~flags_for:None
+        [ Command.Args.A "-o"
+        ; Command.Args.A html_root_rel
+        ; Command.Args.A "--asset-unit"
+        ; Command.Args.Dep (Path.build odocl_file)
+        ; Command.Args.Dep source_file
+        ]
+    in
+    add_rule sctx (Action_builder.With_targets.add ~file_targets:[ output_file ] run_odoc)
 ;;
 
 let odoc_support_path ctx ~mode ~flags ~pkg_name =
@@ -735,6 +796,7 @@ let generate_html_artifact
   =
   let ctx = Super_context.context sctx in
   match Artifact.get_kind artifact with
+  | Asset _ -> generate_asset_artifact sctx ~artifact ~mode output_format
   | Module _ | Page _ ->
     let* action =
       generate_output_action
@@ -797,7 +859,7 @@ let setup_pkg_support_rule sctx ~mode ~pkg_name =
    - Modules in a library: the library's transitive closure plus sibling libs
      in the same package (allowing cross-references between siblings).
    - Private libraries (no package): just the library's transitive closure.
-   - Pages in a package: libs in the package plus their transitive deps.
+   - Pages/assets in a package: libs in the package plus their transitive deps.
    Extra libs resolved from odoc-config.sexp are appended, then the whole list
    is deduplicated. *)
 let compute_link_requires sctx ~artifact =
@@ -805,6 +867,7 @@ let compute_link_requires sctx ~artifact =
   let closure libs = Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml in
   let* base_requires =
     match Artifact.get_kind artifact with
+    | Asset (_, (Pkg _ | Toplevel _)) -> Memo.return (Resolve.return [])
     | Module (_, Lib (pkg, lib)) ->
       let* closure = closure [ lib ] in
       let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
@@ -1021,7 +1084,10 @@ let handle_sidebar_artifacts sctx ~mode pkg_or_lib_name =
         List.filter_map all_artifacts ~f:(fun artifact ->
           if Artifact.hidden artifact
           then None
-          else Some (Artifact.odocl_file ctx artifact))
+          else (
+            match Artifact.get_kind artifact with
+            | Asset _ -> None
+            | Module _ | Page _ -> Some (Artifact.odocl_file ctx artifact)))
       in
       let* index_file = generate_index sctx ~mode ~scope ~packages:[ pkg ] ~odocl_files in
       generate_sidebar sctx ~mode ~scope ~index_file Binary)
@@ -1152,7 +1218,12 @@ let generate_html_for_package
         ~pkg_name
         ())
   in
-  let artifact_paths = List.map visible_artifacts ~f:output_file in
+  let artifact_paths =
+    List.filter_map visible_artifacts ~f:(fun artifact ->
+      match output_format, Artifact.get_kind artifact with
+      | Markdown, Asset _ -> None
+      | _ -> Some (output_file artifact))
+  in
   let all_paths =
     if should_generate_sidebar_json
     then Path.build (Paths.sidebar_json ctx mode scope output_format) :: artifact_paths
@@ -1165,7 +1236,7 @@ let generate_html_for_package
     | Module (_, ((Lib _ | Private_lib _) as target)) ->
       let lib_alias = Dep.format_alias output_format mode ctx target in
       Dep.add_file_deps lib_alias [ output_file artifact ]
-    | Module _ | Page _ -> Memo.return ())
+    | Module _ | Page _ | Asset _ -> Memo.return ())
 ;;
 
 let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
@@ -1216,7 +1287,7 @@ let handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name =
                 acc
                 module_name
                 (Path.build (Artifact.odoc_file ctx artifact))
-            | Page _ -> acc)
+            | Page _ | Asset _ -> acc)
         in
         let* () =
           Memo.parallel_iter all_artifacts ~f:(fun artifact ->
@@ -1232,7 +1303,8 @@ let handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name =
             match Artifact.get_kind artifact with
             | Module (_, target) ->
               Dep.setup_deps ctx target (Path.Set.singleton odoc_file)
-            | Page (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
+            | Page (_, target) | Asset (_, target) ->
+              Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
         in
         let lib_names_with_artifacts =
           List.filter_map all_artifacts ~f:(fun a ->
@@ -1276,7 +1348,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
           List.filter visible_artifacts ~f:(fun a ->
             match Artifact.get_kind a with
             | Module _ -> true
-            | Page _ -> false)
+            | Page _ | Asset _ -> false)
         in
         let* () =
           Memo.parallel_iter visible_lib_artifacts ~f:(fun artifact ->
