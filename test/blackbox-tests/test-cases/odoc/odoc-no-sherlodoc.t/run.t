@@ -53,10 +53,6 @@ Set up some fake environment without sherlodoc
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 4, characters 2-25:
-  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
-  File "_index/index.mld", line 3, characters 2-25:
-  Warning: Failed to resolve reference /bar/index Path '/bar/index' not found
 
 This test if `.odocl` files are generated
   $ find _build/default/_doc/_odocls -name '*.odocl' | sort -n
@@ -76,7 +72,7 @@ This test if `.odocl` files are generated
 
   $ PATH=$(realpath ./_path) dune runtest
   <!DOCTYPE html>
-  <html xmlns="http://www.w3.org/1999/xhtml"><head><title>index (index)</title><meta charset="utf-8"/><link rel="stylesheet" href="odoc.support/odoc.css"/><meta name="generator" content="odoc 3.1.0"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="odoc.support/highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"></nav><header class="odoc-preamble"><h1 id="ocaml-package-documentation"><a href="#ocaml-package-documentation" class="anchor"></a>OCaml package documentation</h1><ul><li><span class="xref-unresolved" title="/bar/index">bar</span></li><li><span class="xref-unresolved" title="/foo/index">foo</span></li></ul></header><div class="odoc-content"></div></body></html>
+  <html xmlns="http://www.w3.org/1999/xhtml"><head><title>index (index)</title><meta charset="utf-8"/><link rel="stylesheet" href="odoc.support/odoc.css"/><meta name="generator" content="odoc 3.1.0"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="odoc.support/highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"></nav><header class="odoc-preamble"><h1 id="ocaml-package-documentation"><a href="#ocaml-package-documentation" class="anchor"></a>OCaml package documentation</h1><ul><li><a href="bar/index.html" title="index">bar</a></li><li><a href="foo/index.html" title="index">foo</a></li></ul></header><div class="odoc-content"></div></body></html>
 
   $ PATH=$(realpath ./_path) dune build @foo-mld
   {0 foo index}

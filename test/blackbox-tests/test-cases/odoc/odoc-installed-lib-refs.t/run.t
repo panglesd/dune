@@ -53,8 +53,6 @@ Build documentation:
   Warning: Alert deprecated not expected here.
   File "src/core/lwt_pool.mli", line 23, character 4 to line 39, character 2:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-29:
-  Warning: Failed to resolve reference /mylib/index Path '/mylib/index' not found
 
 Check that documentation was generated without broken reference warnings:
 

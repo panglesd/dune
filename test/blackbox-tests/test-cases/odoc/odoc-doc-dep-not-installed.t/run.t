@@ -46,8 +46,6 @@ sensible error message.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /testpkg/index Path '/testpkg/index' not found
   Error: Documentation dependency "nonexistent-package-that-does-not-exist" is
   not installed.
   -> required by _build/default/_doc/_html/testpkg/index.html

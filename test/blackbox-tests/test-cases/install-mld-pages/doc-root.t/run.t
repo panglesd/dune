@@ -61,8 +61,6 @@ resist building the doc to check what happens: currently, only top-level mld
 files are included in the doc generation.
 
   $ dune build @doc
-  File "_index/index.mld", line 3, characters 2-41:
-  Warning: Failed to resolve reference /testing_mld/index Path '/testing_mld/index' not found
   $ ls _build/default/_doc/_html/testing_mld
   examples
   index.html

@@ -96,12 +96,6 @@ Test markdown with multiple packages and dependencies
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 5, characters 2-37:
-  Warning: Failed to resolve reference /utils_lib/index Path '/utils_lib/index' not found
-  File "_index/index.mld", line 4, characters 2-35:
-  Warning: Failed to resolve reference /core_lib/index Path '/core_lib/index' not found
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /app_lib/index Path '/app_lib/index' not found
 
   $ find _build/default/_doc/_markdown -type d | sort
   _build/default/_doc/_markdown
@@ -128,6 +122,6 @@ Test markdown with multiple packages and dependencies
   
   # OCaml package documentation
   
-  - `app_lib`
-  - `core_lib`
-  - `utils_lib`
+  - [app\_lib](./app_lib/index.md)
+  - [core\_lib](./core_lib/index.md)
+  - [utils\_lib](./utils_lib/index.md)

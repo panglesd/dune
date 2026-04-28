@@ -114,8 +114,6 @@ Build documentation:
   Warning: Alert deprecated not expected here.
   File "lib/core.mli", line 767, characters 21-53:
   Warning: Alert deprecated not expected here.
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /testpkg/index Path '/testpkg/index' not found
   File "typing/types.mli", line 16, characters 4-48:
   Warning: '{0': heading level should be lower than top heading level '0'.
   File "typing/types.mli", line 318, character 17 to line 324, character 48:
@@ -309,8 +307,6 @@ Build documentation:
   Warning: Blank line is not allowed in '[...]' (code).
   File "driver/optcompile.mli", line 25, characters 27-28:
   Warning: Paragraph should begin on its own line.
-  File "testlib.mli", line 5, characters 8-56:
-  Warning: Failed to resolve reference /odoc/odoc_for_authors Path '/odoc/odoc_for_authors' not found
 
 Check that documentation was generated:
 
@@ -328,4 +324,4 @@ Check that references to Odoc_parser types are remapped to ocaml.org:
 Check that page references to documentation dependencies are also remapped:
 
   $ grep -o 'href="[^"]*odoc_for_authors[^"]*"' _build/default/_doc/_html/testpkg/testpkg.lib/Testlib/index.html | sed 's|/[0-9.]*-*[a-z0-9]*/doc|/VERSION/doc|g'
-  [1]
+  href="../../../odoc/odoc_for_authors.html"
