@@ -4,13 +4,6 @@ module Gen_rules = Build_config.Gen_rules
 
 let ( ++ ) = Path.Build.relative
 
-let pkg_or_lnu (local_lib : Lib.Local.t) =
-  let lib = Lib.Local.to_lib local_lib in
-  match Lib_info.package (Lib.info lib) with
-  | Some p -> Package.Name.to_string p
-  | None -> Odoc_scope.lib_unique_name local_lib
-;;
-
 module Target = Odoc_target
 
 let add_rule sctx =
@@ -62,6 +55,7 @@ module Dep : sig
   val format_alias : Output_format.t -> Context.t -> 'a Target.t -> Alias.t
 
   val add_file_deps : Alias.t -> Path.t list -> unit Memo.t
+  val add_odoc_all_deps : Alias.t -> dirs:Path.Build.t list -> unit Memo.t
 
   (** [deps ctx pkg libraries] returns all odoc dependencies of [libraries]. If
       [libraries] are all part of a package [pkg], then the odoc dependencies of
@@ -90,6 +84,14 @@ end = struct
 
   let add_file_deps alias files =
     Rules.Produce.Alias.add_deps alias (Action_builder.paths files)
+  ;;
+
+  let add_odoc_all_deps alias ~dirs =
+    let dep_set =
+      List.map dirs ~f:(fun dir -> Dune_engine.Dep.alias (odoc_all_alias ~dir))
+      |> Dune_engine.Dep.Set.of_list
+    in
+    Rules.Produce.Alias.add_deps alias (Action_builder.deps dep_set)
   ;;
 
   let deps ctx pkgs requires =
@@ -378,13 +380,38 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                ~quiet:false
                ~flags_for:(Some (Artifact.odoc_file ctx artifact))
                [ include_flags
-               ; Command.Args.A "-o"
-               ; Command.Args.Target (Artifact.odoc_file ctx artifact)
+               ; (match Artifact.get_kind artifact with
+                  | Module _ ->
+                    let parent = Artifact.parent_id artifact in
+                    if String.is_empty parent
+                    then
+                      Command.Args.S
+                        [ Command.Args.A "-o"
+                        ; Command.Args.Target (Artifact.odoc_file ctx artifact)
+                        ]
+                    else
+                      Command.Args.S
+                        [ Command.Args.A "--output-dir"
+                        ; Command.Args.A "_odoc"
+                        ; Command.Args.A "--parent-id"
+                        ; Command.Args.A parent
+                        ]
+                  | Page (_, Pkg pkg) ->
+                    Command.Args.S
+                      [ Command.Args.A "-o"
+                      ; Command.Args.Target (Artifact.odoc_file ctx artifact)
+                      ; Command.Args.As [ "--pkg"; Package.Name.to_string pkg ]
+                      ])
                ; (match Artifact.get_kind artifact with
                   | Module (_, Lib local_lib) ->
-                    Command.Args.As [ "--pkg"; pkg_or_lnu local_lib ]
+                    let tag =
+                      match Lib_info.package (Lib.Local.info local_lib) with
+                      | Some pkg -> Package.Name.to_string pkg
+                      | None -> "__private_lib__"
+                    in
+                    Command.Args.As [ "--warnings-tag"; tag ]
                   | Page (_, Pkg pkg) ->
-                    Command.Args.As [ "--pkg"; Package.Name.to_string pkg ])
+                    Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ])
                ; Command.Args.Dep source_file
                ])
     in
@@ -720,15 +747,26 @@ let default_index ~pkg ~lib_artifacts =
 
 let with_package_artifacts sctx ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
-  let+ all_artifacts, _lib_subdirs, _gen_index, pkg =
+  let+ all_artifacts, lib_subdirs, _gen_index, pkg =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
       ~default_index
       ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
-  let rules = f ~ctx ~pkg ~all_artifacts in
+  let all_lib_names =
+    List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
+  in
+  let rules = f ~ctx ~pkg ~all_artifacts ~all_lib_names in
   Build_config.Gen_rules.make rules
+;;
+
+(* Filter artifacts by kind. *)
+let module_artifacts =
+  List.filter ~f:(fun a ->
+    match Artifact.get_kind a with
+    | Module _ -> true
+    | Page _ -> false)
 ;;
 
 let page_artifacts =
@@ -756,30 +794,39 @@ let compile_and_setup_deps
     | Page (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
 ;;
 
-let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
-  let sctx = Compilation_context.super_context cctx in
-  let ctx = Super_context.context sctx in
-  let lib_t = Lib.Local.to_lib local_lib in
-  let* artifacts = Odoc_discovery.discover_local_lib_artifacts sctx ~local_lib in
-  let lib_artifacts_by_module =
-    List.fold_left artifacts ~init:Module_name.Map.empty ~f:(fun acc artifact ->
-      match Artifact.get_kind artifact with
-      | Module ({ module_name; _ }, _) ->
-        Module_name.Map.set acc module_name (Path.build (Artifact.odoc_file ctx artifact))
-      | Page _ -> acc)
-  in
-  let* package_lib_names =
-    match Lib_info.package (Lib.info lib_t) with
-    | None -> Memo.return Lib_name.Set.empty
-    | Some pkg ->
-      let+ libs = libs_of_pkg (Context.name ctx) ~pkg in
-      List.map libs ~f:(fun l -> Lib.name (Lib.Local.to_lib l)) |> Lib_name.Set.of_list
-  in
-  compile_and_setup_deps sctx ~ctx ~artifacts ~lib_artifacts_by_module ~package_lib_names
+let handle_odoc_artifacts sctx ~pkg_or_lib_name =
+  Log.info (sprintf "handle_odoc_artifacts: %s" pkg_or_lib_name) [];
+  with_package_artifacts
+    sctx
+    ~pkg_or_lib_name
+    ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
+      Rules.collect_unit (fun () ->
+        let lib_artifacts = module_artifacts all_artifacts in
+        let lib_artifacts_by_module =
+          List.fold_left lib_artifacts ~init:Module_name.Map.empty ~f:(fun acc artifact ->
+            match Artifact.get_kind artifact with
+            | Module ({ module_name; _ }, _) ->
+              Module_name.Map.set
+                acc
+                module_name
+                (Path.build (Artifact.odoc_file ctx artifact))
+            | Page _ -> acc)
+        in
+        let* () =
+          compile_and_setup_deps
+            sctx
+            ~ctx
+            ~artifacts:lib_artifacts
+            ~lib_artifacts_by_module
+            ~package_lib_names:all_lib_names
+        in
+        ignore pkg;
+        Memo.return ()))
 ;;
 
 let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
   let ctx = Super_context.context sctx in
+  let pkg = Package.Name.of_string pkg_name in
   let rules =
     Rules.collect_unit (fun () ->
       let* all_artifacts, lib_subdirs, _gen_index, _pkg =
@@ -803,35 +850,48 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
               (Path.build (Artifact.odoc_file ctx artifact))
           | Page _ -> acc)
       in
-      compile_and_setup_deps
-        sctx
-        ~ctx
-        ~artifacts:pages
-        ~lib_artifacts_by_module
-        ~package_lib_names:all_lib_names)
+      let* () =
+        compile_and_setup_deps
+          sctx
+          ~ctx
+          ~artifacts:pages
+          ~lib_artifacts_by_module
+          ~package_lib_names:all_lib_names
+      in
+      let pkg_dir = Paths.odocs ctx (Pkg pkg) in
+      let pkg_alias = Dep.odoc_all_alias ~dir:pkg_dir in
+      let libs_alias_dir = Paths.root ctx ++ "_odoc" ++ Package.Name.to_string pkg in
+      let _ = all_lib_names in
+      Dep.add_odoc_all_deps pkg_alias ~dirs:[ libs_alias_dir ])
   in
   Memo.return (Build_config.Gen_rules.make rules)
 ;;
 
 let handle_odocl_artifacts sctx ~pkg_or_lib_name =
-  with_package_artifacts sctx ~pkg_or_lib_name ~f:(fun ~ctx ~pkg ~all_artifacts ->
-    Rules.collect_unit (fun () ->
-      let visible_artifacts =
-        List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
-      in
-      let* () =
-        Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-          link_artifact sctx ~artifact)
-      in
-      match pkg with
-      | None -> Memo.return ()
-      | Some pkg ->
-        let pkg_dir = Paths.odocl_root ctx ++ Package.Name.to_string pkg in
-        let pkg_alias = Dep.odoc_all_alias ~dir:pkg_dir in
-        let all_odocl_paths =
-          List.map visible_artifacts ~f:(fun a -> Path.build (Artifact.odocl_file ctx a))
+  with_package_artifacts
+    sctx
+    ~pkg_or_lib_name
+    ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
+      Rules.collect_unit (fun () ->
+        let visible_artifacts =
+          List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
         in
-        Dep.add_file_deps pkg_alias all_odocl_paths))
+        let* () =
+          Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
+            link_artifact sctx ~artifact)
+        in
+        let _ = all_lib_names in
+        match pkg with
+        | None -> Memo.return ()
+        | Some pkg ->
+          (* Single package-level [.odoc-all] alias (libs share the dir). *)
+          let pkg_dir = Paths.odocl_root ctx ++ Package.Name.to_string pkg in
+          let pkg_alias = Dep.odoc_all_alias ~dir:pkg_dir in
+          let all_odocl_paths =
+            List.map visible_artifacts ~f:(fun a ->
+              Path.build (Artifact.odocl_file ctx a))
+          in
+          Dep.add_file_deps pkg_alias all_odocl_paths))
 ;;
 
 let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
@@ -1053,6 +1113,7 @@ let gen_rules sctx ~dir rest =
   (* Compiled/linked odoc trees *)
   | [ "_odoc" ] | [ "_odoc"; "pkg" ] | [ "_odocls" ] | [ "_mlds" ] -> empty_rules ()
   | [ "_odoc"; "pkg"; pkg_name ] -> handle_odoc_pkg_pages sctx ~dir ~pkg_name
+  | [ "_odoc"; pkg_or_lib_name ] -> handle_odoc_artifacts sctx ~pkg_or_lib_name
   | [ "_odocls"; pkg_or_lib_name ] -> handle_odocl_artifacts sctx ~pkg_or_lib_name
   | [ "_mlds"; pkg_name ] -> handle_mlds_pkg pkg_name
   | ("_odoc" | "_odocls" | "_mlds") :: _ :: _ :: _ -> redirect ()

@@ -544,13 +544,13 @@ let cctx
 
 let library_rules
       (lib : Library.t)
-      ~local_lib
+      ~local_lib:_
       ~cctx
       ~source_modules
       ~dir_contents
       ~compile_info
       ~ctx_dir
-      ~for_merlin
+      ~for_merlin:_
   =
   let modules = Compilation_context.modules cctx in
   let obj_dir = Compilation_context.obj_dir cctx in
@@ -609,7 +609,6 @@ let library_rules
            ~dir_contents
            ~vlib_stubs_o_files)
   and+ () = Odoc.setup_private_library_doc_alias sctx ~scope ~dir:ctx_dir lib
-  and+ () = Memo.when_ for_merlin (fun () -> Odoc.setup_library_odoc_rules cctx local_lib)
   and+ () =
     let source_modules =
       Modules.fold_user_written source_modules ~init:[] ~f:(fun m acc -> m :: acc)

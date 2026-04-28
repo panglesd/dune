@@ -1,6 +1,7 @@
 (** Odoc rules *)
 
 open Import
+module Paths : sig end
 
 val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_builder.t
 val libs_of_pkg : Context_name.t -> pkg:Package.Name.t -> Lib.Local.t list Memo.t
@@ -14,7 +15,6 @@ val run_odoc
   -> Command.Args.any Command.Args.t list
   -> Action.Full.t Action_builder.With_targets.t
 
-val setup_library_odoc_rules : Compilation_context.t -> Lib.Local.t -> unit Memo.t
 val gen_project_rules : Super_context.t -> Dune_project.t -> unit Memo.t
 
 val setup_private_library_doc_alias

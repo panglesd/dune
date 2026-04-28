@@ -30,7 +30,7 @@ let add_pkg_lnu : type a. Path.Build.t -> a Odoc_target.t -> Path.Build.t =
 
 let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
-  | Odoc_target.Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
+  | Odoc_target.Lib local_lib -> add_pkg_lnu (root ctx ++ "_odoc") (Lib local_lib)
   | Odoc_target.Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
 ;;
 

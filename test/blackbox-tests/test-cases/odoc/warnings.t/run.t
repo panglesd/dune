@@ -6,6 +6,8 @@ As configured in the `dune` file at the root, this should be an error:
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Error: End of text is not allowed in '[...]' (code).
   ERROR: Warnings have been generated.
+  File "_doc/_odocls/foo_doc/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/foo_doc/.odoc-all
   [1]
 
 Same for documentation in mli files:
@@ -19,19 +21,25 @@ Same for documentation in mli files:
 These packages are in a nested env, the option is disabled, should success with warning printed:
 
   $ dune build --only-packages=bar_doc,bar_lib @doc
-  File "sub_env/bar_lib/bar.mli", line 1, characters 7-7:
-  Warning: End of text is not allowed in '[...]' (code).
   File "../sub_env/bar_doc/bar.mld", line 4, characters 0-0:
   Error: End of text is not allowed in '[...]' (code).
   ERROR: Warnings have been generated.
+  File "sub_env/bar_lib/bar.mli", line 1, characters 7-7:
+  Error: End of text is not allowed in '[...]' (code).
+  ERROR: Warnings have been generated.
+  File "_doc/_odocls/bar_doc/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/bar_doc/.odoc-all
   [1]
 
 In release mode, no error:
 
   $ dune build -p foo_doc,foo_lib @doc
-  (cd _build/default/_doc && odoc compile -o _odoc/pkg/foo_doc/page-foo.odoc --pkg foo_doc ../foo_doc/foo.mld)
+  (cd _build/default/_doc && odoc compile -o _odoc/pkg/foo_doc/page-foo.odoc --pkg foo_doc --warnings-tag foo_doc ../foo_doc/foo.mld)
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Warning: End of text is not allowed in '[...]' (code).
-  (cd _build/default/_doc && odoc compile -I ../foo_lib/.foo.objs/byte -o ../foo_lib/.foo.objs/byte/foo.odoc --pkg foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
+  (cd _build/default/_doc && odoc compile -I _odoc/foo_lib --output-dir _odoc --parent-id foo_lib --warnings-tag foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
+  File "_doc/_odocls/foo_doc/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/foo_doc/.odoc-all
+  [1]

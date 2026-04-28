@@ -44,6 +44,8 @@ files are included in the doc generation.
   $ dune build @doc
   File "_doc/_odoc/pkg/testing_mld/_unknown_", line 1, characters 0-0:
   ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
+  File "_doc/_odocls/testing_mld/examples/example1/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/testing_mld/.odoc-all
   [1]
   $ ls _build/default/_doc/_html/testing_mld
   ls: cannot access '_build/default/_doc/_html/testing_mld': No such file or directory

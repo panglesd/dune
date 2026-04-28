@@ -17,4 +17,5 @@ val pkg : t -> Package.Name.t option
 val lib_name : t -> Lib_name.t
 val lib : t -> Lib.t option
 val hidden : t -> bool
+val parent_id : t -> string
 val create : kind:kind -> source:source -> t
