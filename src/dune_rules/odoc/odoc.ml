@@ -544,6 +544,8 @@ let module_artifact ~local_lib module_ =
   Artifact.create ~kind ~source:(Local_source source_file)
 ;;
 
+let auto_index_path ctx pkg = Paths.gen_mld_dir ctx pkg ++ "index.mld"
+
 let check_mlds_no_dupes ~pkg ~mlds =
   match
     List.rev_map mlds ~f:(fun ((_path, mld_name) as mld) -> mld_name, mld)
@@ -592,14 +594,15 @@ let mlds sctx pkg =
 
 let odoc_artefacts : type a. _ -> a Target.t -> _ =
   fun sctx target ->
-  let ctx = Super_context.context sctx in
   match target with
   | Pkg pkg ->
     let+ mlds =
       let+ mlds, _ = mlds sctx pkg in
       let mlds = check_mlds_no_dupes ~pkg ~mlds in
       String.Map.update mlds "index" ~f:(function
-        | None -> Some (Paths.gen_mld_dir ctx pkg ++ "index.mld", "index")
+        | None ->
+          let ctx = Super_context.context sctx in
+          Some (auto_index_path ctx pkg, "index")
         | Some _ as s -> s)
     in
     String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
@@ -893,7 +896,7 @@ let package_mlds =
            then Memo.return mlds
            else (
              let ctx = Super_context.context sctx in
-             let path = Paths.gen_mld_dir ctx pkg ++ "index.mld" in
+             let path = auto_index_path ctx pkg in
              let* libs = libs_of_pkg (Context.name ctx) ~pkg in
              let* lib_artifacts =
                Memo.parallel_map libs ~f:(fun lib ->
