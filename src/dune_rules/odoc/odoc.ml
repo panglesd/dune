@@ -19,43 +19,7 @@ let add_rule sctx =
   Super_context.add_rule sctx ~dir
 ;;
 
-module Paths = struct
-  type output_format =
-    | Html
-    | Json
-    | Markdown
-
-  let output_subdir = function
-    | Html | Json -> "_html"
-    | Markdown -> "_markdown"
-  ;;
-
-  let odoc_support_dirname = "odoc.support"
-  let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
-
-  let add_pkg_lnu : type a. Path.Build.t -> a Target.t -> Path.Build.t =
-    fun base -> function
-    | Target.Lib local_lib -> base ++ pkg_or_lnu local_lib
-    | Target.Pkg pkg -> base ++ Package.Name.to_string pkg
-  ;;
-
-  let odocs : type a. Context.t -> a Target.t -> Path.Build.t =
-    fun ctx -> function
-    | Target.Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
-    | Target.Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
-  ;;
-
-  let output_root ctx format = root ctx ++ output_subdir format
-  let html_root ctx = output_root ctx Html
-  let markdown_root ctx = output_root ctx Markdown
-  let odocl_root ctx = root ctx ++ "_odocls"
-  let output ctx format target = add_pkg_lnu (output_root ctx format) target
-  let odocl ctx target = add_pkg_lnu (odocl_root ctx) target
-  let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
-  let odoc_support ctx = html_root ctx ++ odoc_support_dirname
-  let toplevel_index ctx = html_root ctx ++ "index.html"
-  let markdown_index ctx = markdown_root ctx ++ "index.md"
-end
+module Paths = Odoc_paths
 
 module Output_format = struct
   type t = Paths.output_format =
@@ -86,11 +50,11 @@ module Output_format = struct
   ;;
 
   let toplevel_index_path format ctx =
-    let base = Paths.toplevel_index ctx in
+    let base = Paths.output_root ctx format in
     match format with
-    | Html -> base
-    | Json -> Path.Build.extend_basename base ~suffix:Filename.json
-    | Markdown -> Paths.markdown_index ctx
+    | Html -> base ++ "index.html"
+    | Json -> base ++ "index.html.json"
+    | Markdown -> base ++ "index.md"
   ;;
 end
 
@@ -480,9 +444,9 @@ let setup_generate sctx ~search_db odoc_file out =
     match out with
     | Output_format.Markdown ->
       ( "markdown-generate"
-      , Paths.markdown_root ctx
+      , Paths.output_root ctx Markdown
       , [ Command.Args.A "-o"
-        ; Command.Args.Path (Path.build (Paths.markdown_root ctx))
+        ; Command.Args.Path (Path.build (Paths.output_root ctx Markdown))
         ; Command.Args.Dep (Path.build (Artifact.odocl_file ctx odoc_file))
         ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
         ] )
@@ -491,13 +455,16 @@ let setup_generate sctx ~search_db odoc_file out =
         match search_db with
         | None -> Command.Args.empty
         | Some search_db ->
-          Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:(Paths.html_root ctx)
+          Sherlodoc.odoc_args
+            sctx
+            ~search_db
+            ~dir_sherlodoc_dot_js:(Paths.output_root ctx Html)
       in
       ( "html-generate"
-      , Paths.html_root ctx
+      , Paths.output_root ctx Html
       , [ search_args
         ; Command.Args.A "-o"
-        ; Command.Args.Path (Path.build (Paths.html_root ctx))
+        ; Command.Args.Path (Path.build (Paths.output_root ctx Html))
         ; Command.Args.A "--support-uri"
         ; Command.Args.Path (Path.build odoc_support_path)
         ; Command.Args.A "--theme-uri"
@@ -1103,7 +1070,7 @@ let gen_rules sctx ~dir rest =
     let directory_targets = Path.Build.Map.singleton (Paths.odoc_support ctx) Loc.none in
     has_rules
       ~directory_targets
-      (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
+      (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx Html)
        >>> setup_css_rule sctx
        >>> setup_toplevel_index_rule sctx Html
        >>> setup_toplevel_index_rule sctx Json)
