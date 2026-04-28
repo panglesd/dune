@@ -3,6 +3,16 @@ open Memo.O
 
 let ( ++ ) = Path.Build.relative
 
+let get_workspace_packages () =
+  let* packages = Dune_load.packages () in
+  let* mask = Dune_load.mask () in
+  let all_pkgs = Package.Name.Map.keys packages in
+  match Only_packages.enumerate mask with
+  | `All -> Memo.return all_pkgs
+  | `Set visible_pkgs ->
+    Memo.return (List.filter all_pkgs ~f:(Package.Name.Set.mem visible_pkgs))
+;;
+
 let libs_of_pkg (ctx : Context.t) ~pkg =
   let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
     Scope.DB.lib_entries_of_package (Context.name ctx) pkg
@@ -197,15 +207,24 @@ let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name
     discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
 ;;
 
-let collect_all_visible_odocls sctx ~default_index ~workspace_pkgs =
+let collect_all_visible_odocls sctx ~default_index () =
   let ctx = Super_context.context sctx in
-  Memo.List.concat_map workspace_pkgs ~f:(fun pkg ->
-    let pkg_name = Package.Name.to_string pkg in
-    let+ all_artifacts, _lib_subdirs =
-      discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name:pkg_name
-    in
-    List.filter_map all_artifacts ~f:(fun artifact ->
-      if Odoc_artifact.hidden artifact
-      then None
-      else Some (Odoc_artifact.odocl_file ctx artifact)))
+  let* workspace_pkgs = get_workspace_packages () in
+  let* pkg_odocl_files =
+    Memo.List.concat_map workspace_pkgs ~f:(fun pkg ->
+      let pkg_name = Package.Name.to_string pkg in
+      let* all_artifacts, _lib_subdirs =
+        discover_package_artifacts
+          sctx
+          ctx
+          ~default_index
+          ~pkg_or_lib_unique_name:pkg_name
+      in
+      Memo.return
+        (List.filter_map all_artifacts ~f:(fun artifact ->
+           if Odoc_artifact.hidden artifact
+           then None
+           else Some (Odoc_artifact.odocl_file ctx artifact))))
+  in
+  Memo.return (workspace_pkgs, pkg_odocl_files)
 ;;

@@ -126,11 +126,7 @@ end = struct
   ;;
 end
 
-let get_workspace_packages () =
-  let* packages = Dune_load.packages () in
-  let+ mask = Dune_load.mask () in
-  Package.Name.Map.keys packages |> List.filter ~f:(Only_packages.mem mask)
-;;
+let get_workspace_packages = Odoc_discovery.get_workspace_packages
 
 module Flags = struct
   type warnings = Dune_env.Odoc.warnings =
@@ -1132,9 +1128,8 @@ let gen_rules sctx ~dir rest =
   | [ "_sherlodoc" ] ->
     let rules =
       Rules.collect_unit (fun () ->
-        let* workspace_pkgs = get_workspace_packages () in
-        let* all_odocl_files =
-          Odoc_discovery.collect_all_visible_odocls sctx ~default_index ~workspace_pkgs
+        let* _real_pkgs, all_odocl_files =
+          Odoc_discovery.collect_all_visible_odocls sctx ~default_index ()
         in
         let dir = Paths.sherlodoc_root ctx in
         let+ _db =
