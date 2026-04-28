@@ -749,39 +749,6 @@ let generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format 
     | Module _ | Page _ -> Memo.return ())
 ;;
 
-let default_index ~pkg ~lib_artifacts =
-  let b = Buffer.create 512 in
-  Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
-  List.sort lib_artifacts ~compare:(fun (x, _) (y, _) ->
-    Lib_name.compare (Lib.name x) (Lib.name y))
-  |> List.iter ~f:(fun (lib, artifacts) ->
-    let modules =
-      List.filter_map artifacts ~f:(fun artifact ->
-        if Odoc_artifact.hidden artifact
-        then None
-        else (
-          match Odoc_artifact.get_kind artifact with
-          | Module ({ visible = true; module_name; _ }, _) -> Some module_name
-          | _ -> None))
-    in
-    Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string (Lib.name lib));
-    Buffer.add_string
-      b
-      (match modules with
-       | [ x ] ->
-         Printf.sprintf
-           "The entry point of this library is the module:\n{!module-%s}.\n"
-           (Module_name.to_string x)
-       | _ ->
-         Printf.sprintf
-           "This library exposes the following toplevel modules:\n{!modules:%s}\n"
-           (modules
-            |> List.sort ~compare:Module_name.compare
-            |> List.map ~f:Module_name.to_string
-            |> String.concat ~sep:" ")));
-  Buffer.contents b
-;;
-
 let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
   let* scope_id = Scope_id.of_string pkg_or_lib_name in
@@ -789,7 +756,6 @@ let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
-      ~default_index
       ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let all_lib_names =
@@ -938,7 +904,6 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
-      ~default_index
       ~pkg_or_lib_unique_name:pkg_or_lib_name
   in
   let all_lib_names =
@@ -1113,11 +1078,7 @@ let handle_classify_dir sctx ~pkg_name ~lib_name =
 let handle_mlds_dir sctx ~pkg_name =
   let ctx = Super_context.context sctx in
   let* all_artifacts, _lib_subdirs =
-    Odoc_discovery.discover_package_artifacts
-      sctx
-      ctx
-      ~default_index
-      ~pkg_or_lib_unique_name:pkg_name
+    Odoc_discovery.discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_name
   in
   Memo.List.iter all_artifacts ~f:(fun artifact ->
     match Artifact.generated_content artifact with
@@ -1207,7 +1168,7 @@ let gen_rules sctx ~dir rest =
     let rules =
       Rules.collect_unit (fun () ->
         let* _real_pkgs, all_odocl_files =
-          Odoc_discovery.collect_all_visible_odocls sctx ~default_index ()
+          Odoc_discovery.collect_all_visible_odocls sctx ()
         in
         let dir = Paths.sherlodoc_root ctx in
         let+ _db =
