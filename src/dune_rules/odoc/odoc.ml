@@ -12,9 +12,20 @@ let pkg_or_lnu (local_lib : Lib.Local.t) =
   | None -> Odoc_scope.lib_unique_name local_lib
 ;;
 
-type target =
-  | Lib of Lib.Local.t
-  | Pkg of Package.Name.t
+module Target = struct
+  type page = { name : string }
+
+  type mod_ =
+    { visible : bool
+    ; module_name : Module_name.t
+    }
+
+  type _ t =
+    | Lib : Lib.Local.t -> mod_ t
+    | Pkg : Package.Name.t -> page t
+end
+
+open Target
 
 let add_rule sctx =
   let dir = Super_context.context sctx |> Context.build_dir in
@@ -35,12 +46,14 @@ module Paths = struct
   let odoc_support_dirname = "odoc.support"
   let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
-  let add_pkg_lnu base = function
+  let add_pkg_lnu : type a. Path.Build.t -> a Target.t -> Path.Build.t =
+    fun base -> function
     | Lib local_lib -> base ++ pkg_or_lnu local_lib
     | Pkg pkg -> base ++ Package.Name.to_string pkg
   ;;
 
-  let odocs ctx = function
+  let odocs : type a. Context.t -> a Target.t -> Path.Build.t =
+    fun ctx -> function
     | Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
     | Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
   ;;
@@ -95,16 +108,9 @@ module Output_format = struct
 end
 
 module Artifact = struct
-  type page = { name : string }
-
-  type mod_ =
-    { visible : bool
-    ; module_name : Module_name.t
-    }
-
   type kind =
-    | Module of mod_ * Lib.Local.t
-    | Page of page * Package.Name.t
+    | Module : mod_ * mod_ Target.t -> kind
+    | Page : page * page Target.t -> kind
 
   type source = Local_source of Path.Build.t
 
@@ -118,8 +124,8 @@ module Artifact = struct
 
   let pkg t =
     match t.kind with
-    | Module (_, local_lib) -> Lib_info.package (Lib.Local.info local_lib)
-    | Page (_, pkg) -> Some pkg
+    | Module (_, Lib local_lib) -> Lib_info.package (Lib.Local.info local_lib)
+    | Page (_, Pkg pkg) -> Some pkg
   ;;
 
   let split_page_name name =
@@ -135,36 +141,38 @@ module Artifact = struct
       Path.Build.basename src_path |> Filename.remove_extension
   ;;
 
-  let target t =
-    match t.kind with
-    | Module (_, local_lib) -> Lib local_lib
-    | Page (_, pkg) -> Pkg pkg
-  ;;
-
   let odoc_file ctx t =
     let basename = get_basename t in
-    let base_dir = Paths.odocs ctx (target t) in
     match t.kind with
-    | Page (page, _) ->
+    | Page (page, target) ->
+      let base_dir = Paths.odocs ctx target in
       (match fst (split_page_name page.name) with
        | Some parent_path -> base_dir ++ parent_path ++ ("page-" ^ basename ^ ".odoc")
        | None -> base_dir ++ ("page-" ^ basename ^ ".odoc"))
-    | Module _ -> base_dir ++ (basename ^ ".odoc")
+    | Module (_, target) ->
+      let base_dir = Paths.odocs ctx target in
+      base_dir ++ (basename ^ ".odoc")
   ;;
 
   let odocl_file ctx t =
     let basename = get_basename t in
-    let base_dir = Paths.odocl ctx (target t) in
     match t.kind with
-    | Page (page, _) ->
+    | Page (page, target) ->
+      let base_dir = Paths.odocl ctx target in
       (match fst (split_page_name page.name) with
        | Some parent_path -> base_dir ++ parent_path ++ ("page-" ^ basename ^ ".odocl")
        | None -> base_dir ++ ("page-" ^ basename ^ ".odocl"))
-    | Module _ -> base_dir ++ (basename ^ ".odocl")
+    | Module (_, target) ->
+      let base_dir = Paths.odocl ctx target in
+      base_dir ++ (basename ^ ".odocl")
   ;;
 
   let output_file ctx format t =
-    let base = Paths.output ctx format (target t) in
+    let base =
+      match t.kind with
+      | Module (_, target) -> Paths.output ctx format target
+      | Page (_, target) -> Paths.output ctx format target
+    in
     let basename = get_basename t in
     let suffix = Filename.of_string_exn (Output_format.extension format) in
     match t.kind, (format : Paths.output_format) with
@@ -193,7 +201,7 @@ end
 module Dep : sig
   (** [format_alias output ctx target] returns the alias that depends on all
       targets produced by odoc for [target] in output format [output]. *)
-  val format_alias : Output_format.t -> Context.t -> target -> Alias.t
+  val format_alias : Output_format.t -> Context.t -> 'a Target.t -> Alias.t
 
   (** [deps ctx pkg libraries] returns all odoc dependencies of [libraries]. If
       [libraries] are all part of a package [pkg], then the odoc dependencies of
@@ -206,9 +214,12 @@ module Dep : sig
 
   (*** [setup_deps ctx target odocs] Adds [odocs] as dependencies for [target].
     These dependencies may be used using the [deps] function *)
-  val setup_deps : Context.t -> target -> Path.Set.t -> unit Memo.t
+  val setup_deps : Context.t -> 'a Target.t -> Path.Set.t -> unit Memo.t
 end = struct
-  let format_alias f ctx m = Output_format.alias f ~dir:(Paths.output ctx f m)
+  let format_alias : type a. Output_format.t -> Context.t -> a Target.t -> Alias.t =
+    fun f ctx m -> Output_format.alias f ~dir:(Paths.output ctx f m)
+  ;;
+
   let alias = Alias.make (Alias.Name.of_string ".odoc-all")
 
   let deps ctx pkg requires =
@@ -229,9 +240,12 @@ end = struct
            Dep.Set.add acc (Dep.alias alias)))
   ;;
 
-  let alias ctx m = alias ~dir:(Paths.odocs ctx m)
+  let alias : type a. Context.t -> a Target.t -> Alias.t =
+    fun ctx m -> alias ~dir:(Paths.odocs ctx m)
+  ;;
 
-  let setup_deps ctx m files =
+  let setup_deps : type a. Context.t -> a Target.t -> Path.Set.t -> unit Memo.t =
+    fun ctx m files ->
     Rules.Produce.Alias.add_deps (alias ctx m) (Action_builder.path_set files)
   ;;
 end
@@ -689,12 +703,12 @@ let libs_of_pkg ctx ~pkg =
 ;;
 
 let module_artifact ~local_lib module_ =
-  let mod_ : Artifact.mod_ =
+  let mod_ =
     { visible = Module.visibility module_ = Visibility.Public
     ; module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none
     }
   in
-  let kind = Artifact.Module (mod_, local_lib) in
+  let kind = Artifact.Module (mod_, Lib local_lib) in
   let obj_dir = Lib.Local.obj_dir local_lib in
   let source_file = Obj_dir.Module.cmti_file obj_dir module_ ~cm_kind:(Ocaml Cmi) in
   Artifact.create ~kind ~source:(Local_source source_file)
@@ -746,7 +760,8 @@ let mlds sctx pkg =
     | _ -> Right mld)
 ;;
 
-let odoc_artefacts sctx target =
+let odoc_artefacts : type a. _ -> a Target.t -> _ =
+  fun sctx target ->
   let ctx = Super_context.context sctx in
   match target with
   | Pkg pkg ->
@@ -758,7 +773,9 @@ let odoc_artefacts sctx target =
         | Some _ as s -> s)
     in
     String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
-      Artifact.create ~kind:(Artifact.Page ({ name }, pkg)) ~source:(Local_source path))
+      Artifact.create
+        ~kind:(Artifact.Page ({ name }, Pkg pkg))
+        ~source:(Local_source path))
   | Lib local_lib ->
     let+ all_modules =
       Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
