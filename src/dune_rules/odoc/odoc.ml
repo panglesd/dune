@@ -239,9 +239,53 @@ let odoc_include_flags ctx pkg requires =
           [ Command.Args.A "-I"; Path dir ])))
 ;;
 
-let compile_artifact sctx ~artifact ~module_deps ~requires =
+let compute_intra_library_module_deps sctx ~ctx ~artifact ~lib_artifacts_by_module =
+  let source_file = Artifact.source_file artifact in
+  match Artifact.get_kind artifact with
+  | Page _ -> Memo.return (Action_builder.return ())
+  | Module ({ module_name; _ }, _) ->
+    let module_name_str = Module_name.to_string module_name in
+    let output_dir = Artifact.odoc_dir ctx artifact in
+    let deps_file = Path.Build.relative output_dir (module_name_str ^ ".deps") in
+    let program = odoc_program sctx (Context.build_dir ctx) in
+    let+ () =
+      let run_compile_deps =
+        Command.run_dyn_prog
+          program
+          ~dir:(Path.build (Context.build_dir ctx))
+          ~stdout_to:deps_file
+          [ A "compile-deps"; Dep source_file ]
+      in
+      add_rule sctx run_compile_deps
+    in
+    let open Action_builder.O in
+    let* lines = Action_builder.lines_of (Path.build deps_file) in
+    let dep_modules =
+      List.filter_map lines ~f:(fun line ->
+        match String.split ~on:' ' line with
+        | [ m; _hash ] -> Some (Module_name.of_checked_string m)
+        | _ -> None)
+    in
+    let current_module_name =
+      match Artifact.get_kind artifact with
+      | Module ({ module_name; _ }, _) -> Some module_name
+      | Page _ -> None
+    in
+    let dep_odoc_files =
+      List.filter_map dep_modules ~f:(fun dep_module ->
+        match current_module_name with
+        | Some current when Module_name.equal current dep_module -> None
+        | _ -> Module_name.Map.find lib_artifacts_by_module dep_module)
+    in
+    Dune_engine.Dep.Set.of_files dep_odoc_files |> Action_builder.deps
+;;
+
+let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~requires =
   let ctx = Super_context.context sctx in
   let source_file = Artifact.source_file artifact in
+  let* module_deps =
+    compute_intra_library_module_deps sctx ~ctx ~artifact ~lib_artifacts_by_module
+  in
   let include_flags, lib_deps, pkg_arg =
     match Artifact.get_kind artifact with
     | Module (_, Lib local_lib) ->
@@ -626,36 +670,31 @@ let page_artifacts =
     | Module _ -> false)
 ;;
 
+let compile_and_setup_deps sctx ~ctx ~artifacts ~lib_artifacts_by_module ~requires =
+  let* () =
+    Memo.parallel_iter artifacts ~f:(fun artifact ->
+      compile_artifact sctx ~artifact ~lib_artifacts_by_module ~requires)
+  in
+  Memo.parallel_iter artifacts ~f:(fun artifact ->
+    let odoc_file = Path.build (Artifact.odoc_file ctx artifact) in
+    match Artifact.get_kind artifact with
+    | Module (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file)
+    | Page (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
+;;
+
 let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
   let sctx = Compilation_context.super_context cctx in
   let ctx = Super_context.context sctx in
-  let obj_dir = Compilation_context.obj_dir cctx in
-  let dep_graphs = Compilation_context.dep_graphs cctx in
-  let modules = Compilation_context.modules cctx |> Modules.With_vlib.drop_vlib in
+  let* artifacts = Odoc_discovery.discover_local_lib_artifacts sctx ~local_lib in
+  let lib_artifacts_by_module =
+    List.fold_left artifacts ~init:Module_name.Map.empty ~f:(fun acc artifact ->
+      match Artifact.get_kind artifact with
+      | Module ({ module_name; _ }, _) ->
+        Module_name.Map.set acc module_name (Path.build (Artifact.odoc_file ctx artifact))
+      | Page _ -> acc)
+  in
   let* requires = Compilation_context.requires_compile cctx in
-  let module_deps_for m =
-    Action_builder.dyn_paths_unit
-      (let open Action_builder.O in
-       let+ deps =
-         if Module.has m ~ml_kind:Intf
-         then Dep_graph.deps_of dep_graphs.intf m
-         else Dep_graph.deps_of dep_graphs.impl m
-       in
-       List.map deps ~f:(fun m -> Path.build (Obj_dir.Module.odoc obj_dir m)))
-  in
-  let module_artifacts =
-    Modules.fold modules ~init:[] ~f:(fun m acc ->
-      (m, Odoc_discovery.module_artifact ~local_lib m) :: acc)
-  in
-  let* () =
-    Memo.parallel_iter module_artifacts ~f:(fun (m, artifact) ->
-      compile_artifact sctx ~artifact ~module_deps:(module_deps_for m) ~requires)
-  in
-  let odoc_files =
-    Path.Set.of_list_map module_artifacts ~f:(fun (_, a) ->
-      Path.build (Artifact.odoc_file ctx a))
-  in
-  Dep.setup_deps ctx (Lib local_lib) odoc_files
+  compile_and_setup_deps sctx ~ctx ~artifacts ~lib_artifacts_by_module ~requires
 ;;
 
 let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
@@ -670,20 +709,12 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
           ~pkg_or_lib_unique_name:pkg_name
       in
       let pages = page_artifacts all_artifacts in
-      let* () =
-        Memo.parallel_iter pages ~f:(fun artifact ->
-          compile_artifact
-            sctx
-            ~artifact
-            ~module_deps:(Action_builder.return ())
-            ~requires:(Resolve.return []))
-      in
-      Memo.parallel_iter pages ~f:(fun artifact ->
-        match Artifact.get_kind artifact with
-        | Page (_, target) ->
-          let odoc_file = Path.build (Artifact.odoc_file ctx artifact) in
-          Dep.setup_deps ctx target (Path.Set.singleton odoc_file)
-        | Module _ -> Memo.return ()))
+      compile_and_setup_deps
+        sctx
+        ~ctx
+        ~artifacts:pages
+        ~lib_artifacts_by_module:Module_name.Map.empty
+        ~requires:(Resolve.return []))
   in
   Memo.return (Build_config.Gen_rules.make rules)
 ;;
