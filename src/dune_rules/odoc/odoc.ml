@@ -468,7 +468,7 @@ let generate_output_action sctx ~artifact ?search_db ~output_format () =
       let search_args =
         match search_db with
         | Some search_db ->
-          Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:html_root
+          Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:html_root ~html_root
         | None -> Command.Args.empty
       in
       let args =

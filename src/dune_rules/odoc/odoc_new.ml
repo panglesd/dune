@@ -910,7 +910,11 @@ let html_generate sctx all ~search_db (a : Artifact.t) =
     Path.reach (Path.build odoc_support_path) ~from:(Path.build html_output)
   in
   let search_args =
-    Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:(Index.html_dir ctx ~all [])
+    Sherlodoc.odoc_args
+      sctx
+      ~search_db
+      ~dir_sherlodoc_dot_js:(Index.html_dir ctx ~all [])
+      ~html_root:html_output
   in
   let run_odoc =
     Odoc.run_odoc
