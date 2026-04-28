@@ -35,11 +35,11 @@ Works for Melange-only libraries
   > EOF
 
   $ dune build @doc
-  File "_doc/_odoc/foo/_unknown_", line 1, characters 0-0:
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
   Error: No rule found for .foo.objs/byte/foo.cmt
-  File "_doc/_odoc/foo/_unknown_", line 1, characters 0-0:
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
   Error: No rule found for .foo.objs/byte/foo__.cmt
-  File "_doc/_odoc/foo/_unknown_", line 1, characters 0-0:
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
   Error: No rule found for .foo.objs/byte/foo__Bar.cmt
   [1]
 

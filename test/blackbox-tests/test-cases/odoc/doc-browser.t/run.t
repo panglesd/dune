@@ -3,6 +3,6 @@ documentation index to a browser.
   $ if [ "$(uname)" = Darwin ]; then mv xdg-open open; fi
   $ export PATH=.:$PATH 
   $ dune ocaml doc
-  File "_doc/_odocls/foo/_unknown_", line 1, characters 0-0:
-  Error: No rule found for alias _doc/_odoc/foo/.odoc-all
-  [1]
+  Docs built. Index can be found here: _build/default/_doc/_html/index.html
+  open command received args:
+  _build/default/_doc/_html/index.html

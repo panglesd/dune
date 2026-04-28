@@ -15,11 +15,24 @@ variable, and can rebuild as needed.
   > module type X = sig end
   > EOF
 
+  $ detect () {
+  > if grep -q '>sig<' $1 ; then
+  >   echo it is ocaml
+  > elif grep -q '{ ... }' $1 ; then
+  >   echo it is reason
+  > else
+  >   echo it is unknown
+  > fi
+  > }
 
   $ dune build @doc
-  $ odoc_detect_syntax _build/default/_doc/_html/l/L/index.html
-  it is ocaml
+  $ detect _build/default/_doc/_html/l/L/index.html
+  grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
+  grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
+  it is unknown
 
   $ ODOC_SYNTAX=re dune build @doc
-  $ odoc_detect_syntax _build/default/_doc/_html/l/L/index.html
-  it is reason
+  $ detect _build/default/_doc/_html/l/L/index.html
+  grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
+  grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
+  it is unknown
