@@ -1,12 +1,11 @@
 Test that odoc assets (images, etc.) are properly processed:
 
   $ dune build @doc
-  File "../index.mld", line 7, characters 0-23:
-  Warning: Failed to resolve reference /mylib/logo.png Path '/mylib/logo.png' not found
 
 Verify the asset .odocl file was compiled:
 
   $ find _build/default/_doc/_odocls/mylib -name '*.odocl' | sort
+  _build/default/_doc/_odocls/mylib/asset-logo.png.odocl
   _build/default/_doc/_odocls/mylib/mylib/mylib.odocl
   _build/default/_doc/_odocls/mylib/mylib/page-index.odocl
   _build/default/_doc/_odocls/mylib/page-index.odocl
@@ -14,7 +13,7 @@ Verify the asset .odocl file was compiled:
 Verify the asset was copied to HTML output:
 
   $ test -f _build/default/_doc/_html/mylib/logo.png && echo "logo.png exists in HTML output"
-  [1]
+  logo.png exists in HTML output
 
 Verify the index.html references the asset:
 
@@ -28,7 +27,7 @@ Test that @doc-full also works with assets:
 Verify asset was copied to HTML full output:
 
   $ test -f _build/default/_doc/_html_full/mylib/logo.png && echo "logo.png exists in HTML full output"
-  [1]
+  logo.png exists in HTML full output
 
 Test that @doc-json also works with assets (assets are copied to JSON output):
 
@@ -44,7 +43,7 @@ Verify JSON files are generated:
 Verify the asset was copied to JSON output:
 
   $ test -f _build/default/_doc/_json/mylib/logo.png && echo "logo.png exists in JSON output"
-  [1]
+  logo.png exists in JSON output
 
 Test that @doc-json-full also works with assets:
 
@@ -53,4 +52,4 @@ Test that @doc-json-full also works with assets:
 Verify asset was copied to JSON full output:
 
   $ test -f _build/default/_doc/_json_full/mylib/logo.png && echo "logo.png exists in JSON full output"
-  [1]
+  logo.png exists in JSON full output
