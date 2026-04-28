@@ -48,9 +48,16 @@ module Odoc = struct
     | Fatal
     | Nonfatal
 
-  type t = { warnings : warnings option }
+  type support =
+    | Root
+    | Per_package
 
-  let empty = { warnings = None }
+  type t =
+    { warnings : warnings option
+    ; support : support option
+    }
+
+  let empty = { warnings = None; support = None }
 
   let warnings_equal x y =
     match x, y with
@@ -58,13 +65,25 @@ module Odoc = struct
     | (Fatal | Nonfatal), _ -> false
   ;;
 
-  let equal x y = Option.equal warnings_equal x.warnings y.warnings
+  let support_equal x y =
+    match x, y with
+    | Root, Root | Per_package, Per_package -> true
+    | (Root | Per_package), _ -> false
+  ;;
+
+  let equal x y =
+    Option.equal warnings_equal x.warnings y.warnings
+    && Option.equal support_equal x.support y.support
+  ;;
+
   let warnings_decode = enum [ "fatal", Fatal; "nonfatal", Nonfatal ]
+  let support_decode = enum [ "root", Root; "per-package", Per_package ]
 
   let decode =
     fields
-    @@ let+ warnings = field_o "warnings" warnings_decode in
-       { warnings }
+    @@ let+ warnings = field_o "warnings" warnings_decode
+       and+ support = field_o "support" support_decode in
+       { warnings; support }
   ;;
 end
 

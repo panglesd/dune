@@ -173,14 +173,22 @@ module Flags = struct
     | Fatal
     | Nonfatal
 
-  type t = { warnings : warnings }
+  type support = Dune_env.Odoc.support =
+    | Root
+    | Per_package
 
-  let default = { warnings = Nonfatal }
+  type t =
+    { warnings : warnings
+    ; support : support
+    }
+
+  let default = { warnings = Nonfatal; support = Root }
 
   let get_memo ~dir =
     Env_stanza_db.value ~default ~dir ~f:(fun config ->
       let warnings = Option.value config.odoc.warnings ~default:default.warnings in
-      Memo.return (Some { warnings }))
+      let support = Option.value config.odoc.support ~default:default.support in
+      Memo.return (Some { warnings; support }))
   ;;
 
   let get ~dir = get_memo ~dir |> Action_builder.of_memo
@@ -587,6 +595,16 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
      Action_builder.with_no_targets deps >>> run_odoc)
 ;;
 
+let odoc_support_path ctx ~mode ~flags ~pkg_name =
+  match flags.Flags.support, pkg_name with
+  | Flags.Per_package, Some pkg -> Paths.odoc_support_for_pkg ctx mode pkg
+  | Flags.Root, _ | Flags.Per_package, None -> Paths.odoc_support ctx mode
+;;
+
+let odoc_support_uri ~html_root support_path =
+  Path.reach (Path.build support_path) ~from:(Path.build html_root)
+;;
+
 let generate_output_action
       sctx
       ~artifact
@@ -594,25 +612,35 @@ let generate_output_action
       ?(remap_file : Path.Build.t option = None)
       ~mode
       ~output_format
+      ?pkg_name
       ()
   =
   let ctx = Super_context.context sctx in
   let doc_root = Paths.root ctx in
   let output_root = Paths.output_root ctx mode output_format in
   let output_root_rel = Path.reach (Path.build output_root) ~from:(Path.build doc_root) in
-  let subcommand, html_args =
+  let* subcommand, html_args =
     match (output_format : Output_format.t) with
-    | Markdown -> "markdown-generate", Command.Args.empty
+    | Markdown -> Memo.return ("markdown-generate", Command.Args.empty)
     | Html | Json ->
       let html_root = Paths.output_root ctx mode Html in
-      let odoc_support_path = Paths.odoc_support ctx mode in
-      let odoc_support_uri =
-        Path.reach (Path.build odoc_support_path) ~from:(Path.build html_root)
+      let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+      let odoc_support_path = odoc_support_path ctx ~mode ~flags ~pkg_name in
+      let odoc_support_uri = odoc_support_uri ~html_root odoc_support_path in
+      (* sherlodoc.js lives in the per-package HTML dir when configured *)
+      let sherlodoc_js_dir =
+        match flags.support, pkg_name with
+        | Flags.Per_package, Some pkg -> html_root ++ pkg
+        | Flags.Root, _ | Flags.Per_package, None -> html_root
       in
       let search_args =
         match search_db with
         | Some search_db ->
-          Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:html_root ~html_root
+          Sherlodoc.odoc_args
+            sctx
+            ~search_db
+            ~dir_sherlodoc_dot_js:sherlodoc_js_dir
+            ~html_root
         | None -> Command.Args.empty
       in
       let args =
@@ -629,7 +657,7 @@ let generate_output_action
           ; Output_format.args output_format
           ]
       in
-      "html-generate", args
+      Memo.return ("html-generate", args)
   in
   let+ quiet = Artifact.should_suppress_output artifact in
   let odocl_dep = Command.Args.Dep (Path.build (Artifact.odocl_file ctx artifact)) in
@@ -648,13 +676,22 @@ let generate_html_artifact
       ?(remap_file : Path.Build.t option)
       ?(mode = Doc_mode.Local_only)
       ~output_format
+      ?pkg_name
       ()
   =
   let ctx = Super_context.context sctx in
   match Artifact.get_kind artifact with
   | Module _ | Page _ ->
     let* action =
-      generate_output_action sctx ~artifact ?search_db ~remap_file ~mode ~output_format ()
+      generate_output_action
+        sctx
+        ~artifact
+        ?search_db
+        ~remap_file
+        ~mode
+        ~output_format
+        ?pkg_name
+        ()
     in
     let rule =
       let file_target () =
@@ -692,6 +729,13 @@ let setup_support_files_rule sctx ~dir =
 let setup_css_rule sctx ~mode =
   let ctx = Super_context.context sctx in
   setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx mode)
+;;
+
+let setup_pkg_support_rule sctx ~mode ~pkg_name =
+  let ctx = Super_context.context sctx in
+  let pkg_html_dir = Paths.output_root ctx mode Html ++ pkg_name in
+  setup_support_files_rule sctx ~dir:(Paths.odoc_support_for_pkg ctx mode pkg_name)
+  >>> Sherlodoc.sherlodoc_dot_js sctx ~dir:pkg_html_dir
 ;;
 
 (* Compute requires for linking an artifact.
@@ -843,6 +887,7 @@ let generate_html_for_package
       ()
   =
   let pkg = Scope_id.as_package_name scope_id in
+  let pkg_name = Scope_id.to_string scope_id in
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
@@ -861,7 +906,15 @@ let generate_html_for_package
   in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-      generate_html_artifact sctx ~artifact ?search_db ?remap_file ~mode ~output_format ())
+      generate_html_artifact
+        sctx
+        ~artifact
+        ?search_db
+        ?remap_file
+        ~mode
+        ~output_format
+        ~pkg_name
+        ())
   in
   let artifact_paths = List.map visible_artifacts ~f:output_file in
   let pkg_alias = Dep.format_alias output_format mode ctx (Pkg pkg) in
@@ -1025,6 +1078,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
 let handle_output_artifacts sctx ~dir ~mode ~pkg_or_lib_name ~output_format =
   let ctx = Super_context.context sctx in
   let* scope_id = Scope_id.of_string pkg_or_lib_name in
+  let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
   let* all_artifacts, lib_subdirs =
     Odoc_discovery.discover_package_artifacts
       sctx
@@ -1033,6 +1087,12 @@ let handle_output_artifacts sctx ~dir ~mode ~pkg_or_lib_name ~output_format =
   in
   let all_lib_names =
     List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
+  in
+  (* Check if we need per-package support files (HTML only) *)
+  let needs_pkg_support =
+    match flags.support, output_format with
+    | Flags.Per_package, Output_format.Html -> true
+    | _ -> false
   in
   (* Collect directory targets for module directories (deduplicated).
      Markdown has no directory targets: each artifact produces a primary .md
@@ -1048,22 +1108,34 @@ let handle_output_artifacts sctx ~dir ~mode ~pkg_or_lib_name ~output_format =
       |> Path.Build.Set.of_list
       |> Path.Build.Set.to_list
   in
-  let directory_targets =
-    List.map module_dir_targets ~f:(fun dir -> dir, Loc.none)
-    |> Path.Build.Map.of_list_exn
+  (* Add support directory target if per-package support is enabled *)
+  let all_dir_targets =
+    if needs_pkg_support
+    then (
+      let support_dir = Paths.odoc_support_for_pkg ctx mode pkg_or_lib_name in
+      support_dir :: module_dir_targets)
+    else module_dir_targets
   in
+  let directory_targets =
+    List.map all_dir_targets ~f:(fun dir -> dir, Loc.none) |> Path.Build.Map.of_list_exn
+  in
+  (* Note: we don't add odoc.support to subdirs - it's just a directory target,
+     same as at the root level. Adding it to subdirs causes conflicts. *)
   let other_formats = List.filter Output_format.all ~f:(fun f -> f <> output_format) in
   let rules =
     Rules.collect_unit (fun () ->
-      generate_html_for_package
-        sctx
-        ~ctx
-        ~scope_id
-        ~all_artifacts
-        ~dir
-        ~mode
-        ~output_format
-        ()
+      (if needs_pkg_support
+       then setup_pkg_support_rule sctx ~mode ~pkg_name:pkg_or_lib_name
+       else Memo.return ())
+      >>> generate_html_for_package
+            sctx
+            ~ctx
+            ~scope_id
+            ~all_artifacts
+            ~dir
+            ~mode
+            ~output_format
+            ()
       >>> Memo.parallel_iter other_formats ~f:(fun other_format ->
         let other_alias = Output_format.alias other_format ~mode ~dir in
         Rules.Produce.Alias.add_deps other_alias (Action_builder.return ())
