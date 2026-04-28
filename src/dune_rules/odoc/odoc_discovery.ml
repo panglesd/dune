@@ -43,6 +43,31 @@ let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   else Memo.return []
 ;;
 
+let library_index_content_from_artifacts ~lib_name ~artifacts =
+  let b = Buffer.create 256 in
+  Printf.bprintf b "@toc_status hidden\n";
+  Printf.bprintf b "@order_category libraries\n";
+  Printf.bprintf b "{0 Library [%s]}\n" (Lib_name.to_string lib_name);
+  (* Extract non-hidden, visible modules from artifacts.
+     Odoc_artifact.hidden filters out implementation modules (Foo__Bar, Foo__). *)
+  let module_names =
+    List.filter_map artifacts ~f:(fun artifact ->
+      if Odoc_artifact.hidden artifact
+      then None
+      else (
+        match Odoc_artifact.get_kind artifact with
+        | Module ({ visible = true; module_name; _ }, _) -> Some module_name
+        | Module ({ visible = false; _ }, _) | Page _ -> None))
+    |> List.sort ~compare:Module_name.compare
+  in
+  if not (List.is_empty module_names)
+  then (
+    Printf.bprintf b "{!modules:";
+    List.iter module_names ~f:(fun m -> Printf.bprintf b " %s" (Module_name.to_string m));
+    Printf.bprintf b "}\n");
+  Buffer.contents b
+;;
+
 (* Generate default package index.mld content from artifacts organized by library.
    Lists entry modules for each library. *)
 let default_pkg_index ~pkg ~lib_artifacts =
@@ -158,7 +183,7 @@ let discover_pkg_mld_artifacts ~pkg ~pkg_libs ~mld_infos =
       Odoc_artifact.create ~kind ~source)
   in
   let has_index = List.exists mld_infos ~f:(fun (_, name) -> String.equal name "index") in
-  mld_artifacts, has_index
+  mld_artifacts, has_index, mld_infos
 ;;
 
 let create_pkg_index_artifact ctx ~pkg ~pkg_libs ~lib_artifacts =
@@ -167,6 +192,17 @@ let create_pkg_index_artifact ctx ~pkg ~pkg_libs ~lib_artifacts =
   let page = { Odoc_target.name = "index"; pkg_libs } in
   let kind = Odoc_artifact.Page (page, target) in
   let content = default_pkg_index ~pkg ~lib_artifacts in
+  let source = Odoc_artifact.Generated { content; output_path } in
+  Odoc_artifact.create ~kind ~source
+;;
+
+let create_lib_index_artifact ctx ~pkg ~pkg_libs ~lib_name ~lib_artifacts =
+  let target = Odoc_target.Pkg pkg in
+  let lib_index_name = sprintf "%s/index" (Lib_name.to_string lib_name) in
+  let output_path = Odoc_paths.lib_index_mld ctx pkg lib_name in
+  let page = { Odoc_target.name = lib_index_name; pkg_libs } in
+  let kind = Odoc_artifact.Page (page, target) in
+  let content = library_index_content_from_artifacts ~lib_name ~artifacts:lib_artifacts in
   let source = Odoc_artifact.Generated { content; output_path } in
   Odoc_artifact.create ~kind ~source
 ;;
@@ -325,9 +361,9 @@ let get_local_mld_infos sctx ~pkg =
     source, name)
 ;;
 
-let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
+let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~generate_lib_indices =
   let lib_subdirs = List.map libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string) in
-  let mld_artifacts, has_pkg_index =
+  let mld_artifacts, has_pkg_index, mld_infos =
     discover_pkg_mld_artifacts ~pkg ~pkg_libs:libs ~mld_infos
   in
   let* lib_artifacts = discover_all_lib_artifacts sctx ctx ~pkg ~libs in
@@ -336,14 +372,47 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
     then []
     else [ create_pkg_index_artifact ctx ~pkg ~pkg_libs:libs ~lib_artifacts ]
   in
+  let lib_index_artifacts =
+    if not generate_lib_indices
+    then []
+    else
+      List.filter_map lib_artifacts ~f:(fun (lib, artifacts) ->
+        let lib_name = Lib.name lib in
+        let lib_index_name = sprintf "%s/index" (Lib_name.to_string lib_name) in
+        let has_source_lib_index =
+          List.exists mld_infos ~f:(fun (_, name) -> String.equal name lib_index_name)
+        in
+        if has_source_lib_index
+        then None
+        else
+          Some
+            (create_lib_index_artifact
+               ctx
+               ~pkg
+               ~pkg_libs:libs
+               ~lib_name
+               ~lib_artifacts:artifacts))
+  in
   let all_module_artifacts = List.concat_map lib_artifacts ~f:snd in
-  let all_artifacts = mld_artifacts @ pkg_index_artifact @ all_module_artifacts in
+  let all_artifacts =
+    mld_artifacts @ pkg_index_artifact @ lib_index_artifacts @ all_module_artifacts
+  in
   Memo.return (all_artifacts, lib_subdirs)
+;;
+
+let create_private_lib_index_artifact ctx ~lib_unique_name ~lib_name ~lib_artifacts =
+  let dummy_pkg = Package.Name.of_string lib_unique_name in
+  let output_path = Odoc_paths.gen_mld_dir ctx dummy_pkg ++ "index.mld" in
+  let page = { Odoc_target.name = "index"; pkg_libs = [] } in
+  let kind = Odoc_artifact.Page (page, Odoc_target.Pkg dummy_pkg) in
+  let content = library_index_content_from_artifacts ~lib_name ~artifacts:lib_artifacts in
+  let source = Odoc_artifact.Generated { content; output_path } in
+  Odoc_artifact.create ~kind ~source
 ;;
 
 (* Discover artifacts for a private library.
    Takes the fields from Scope_id.Private_lib directly to make invalid calls impossible. *)
-let discover_private_lib_artifacts sctx ctx ~lib_name ~project
+let discover_private_lib_artifacts sctx ctx ~lib_unique_name ~lib_name ~project
   : (Odoc_artifact.t list * string list) Memo.t
   =
   let* lib_db =
@@ -357,8 +426,17 @@ let discover_private_lib_artifacts sctx ctx ~lib_name ~project
   match lib_opt with
   | None -> Memo.return ([], [])
   | Some local_lib ->
-    let+ module_artifacts = discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib in
-    module_artifacts, []
+    let* module_artifacts = discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib in
+    let index_artifact =
+      create_private_lib_index_artifact
+        ctx
+        ~lib_unique_name
+        ~lib_name
+        ~lib_artifacts:module_artifacts
+    in
+    let artifacts = index_artifact :: module_artifacts in
+    (* Private libraries don't have subdirectories in the same sense as packages *)
+    Memo.return (artifacts, [])
 ;;
 
 let discover_local_pkg_artifacts sctx ctx ~pkg
@@ -371,7 +449,13 @@ let discover_local_pkg_artifacts sctx ctx ~pkg
   in
   let* mld_infos = get_local_mld_infos sctx ~pkg in
   let* base_artifacts, lib_subdirs =
-    discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos
+    discover_pkg_artifacts_common
+      sctx
+      ctx
+      ~pkg
+      ~libs
+      ~mld_infos
+      ~generate_lib_indices:true
   in
   let* impl_artifacts =
     let* impl_libs = vlib_impl_libs_of_local_pkg ctx ~pkg in
@@ -407,7 +491,7 @@ let discover_installed_pkg_artifacts sctx ctx ~pkg
       let source = Odoc_artifact.Installed_source { src_path = mld_path } in
       source, name)
   in
-  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos
+  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~generate_lib_indices:false
 ;;
 
 let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name
@@ -415,8 +499,13 @@ let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name
   =
   let* scope_id = Odoc_scope.Scope_id.of_string pkg_or_lib_unique_name in
   match scope_id with
-  | Odoc_scope.Scope_id.Private_lib { unique_name = _; lib_name; project } ->
-    discover_private_lib_artifacts sctx ctx ~lib_name ~project
+  | Odoc_scope.Scope_id.Private_lib { unique_name; lib_name; project } ->
+    discover_private_lib_artifacts
+      sctx
+      ctx
+      ~lib_unique_name:unique_name
+      ~lib_name
+      ~project
   | Odoc_scope.Scope_id.Package pkg ->
     let* is_project_pkg =
       let* packages = Dune_load.packages () in
