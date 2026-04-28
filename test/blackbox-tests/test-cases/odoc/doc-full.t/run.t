@@ -25,21 +25,16 @@ Setup a simple project:
 Build documentation with @doc-full:
 
   $ dune build @doc-full
-  Error: Alias "doc-full" specified on the command line is empty.
-  It is not defined in . or any of its descendants.
-  [1]
 
 Check that local package HTML was built in _html_full:
 
   $ ls _build/default/_doc/_html_full/mylib/mylib/Mylib/index.html
-  ls: cannot access '_build/default/_doc/_html_full/mylib/mylib/Mylib/index.html': No such file or directory
-  [2]
+  _build/default/_doc/_html_full/mylib/mylib/Mylib/index.html
 
 Check that the root index exists:
 
   $ ls _build/default/_doc/_html_full/index.html
-  ls: cannot access '_build/default/_doc/_html_full/index.html': No such file or directory
-  [2]
+  _build/default/_doc/_html_full/index.html
 
 Both _html (local-only) and _html_full directories should be independent:
 

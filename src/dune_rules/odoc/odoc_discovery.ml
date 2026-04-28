@@ -29,6 +29,44 @@ let stdlib_lib ctx =
   Lib.DB.find public_libs (Lib_name.of_string "stdlib")
 ;;
 
+(* Get all private libraries (local libraries without a package) in the workspace.
+   In -p mode, returns empty list since private libraries don't belong to packages. *)
+let get_private_libraries ctx =
+  let* mask = Dune_load.mask () in
+  match Only_packages.enumerate mask with
+  | `Set _ ->
+    (* In -p mode, don't include private libraries *)
+    Memo.return []
+  | `All ->
+    let* projects = Dune_load.projects () in
+    let* find_scope_fn = Scope.DB.with_all ctx ~f:(fun find_scope -> find_scope) in
+    Memo.List.concat_map projects ~f:(fun project ->
+      let scope = find_scope_fn project in
+      let lib_db = Scope.libs scope in
+      (* Get all libraries from this scope (non-recursive to avoid duplicates from parent) *)
+      let+ lib_set = Lib.DB.all ~recursive:false lib_db in
+      Lib.Set.to_list lib_set
+      |> List.filter_map ~f:(fun lib ->
+        (* Only keep local libraries without a package *)
+        match Lib.Local.of_lib lib with
+        | None -> None
+        | Some local_lib ->
+          let info = Lib.Local.info local_lib in
+          (match Lib_info.package info with
+           | Some _ -> None (* Has a package, skip *)
+           | None -> Some local_lib)))
+    >>= Memo.List.filter ~f:(fun local_lib ->
+      let lib_info = Lib.Local.info local_lib in
+      let src_path =
+        Path.drop_optional_build_context (Path.build (Lib_info.src_dir lib_info))
+      in
+      match Path.as_in_source_tree src_path with
+      | Some src_dir ->
+        let+ is_vendored = Source_tree.is_vendored src_dir in
+        not is_vendored
+      | None -> Memo.return true)
+;;
+
 let libs_of_pkg (ctx : Context.t) ~pkg =
   let* packages = Dune_load.packages () in
   if Package.Name.Map.mem packages pkg
@@ -216,7 +254,14 @@ module Toplevel_index = struct
     ; version : Package_version.t option
     }
 
-  type item = Package of pkg_item
+  type private_lib_item =
+    { unique_name : string
+    ; display_name : string
+    }
+
+  type item =
+    | Package of pkg_item
+    | Private_lib of private_lib_item [@warning "-37"]
 
   let of_packages packages =
     Package.Name.Map.to_list_map packages ~f:(fun name package ->
@@ -227,19 +272,68 @@ module Toplevel_index = struct
   let mld_content t =
     let b = Buffer.create 1024 in
     Printf.bprintf b "{0 OCaml package documentation}\n\n";
-    List.iter t ~f:(fun (Package { name; version }) ->
-      let version_suffix =
-        match version with
-        | None -> ""
-        | Some v -> sprintf " (%s)" (Package_version.to_string v)
-      in
-      Printf.bprintf b "- {{!/%s/page-index}%s}%s\n" name name version_suffix);
+    (* Separate packages and private libs *)
+    let packages, private_libs =
+      List.partition_map t ~f:(fun item ->
+        match item with
+        | Package p -> Left p
+        | Private_lib p -> Right p)
+    in
+    if not (List.is_empty packages)
+    then
+      List.iter packages ~f:(fun { name; version } ->
+        let version_suffix =
+          match version with
+          | None -> ""
+          | Some v -> sprintf " (%s)" (Package_version.to_string v)
+        in
+        Printf.bprintf b "- {{!/%s/page-index}%s}%s\n" name name version_suffix);
+    if not (List.is_empty private_libs)
+    then (
+      Printf.bprintf b "\n{1 Private libraries}\n\n";
+      List.iter private_libs ~f:(fun { unique_name; display_name } ->
+        Printf.bprintf b "- {{!/%s/page-index}%s}\n" unique_name display_name));
     Buffer.contents b
   ;;
 
-  let get_items _ctx =
-    let+ packages = Dune_load.packages () in
-    of_packages packages
+  let get_full_mode_items ctx =
+    let* local_packages = Dune_load.packages () in
+    let local_pkg_names = Package.Name.Map.keys local_packages in
+    let* private_local_libs = get_private_libraries ctx in
+    let private_libs = List.map private_local_libs ~f:Lib.Local.to_lib in
+    let* all_packages =
+      expand_packages_with_odoc_config ctx ~packages:local_pkg_names ~private_libs
+    in
+    let* pkg_discovery = Package_discovery.create ~context:ctx in
+    let* pkg_items =
+      Memo.List.map (Package.Name.Set.to_list all_packages) ~f:(fun pkg ->
+        match Package.Name.Map.find local_packages pkg with
+        | Some local_pkg ->
+          Memo.return
+            (Package
+               { name = Package.Name.to_string pkg; version = Package.version local_pkg })
+        | None ->
+          let+ version = Package_discovery.version_of_package pkg_discovery pkg in
+          Package
+            { name = Package.Name.to_string pkg
+            ; version = Option.map version ~f:Package_version.of_string
+            })
+    in
+    let private_lib_items =
+      List.map private_local_libs ~f:(fun local_lib ->
+        let unique_name = Odoc_scope.lib_unique_name local_lib in
+        let display_name = Lib_name.to_string (Lib.name (Lib.Local.to_lib local_lib)) in
+        Private_lib { unique_name; display_name })
+    in
+    Memo.return (pkg_items @ private_lib_items)
+  ;;
+
+  let get_items ~mode ctx =
+    match mode with
+    | Odoc_target.Doc_mode.Local_only ->
+      let+ packages = Dune_load.packages () in
+      of_packages packages
+    | Odoc_target.Doc_mode.Full -> get_full_mode_items ctx
   ;;
 end
 
@@ -409,10 +503,10 @@ let discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib
   Memo.return artifacts
 ;;
 
-let toplevel_index_artifact ctx =
-  let output_path = Odoc_paths.toplevel_index_mld ctx in
+let toplevel_index_artifact ctx ~mode =
+  let output_path = Odoc_paths.toplevel_index_mld ctx mode in
   let page = { Odoc_target.name = "index"; pkg_libs = [] } in
-  let kind = Odoc_artifact.Page (page, Odoc_target.Toplevel) in
+  let kind = Odoc_artifact.Page (page, Odoc_target.Toplevel mode) in
   (* Check for a custom index.mld from dune-project (documentation (index ...)) *)
   let* projects = Dune_load.projects () in
   let root_project =
@@ -433,24 +527,35 @@ let toplevel_index_artifact ctx =
       Odoc_artifact.Generated { content; output_path }
     | None ->
       (* Generate the index content as before *)
-      let+ items = Toplevel_index.get_items ctx in
+      let+ items = Toplevel_index.get_items ~mode ctx in
       let content = Toplevel_index.mld_content items in
       Odoc_artifact.Generated { content; output_path }
   in
-  let* items = Toplevel_index.get_items ctx in
+  let* items = Toplevel_index.get_items ~mode ctx in
   let package_names =
-    List.map items ~f:(fun (Toplevel_index.Package { name; _ }) ->
-      Package.Name.of_string name)
+    List.filter_map items ~f:(fun item ->
+      match item with
+      | Toplevel_index.Package { name; _ } -> Some (Package.Name.of_string name)
+      | Toplevel_index.Private_lib _ -> None)
   in
   let deps = { Odoc_config.packages = package_names; libraries = [] } in
   (* Lazy computation of extra_libs and extra_packages - deferred until accessed *)
   let config_lazy =
     Memo.lazy_ (fun () ->
       (* Don't validate here - packages come from get_items which already filters appropriately *)
-      let+ libs, packages_from_deps =
+      let* libs, packages_from_deps =
         resolve_odoc_config_deps ctx ~deps ~validate_packages:false
       in
-      libs, packages_from_deps)
+      (* Only add private libraries for Full mode - Local_only should only document packages *)
+      let+ private_lib_pseudo_pkgs =
+        match mode with
+        | Odoc_target.Doc_mode.Local_only -> Memo.return []
+        | Odoc_target.Doc_mode.Full ->
+          let+ private_local_libs = get_private_libraries ctx in
+          List.map private_local_libs ~f:(fun local_lib ->
+            Package.Name.of_string (Odoc_scope.lib_unique_name local_lib))
+      in
+      libs, packages_from_deps @ private_lib_pseudo_pkgs)
   in
   let extra_libs = Memo.Lazy.force config_lazy >>| fst in
   let extra_packages = Memo.Lazy.force config_lazy >>| snd in
@@ -883,11 +988,25 @@ let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name
     else discover_installed_pkg_artifacts sctx ctx ~pkg
 ;;
 
-let collect_all_visible_odocls sctx () =
+let collect_all_visible_odocls sctx ~mode () =
   let ctx = Super_context.context sctx in
   let* workspace_pkgs = get_workspace_packages () in
+  (* Only get private libraries for Full mode - Local_only should only document packages *)
+  let* private_local_libs =
+    match mode with
+    | Odoc_target.Doc_mode.Local_only -> Memo.return []
+    | Odoc_target.Doc_mode.Full -> get_private_libraries ctx
+  in
+  let private_libs = List.map private_local_libs ~f:Lib.Local.to_lib in
+  let* packages_to_collect =
+    match mode with
+    | Odoc_target.Doc_mode.Full ->
+      expand_packages_with_odoc_config ctx ~packages:workspace_pkgs ~private_libs
+    | Odoc_target.Doc_mode.Local_only ->
+      Memo.return (Package.Name.Set.of_list workspace_pkgs)
+  in
   let* pkg_odocl_files =
-    Memo.List.concat_map workspace_pkgs ~f:(fun pkg ->
+    Memo.List.concat_map (Package.Name.Set.to_list packages_to_collect) ~f:(fun pkg ->
       let pkg_name = Package.Name.to_string pkg in
       let* all_artifacts, _lib_subdirs =
         discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:pkg_name
@@ -898,8 +1017,20 @@ let collect_all_visible_odocls sctx () =
            then None
            else Some (Odoc_artifact.odocl_file ctx artifact))))
   in
-  let* toplevel_artifact = toplevel_index_artifact ctx in
+  let* private_lib_odocl_files =
+    Memo.List.concat_map private_local_libs ~f:(fun local_lib ->
+      let lib_unique_name = Odoc_scope.lib_unique_name local_lib in
+      let* all_artifacts, _lib_subdirs =
+        discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name:lib_unique_name
+      in
+      Memo.return
+        (List.filter_map all_artifacts ~f:(fun artifact ->
+           if Odoc_artifact.hidden artifact
+           then None
+           else Some (Odoc_artifact.odocl_file ctx artifact))))
+  in
+  let* toplevel_artifact = toplevel_index_artifact ctx ~mode in
   let toplevel_odocl = Odoc_artifact.odocl_file ctx toplevel_artifact in
-  let all_odocl_files = toplevel_odocl :: pkg_odocl_files in
+  let all_odocl_files = (toplevel_odocl :: pkg_odocl_files) @ private_lib_odocl_files in
   Memo.return (workspace_pkgs, all_odocl_files)
 ;;

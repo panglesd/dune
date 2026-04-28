@@ -1,6 +1,13 @@
 (** Odoc rules *)
 
 open Import
+
+module Doc_mode : sig
+  type t =
+    | Local_only
+    | Full
+end
+
 module Paths : sig end
 
 val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_builder.t

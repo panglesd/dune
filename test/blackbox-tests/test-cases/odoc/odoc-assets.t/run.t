@@ -24,8 +24,8 @@ Verify the index.html references the asset:
 Test that @doc-full also works with assets:
 
   $ dune build @doc-full
-  Error: Alias "doc-full" specified on the command line is empty.
-  It is not defined in . or any of its descendants.
+  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
+  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
   [1]
 
 Verify asset was copied to HTML full output:
@@ -54,8 +54,8 @@ Verify the asset was copied to JSON output:
 Test that @doc-json-full also works with assets:
 
   $ dune build @doc-json-full
-  Error: Alias "doc-json-full" specified on the command line is empty.
-  It is not defined in . or any of its descendants.
+  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
+  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
   [1]
 
 Verify asset was copied to JSON full output:

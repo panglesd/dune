@@ -14,10 +14,10 @@ Check that documentation was generated:
 Check that references to Odoc_parser types are remapped to ocaml.org:
 
   $ grep -o 'href="[^"]*Odoc_parser[^"]*"' _build/default/_doc/_html/testpkg/testpkg.lib/Testlib/index.html | sed 's|/[0-9.]*-*[a-z0-9]*/doc|/VERSION/doc|g' | sort -u
-  href="../../../odoc-parser/odoc-parser/Odoc_parser/Loc/index.html#type-span"
-  href="../../../odoc-parser/odoc-parser/Odoc_parser/Warning/index.html#type-t"
-  href="../../../odoc-parser/odoc-parser/Odoc_parser/index.html#type-t"
-  href="../../../odoc-parser/odoc-parser/Odoc_parser/index.html#val-parse_comment"
+  href="https://ocaml.org/p/odoc-parser/VERSION/doc/odoc-parser/Odoc_parser/Loc/index.html#type-span"
+  href="https://ocaml.org/p/odoc-parser/VERSION/doc/odoc-parser/Odoc_parser/Warning/index.html#type-t"
+  href="https://ocaml.org/p/odoc-parser/VERSION/doc/odoc-parser/Odoc_parser/index.html#type-t"
+  href="https://ocaml.org/p/odoc-parser/VERSION/doc/odoc-parser/Odoc_parser/index.html#val-parse_comment"
 
 Check that page references to documentation dependencies are also remapped:
 
