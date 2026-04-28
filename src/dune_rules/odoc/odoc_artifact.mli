@@ -4,11 +4,18 @@ type kind =
   | Module : Odoc_target.mod_ * Odoc_target.mod_ Odoc_target.t -> kind
   | Page : Odoc_target.page * Odoc_target.page Odoc_target.t -> kind
 
-type source = Local_source of Path.Build.t
+type source =
+  | Local_source of Path.Build.t
+  | Generated of
+      { content : string
+      ; output_path : Path.Build.t
+      }
+
 type t
 
 val get_kind : t -> kind
 val source_file : t -> Path.t
+val generated_content : t -> string option
 val odoc_file : Context.t -> t -> Path.Build.t
 val odocl_file : Context.t -> t -> Path.Build.t
 val odoc_dir : Context.t -> t -> Path.Build.t

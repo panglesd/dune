@@ -6,7 +6,12 @@ type kind =
   | Module : Odoc_target.mod_ * Odoc_target.mod_ Odoc_target.t -> kind
   | Page : Odoc_target.page * Odoc_target.page Odoc_target.t -> kind
 
-type source = Local_source of Path.Build.t
+type source =
+  | Local_source of Path.Build.t
+  | Generated of
+      { content : string
+      ; output_path : Path.Build.t
+      }
 
 type t =
   { kind : kind
@@ -18,6 +23,13 @@ let get_kind t = t.kind
 let source_file t =
   match t.source with
   | Local_source path -> Path.build path
+  | Generated { output_path; _ } -> Path.build output_path
+;;
+
+let generated_content t =
+  match t.source with
+  | Generated { content; _ } -> Some content
+  | Local_source _ -> None
 ;;
 
 let pkg t =
@@ -55,6 +67,7 @@ let get_basename t =
   | Page (page, _), _ -> snd (split_page_name page.name)
   | Module (_, _), Local_source src_path ->
     Path.Build.basename src_path |> Filename.remove_extension
+  | Module _, Generated _ -> Code_error.raise "Module artifact with Generated source" []
 ;;
 
 let odoc_file ctx t =

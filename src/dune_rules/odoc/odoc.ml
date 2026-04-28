@@ -770,7 +770,7 @@ let default_index ~pkg ~lib_artifacts =
 let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
   let* scope_id = Scope_id.of_string pkg_or_lib_name in
-  let+ all_artifacts, lib_subdirs, _gen_index =
+  let+ all_artifacts, lib_subdirs =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
@@ -919,7 +919,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
 let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
   let ctx = Super_context.context sctx in
   let* scope_id = Scope_id.of_string pkg_or_lib_name in
-  let* all_artifacts, lib_subdirs, _gen_index =
+  let* all_artifacts, lib_subdirs =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
@@ -1050,16 +1050,21 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
 
 let handle_mlds_dir sctx ~pkg_name =
   let ctx = Super_context.context sctx in
-  let* _all_artifacts, _lib_subdirs, gen_index =
+  let* all_artifacts, _lib_subdirs =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
       ~default_index
       ~pkg_or_lib_unique_name:pkg_name
   in
-  match gen_index with
-  | None -> Memo.return ()
-  | Some (path, content) -> add_rule sctx (Action_builder.write_file path content)
+  Memo.List.iter all_artifacts ~f:(fun artifact ->
+    match Artifact.generated_content artifact with
+    | None -> Memo.return ()
+    | Some content ->
+      let output_path = Artifact.source_file artifact in
+      add_rule
+        sctx
+        (Action_builder.write_file (Path.as_in_build_dir_exn output_path) content))
 ;;
 
 let handle_output_root sctx ~output_format =
