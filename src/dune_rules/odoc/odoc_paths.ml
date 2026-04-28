@@ -65,6 +65,18 @@ let output
   | Toplevel _ -> base
 ;;
 
+(* Source HTML directory: like [output Html] but with a "src" component between
+   the package and library name, matching the odoc_driver convention
+   (e.g. <pkg>/src/<lib>/ instead of <pkg>/<lib>/) *)
+let html_src ctx mode (target : Odoc_target.mod_ Odoc_target.t) =
+  let base = output_root ctx mode Html in
+  match target with
+  | Lib (pkg, lib) ->
+    let lib_name = Lib.name lib in
+    base ++ Package.Name.to_string pkg ++ "src" ++ Lib_name.to_string lib_name
+  | Private_lib (lib_unique_name, _) -> base ++ lib_unique_name
+;;
+
 let odocl : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
   | Lib (pkg, lib) ->

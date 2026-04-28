@@ -6,6 +6,7 @@ type kind =
   | Module : Odoc_target.mod_ * Odoc_target.mod_ Odoc_target.t -> kind
   | Page : Odoc_target.page * Odoc_target.page Odoc_target.t -> kind
   | Asset : Odoc_target.asset * Odoc_target.page Odoc_target.t -> kind
+  | Impl : Odoc_target.impl * Odoc_target.mod_ Odoc_target.t -> kind
 
 type source =
   | Local_source of Path.Build.t
@@ -43,6 +44,8 @@ let pkg t =
   match t.kind with
   | Module (_, Lib (pkg, _)) -> Some pkg
   | Module (_, Private_lib _) -> None
+  | Impl (_, Lib (pkg, _)) -> Some pkg
+  | Impl (_, Private_lib _) -> None
   | Page (_, Pkg pkg) -> Some pkg
   | Page (_, Toplevel _) -> None
   | Asset (_, Pkg pkg) -> Some pkg
@@ -52,12 +55,14 @@ let pkg t =
 let lib t =
   match t.kind with
   | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Some lib
+  | Impl (_, (Lib (_, lib) | Private_lib (_, lib))) -> Some lib
   | Page _ | Asset _ -> None
 ;;
 
 let lib_name t =
   match t.kind with
   | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
+  | Impl (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
   | Page (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
   | Page (_, Toplevel _) -> Lib_name.of_string "index"
   | Asset (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
@@ -67,6 +72,7 @@ let lib_name t =
 let odoc_dir ctx t =
   match t.kind with
   | Module (_, target) -> Odoc_paths.odocs ctx target
+  | Impl (_, target) -> Odoc_paths.odocs ctx target
   | Page (_, target) -> Odoc_paths.odocs ctx target
   | Asset (_, target) -> Odoc_paths.odocs ctx target
 ;;
@@ -85,6 +91,8 @@ let get_basename t =
     Path.Build.basename src_path |> Filename.remove_extension
   | Module (mod_, _), (Installed_source _ | Generated _) ->
     Module_name.to_string mod_.module_name |> String.uncapitalize_ascii
+  | Impl (impl, _), _ ->
+    "impl-" ^ (Module_name.to_string impl.module_name |> String.uncapitalize_ascii)
 ;;
 
 let odoc_file ctx t =
@@ -101,6 +109,9 @@ let odoc_file ctx t =
      | Some parent_path -> base_dir ++ parent_path ++ ("asset-" ^ basename ^ ".odoc")
      | None -> base_dir ++ ("asset-" ^ basename ^ ".odoc"))
   | Module (_, target) ->
+    let base_dir = Odoc_paths.odocs ctx target in
+    base_dir ++ (basename ^ ".odoc")
+  | Impl (_, target) ->
     let base_dir = Odoc_paths.odocs ctx target in
     base_dir ++ (basename ^ ".odoc")
 ;;
@@ -121,13 +132,21 @@ let odocl_file ctx t =
   | Module (_, target) ->
     let base_dir = Odoc_paths.odocl ctx target in
     base_dir ++ (basename ^ ".odocl")
+  | Impl (_, target) ->
+    let base_dir = Odoc_paths.odocl ctx target in
+    base_dir ++ (basename ^ ".odocl")
 ;;
 
+(* Base output directory for an artifact in the given format. Only Impl
+   artifacts in Html format use a different base (the src-rendering layout);
+   all other combinations use [Odoc_paths.output]. *)
 let output_base ctx mode format t =
-  match t.kind with
-  | Module (_, target) -> Odoc_paths.output ctx mode format target
-  | Page (_, target) -> Odoc_paths.output ctx mode format target
-  | Asset (_, target) -> Odoc_paths.output ctx mode format target
+  match t.kind, (format : Odoc_paths.output_format) with
+  | Impl (_, target), Html -> Odoc_paths.html_src ctx mode target
+  | Module (_, target), _ -> Odoc_paths.output ctx mode format target
+  | Impl (_, target), _ -> Odoc_paths.output ctx mode format target
+  | Page (_, target), _ -> Odoc_paths.output ctx mode format target
+  | Asset (_, target), _ -> Odoc_paths.output ctx mode format target
 ;;
 
 let output_extension : Odoc_paths.output_format -> string = function
@@ -145,6 +164,9 @@ let output_file ctx mode format t =
     let dir = base ++ Stdune.String.capitalize basename in
     dir ++ ("index" ^ suffix)
   | Module _, Markdown -> base ++ (Stdune.String.capitalize basename ^ suffix)
+  | Impl (impl, _), _ ->
+    let src_basename = Path.basename impl.src_path in
+    base ++ (src_basename ^ suffix)
   | Page (page, _), _ ->
     let path =
       match fst (split_page_name page.name) with
@@ -166,12 +188,12 @@ let output_dir_target ctx mode format t =
     let base = Odoc_paths.output ctx mode format target in
     Some (base ++ Stdune.String.capitalize basename)
   | Module (_, target), Markdown -> Some (Odoc_paths.output ctx mode format target)
-  | Page _, _ | Asset _, _ -> None
+  | Impl _, _ | Page _, _ | Asset _, _ -> None
 ;;
 
 let hidden t =
   match t.kind with
-  | Page _ | Asset _ -> false
+  | Page _ | Asset _ | Impl _ -> false
   | Module _ ->
     let basename = get_basename t in
     String.contains_double_underscore basename
@@ -180,16 +202,17 @@ let hidden t =
 let parent_id t =
   let base_id =
     match t.kind with
-    | Module (_, Lib (pkg, lib)) ->
+    | Module (_, Lib (pkg, lib)) | Impl (_, Lib (pkg, lib)) ->
       sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
-    | Module (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
+    | Module (_, Private_lib (lib_unique_name, _))
+    | Impl (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
     | Page (_, Pkg pkg) -> Package.Name.to_string pkg
     | Page (_, Toplevel _) -> ""
     | Asset (_, Pkg pkg) -> Package.Name.to_string pkg
     | Asset (_, Toplevel _) -> ""
   in
   match t.kind with
-  | Module _ -> base_id
+  | Module _ | Impl _ -> base_id
   | Page (page, _) ->
     (match fst (split_page_name page.name) with
      | Some parent_path -> sprintf "%s/%s" base_id parent_path
@@ -217,7 +240,8 @@ let should_suppress_output t =
   | Generated _ -> Memo.return true
   | Local_source _ ->
     (match t.kind with
-     | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> is_lib_vendored lib
+     | Module (_, (Lib (_, lib) | Private_lib (_, lib)))
+     | Impl (_, (Lib (_, lib) | Private_lib (_, lib))) -> is_lib_vendored lib
      | Page _ | Asset _ -> Memo.return false)
 ;;
 
@@ -228,11 +252,29 @@ let create ~kind ~source ~extra_libs ~extra_packages =
 let asset_name t =
   match t.kind with
   | Asset (asset, _) -> Some asset.asset_name
-  | Page _ | Module _ -> None
+  | Page _ | Module _ | Impl _ -> None
 ;;
 
 let is_asset t =
   match t.kind with
   | Asset _ -> true
-  | Page _ | Module _ -> false
+  | Page _ | Module _ | Impl _ -> false
+;;
+
+let is_impl t =
+  match t.kind with
+  | Impl _ -> true
+  | Module _ | Page _ | Asset _ -> false
+;;
+
+let impl_source_path t =
+  match t.kind with
+  | Impl (impl, _) -> Some impl.src_path
+  | Module _ | Page _ | Asset _ -> None
+;;
+
+let impl_source_id t =
+  match t.kind with
+  | Impl (impl, _) -> Some impl.src_id
+  | Module _ | Page _ | Asset _ -> None
 ;;

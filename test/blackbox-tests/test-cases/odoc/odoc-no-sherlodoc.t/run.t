@@ -13,11 +13,19 @@ Set up some fake environment without sherlodoc
 This test if `.odocl` files are generated
   $ find _build/default/_doc/_odocls -name '*.odocl' | sort -n
   _build/default/_doc/_odocls/bar/bar/bar.odocl
+  _build/default/_doc/_odocls/bar/bar/impl-bar.odocl
+  _build/default/_doc/_odocls/bar/bar/page-index.odocl
   _build/default/_doc/_odocls/bar/page-index.odocl
   _build/default/_doc/_odocls/foo/foo.byte/foo_byte.odocl
+  _build/default/_doc/_odocls/foo/foo.byte/impl-foo_byte.odocl
+  _build/default/_doc/_odocls/foo/foo.byte/page-index.odocl
   _build/default/_doc/_odocls/foo/foo/foo.odocl
   _build/default/_doc/_odocls/foo/foo/foo2.odocl
   _build/default/_doc/_odocls/foo/foo/foo3.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo2.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo3.odocl
+  _build/default/_doc/_odocls/foo/foo/page-index.odocl
   _build/default/_doc/_odocls/foo/page-index.odocl
 
   $ find . -name '*.js' | sort -n
