@@ -1,15 +1,15 @@
 Test that odoc assets (images, etc.) are properly processed:
 
   $ dune build @doc
-  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
-  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
-  [1]
+  File "../index.mld", line 7, characters 0-23:
+  Warning: Failed to resolve reference /mylib/logo.png Path '/mylib/logo.png' not found
 
 Verify the asset .odocl file was compiled:
 
   $ find _build/default/_doc/_odocls/mylib -name '*.odocl' | sort
-  find: '_build/default/_doc/_odocls/mylib': No such file or directory
-  [1]
+  _build/default/_doc/_odocls/mylib/mylib/mylib.odocl
+  _build/default/_doc/_odocls/mylib/mylib/page-index.odocl
+  _build/default/_doc/_odocls/mylib/page-index.odocl
 
 Verify the asset was copied to HTML output:
 
@@ -19,14 +19,11 @@ Verify the asset was copied to HTML output:
 Verify the index.html references the asset:
 
   $ test -f _build/default/_doc/_html/mylib/index.html && echo "index.html exists"
-  [1]
+  index.html exists
 
 Test that @doc-full also works with assets:
 
   $ dune build @doc-full
-  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
-  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
-  [1]
 
 Verify asset was copied to HTML full output:
 
@@ -36,15 +33,13 @@ Verify asset was copied to HTML full output:
 Test that @doc-json also works with assets (assets are copied to JSON output):
 
   $ dune build @doc-json
-  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
-  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
-  [1]
 
 Verify JSON files are generated:
 
   $ find _build/default/_doc/_json/mylib -name '*.json' | sort
-  find: '_build/default/_doc/_json/mylib': No such file or directory
-  [1]
+  _build/default/_doc/_json/mylib/index.html.json
+  _build/default/_doc/_json/mylib/mylib/Mylib/index.html.json
+  _build/default/_doc/_json/mylib/mylib/index.html.json
 
 Verify the asset was copied to JSON output:
 
@@ -54,9 +49,6 @@ Verify the asset was copied to JSON output:
 Test that @doc-json-full also works with assets:
 
   $ dune build @doc-json-full
-  File "_doc/_odoc/mylib/_unknown_", line 1, characters 0-0:
-  ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
-  [1]
 
 Verify asset was copied to JSON full output:
 
