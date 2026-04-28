@@ -1115,27 +1115,21 @@ let gen_rules sctx ~dir rest =
        |> Memo.parallel_iter_seq ~f:(fun (_, (pkg : Package.t)) ->
          let pkg_name = Package.name pkg in
          setup_pkg_markdown_rules sctx ~pkg:pkg_name))
-  | [ "_markdown"; _lib_unique_name_or_pkg ] ->
-    (* package directories are directory targets *)
-    Memo.return Gen_rules.no_rules
+  | [ "_markdown"; _lib_unique_name_or_pkg ] -> Memo.return Gen_rules.no_rules
   | [ "_mlds"; pkg ] ->
     with_package pkg ~f:(fun pkg ->
       let pkg = Package.name pkg in
       let* _mlds, rules = package_mlds sctx ~pkg in
       Rules.produce rules)
-  | [ "_odoc"; "pkg"; pkg ] ->
-    with_package pkg ~f:(fun pkg ->
-      let pkg = Package.name pkg in
-      setup_package_odoc_rules sctx ~pkg)
+  | [ "_odoc"; "pkg"; pkg_name ] ->
+    let pkg = Package.Name.of_string pkg_name in
+    has_rules (setup_package_odoc_rules sctx ~pkg)
   | [ "_odocls"; lib_unique_name_or_pkg ] ->
     has_rules
-      ((* TODO we can be a better with the error handling in the case where
-          lib_unique_name_or_pkg is neither a valid pkg or lnu *)
-       let ctx = Super_context.context sctx in
+      (let ctx = Super_context.context sctx in
        let* lib, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
        in
-       (* jeremiedimino: why isn't [None] some kind of error here? *)
        let* lib =
          let+ lib = Lib.DB.find lib_db lib in
          Option.bind ~f:Lib.Local.of_lib lib
@@ -1171,13 +1165,10 @@ let gen_rules sctx ~dir rest =
        ())
   | [ "_html"; lib_unique_name_or_pkg ] ->
     has_rules
-      ((* TODO we can be a better with the error handling in the case where
-          lib_unique_name_or_pkg is neither a valid pkg or lnu *)
-       let ctx = Super_context.context sctx in
+      (let ctx = Super_context.context sctx in
        let* lib, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
        in
-       (* jeremiedimino: why isn't [None] some kind of error here? *)
        let* lib =
          let+ lib = Lib.DB.find lib_db lib in
          Option.bind ~f:Lib.Local.of_lib lib
@@ -1197,7 +1188,6 @@ let gen_rules sctx ~dir rest =
          | Some lib ->
            (match Lib_info.package (Lib.Local.info lib) with
             | None ->
-              (* lib with no package above it *)
               let* search_db = search_db_for_lib sctx lib in
               setup_lib_html_rules sctx ~search_db lib
             | Some pkg -> setup_pkg_html_rules sctx ~pkg ~for_)
