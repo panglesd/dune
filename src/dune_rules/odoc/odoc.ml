@@ -202,7 +202,6 @@ let compile_module
       ~includes:(file_deps, iflags)
       ~dep_graphs
       ~pkg_or_lnu
-      ~mode
   =
   let odoc_file = Obj_dir.Module.odoc obj_dir m in
   let+ () =
@@ -221,15 +220,7 @@ let compile_module
           ; As [ "--pkg"; pkg_or_lnu ]
           ; A "-o"
           ; Target odoc_file
-          ; Dep
-              (Path.build
-                 (Obj_dir.Module.cmti_file
-                    ~cm_kind:
-                      (match mode with
-                       | Compilation_mode.Ocaml -> Ocaml Cmi
-                       | Melange -> Melange Cmi)
-                    obj_dir
-                    m))
+          ; Dep (Path.build (Obj_dir.Module.cmti_file ~cm_kind:(Ocaml Cmi) obj_dir m))
           ]
       in
       let open Action_builder.With_targets.O in
@@ -634,14 +625,12 @@ let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
   |> Modules.With_vlib.drop_vlib
   |> Modules.fold ~init:[] ~f:(fun m acc ->
     let compiled =
-      let for_ = Compilation_context.for_ cctx in
       compile_module
         sctx
         ~includes
         ~dep_graphs:(Compilation_context.dep_graphs cctx)
         ~obj_dir
         ~pkg_or_lnu
-        ~mode:for_
         m
     in
     compiled :: acc)

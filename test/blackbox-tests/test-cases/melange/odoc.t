@@ -35,6 +35,13 @@ Works for Melange-only libraries
   > EOF
 
   $ dune build @doc
+  File ".foo.objs/byte/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo.cmt
+  File ".foo.objs/byte/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo__.cmt
+  File ".foo.objs/byte/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo__Bar.cmt
+  [1]
 
   $ cat _build/default/_doc/_mlds/foo/index.mld
   {0 foo index}
