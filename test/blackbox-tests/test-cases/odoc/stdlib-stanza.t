@@ -22,6 +22,9 @@ Demonstrate how odoc interops with the `stdlib` stanza
   > EOF
 
   $ dune build @doc
+  File "_odoc/l/l/impl-l.odoc":
+  Warning: Couldn't find the following modules:
+    Bar
   File "_odoc/l/l/l.odoc":
   Warning: Couldn't find the following modules:
     Bar
@@ -29,6 +32,8 @@ Demonstrate how odoc interops with the `stdlib` stanza
 Bar is compiled
   $ find _build/default -name '*.odoc' | sort -n
   _build/default/_doc/_index/page-index.odoc
+  _build/default/_doc/_odoc/l/l/impl-l.odoc
+  _build/default/_doc/_odoc/l/l/impl-l__Bar.odoc
   _build/default/_doc/_odoc/l/l/l.odoc
   _build/default/_doc/_odoc/l/l/l__Bar.odoc
   _build/default/_doc/_odoc/l/l/page-index.odoc
@@ -38,6 +43,12 @@ Bar is compiled
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalLazy.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalMod.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalOO.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalFormat.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalFormatBasics.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalLazy.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalMod.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalOO.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-stdlib.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Arg.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Array.odoc
@@ -108,6 +119,8 @@ Bar is compiled
 Bar is not linked
   $ find _build/default -name '*.odocl' | sort -n
   _build/default/_doc/_index/page-index.odocl
+  _build/default/_doc/_odocls/l/l/impl-l.odocl
+  _build/default/_doc/_odocls/l/l/impl-l__Bar.odocl
   _build/default/_doc/_odocls/l/l/l.odocl
   _build/default/_doc/_odocls/l/l/page-index.odocl
   _build/default/_doc/_odocls/l/page-index.odocl
@@ -119,3 +132,5 @@ No html is generated for Bar
   _build/default/_doc/_html/l/index.html
   _build/default/_doc/_html/l/l/L/index.html
   _build/default/_doc/_html/l/l/index.html
+  _build/default/_doc/_html/l/src/l/bar.ml.html
+  _build/default/_doc/_html/l/src/l/l.ml.html

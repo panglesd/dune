@@ -351,7 +351,7 @@ let library_index_content_from_artifacts ~lib_name ~artifacts =
       else (
         match Odoc_artifact.get_kind artifact with
         | Module ({ visible = true; module_name; _ }, _) -> Some module_name
-        | Module ({ visible = false; _ }, _) | Page _ | Asset _ -> None))
+        | Module ({ visible = false; _ }, _) | Impl _ | Page _ | Asset _ -> None))
     |> List.sort ~compare:Module_name.compare
   in
   if not (List.is_empty module_names)
@@ -431,6 +431,108 @@ let create_artifact_module
     ~extra_packages
 ;;
 
+let create_artifact_impl
+      ~target
+      ~local_lib
+      ~module_
+      ~(extra_libs : Lib.t list Memo.t)
+      ~(extra_packages : Package.Name.t list Memo.t)
+      ?(src_id_lib : Lib.t option)
+      ()
+  =
+  let module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none in
+  let obj_dir = Lib.Local.obj_dir local_lib in
+  match Obj_dir.Module.cmt_file obj_dir module_ ~ml_kind:Impl ~cm_kind:(Ocaml Cmi) with
+  | None -> None
+  | Some cmt_file ->
+    let src_path =
+      match Module.source module_ ~ml_kind:Impl with
+      | Some file -> Module.File.path file
+      | None ->
+        (* Should not happen since we check Module.has *)
+        Path.build cmt_file
+    in
+    (* For src_id, use src_id_lib if provided (e.g. the virtual library),
+       otherwise use local_lib. This ensures source links in vlib docs
+       resolve relative to the vlib's documentation path. *)
+    let id_lib =
+      match src_id_lib with
+      | Some l -> l
+      | None -> Lib.Local.to_lib local_lib
+    in
+    let src_id =
+      match target with
+      | Odoc_target.Private_lib (lib_unique_name, _) ->
+        sprintf "%s/%s" lib_unique_name (Path.basename src_path)
+      | Odoc_target.Lib (pkg, _) ->
+        sprintf
+          "%s/src/%s/%s"
+          (Package.Name.to_string pkg)
+          (Lib_name.to_string (Lib.name id_lib))
+          (Path.basename src_path)
+    in
+    let impl = { Odoc_target.src_id; src_path; module_name } in
+    let kind = Odoc_artifact.Impl (impl, target) in
+    Some
+      (Odoc_artifact.create
+         ~kind
+         ~source:(Local_source cmt_file)
+         ~extra_libs
+         ~extra_packages)
+;;
+
+let _discover_vlib_impl_source_artifacts sctx ctx ~impl_local_lib ~vlib:_
+  : Odoc_artifact.t list Memo.t
+  =
+  let* all_modules =
+    Dir_contents.modules_of_local_lib sctx impl_local_lib ~for_:Compilation_mode.Ocaml
+  in
+  let modules = Modules.fold all_modules ~init:[] ~f:(fun m acc -> m :: acc) in
+  let impl_lib = Lib.Local.to_lib impl_local_lib in
+  let impl_info = Lib.info impl_lib in
+  let impl_pkg = Lib_info.package impl_info in
+  let impl_name = Lib.name impl_lib in
+  let target =
+    match impl_pkg with
+    | None ->
+      let status = Lib_info.status impl_info in
+      let lib_unique_name =
+        match status with
+        | Lib_info.Status.Private (project, _) ->
+          Odoc_scope.Scope_key.to_string impl_name project
+        | _ -> Lib_name.to_string impl_name
+      in
+      Odoc_target.Private_lib (lib_unique_name, impl_lib)
+    | Some pkg -> Odoc_target.Lib (pkg, impl_lib)
+  in
+  let extra_libs, extra_packages =
+    match impl_pkg with
+    | None -> Memo.return [], Memo.return []
+    | Some pkg ->
+      let config_lazy =
+        Memo.lazy_ (fun () ->
+          let* pkg_discovery = Package_discovery.create ~context:ctx in
+          resolve_pkg_odoc_config ctx ~pkg_discovery ~pkg)
+      in
+      ( Memo.Lazy.force config_lazy >>| fst
+      , Memo.Lazy.force config_lazy >>| fun (_, pkgs) -> pkg :: pkgs )
+  in
+  let artifacts =
+    List.filter_map modules ~f:(fun module_ ->
+      if Module.has module_ ~ml_kind:Impl
+      then
+        create_artifact_impl
+          ~target
+          ~local_lib:impl_local_lib
+          ~module_
+          ~extra_libs
+          ~extra_packages
+          ()
+      else None)
+  in
+  Memo.return artifacts
+;;
+
 let discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib
   : Odoc_artifact.t list Memo.t
   =
@@ -498,7 +600,14 @@ let discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib
           ~extra_libs
           ~extra_packages
       in
-      [ mod_artifact ])
+      if Module.has module_ ~ml_kind:Impl
+      then (
+        match
+          create_artifact_impl ~target ~local_lib ~module_ ~extra_libs ~extra_packages ()
+        with
+        | Some impl_artifact -> [ mod_artifact; impl_artifact ]
+        | None -> [ mod_artifact ])
+      else [ mod_artifact ])
   in
   Memo.return artifacts
 ;;
@@ -724,7 +833,33 @@ let discover_installed_lib_artifacts _sctx ctx ~pkg ~lib_name ~lib
                 ~extra_libs
                 ~extra_packages
             in
-            Memo.return (Some module_artifact)
+            (* Create an Impl artifact only if we have both a .cmt and a .ml file.
+               The .cmt is the input to compile-impl (type information), the .ml
+               is the source to render (referenced via src_path/src_id). *)
+            let impl_artifact =
+              match
+                ( Package_discovery.module_cmt_file pkg_discovery ~lib ~module_name
+                , Package_discovery.module_ml_file pkg_discovery ~lib ~module_name )
+              with
+              | Some cmt_path, Some ml_path ->
+                let src_id =
+                  sprintf "%s/src/%s/%s" pkg_name_str lib_name_str (Path.basename ml_path)
+                in
+                let impl =
+                  { Odoc_target.src_id
+                  ; src_path = ml_path
+                  ; module_name = Module_name.of_checked_string module_name
+                  }
+                in
+                Some
+                  (Odoc_artifact.create
+                     ~kind:(Impl (impl, target))
+                     ~source:(Installed_source { src_path = cmt_path })
+                     ~extra_libs
+                     ~extra_packages)
+              | _ -> None
+            in
+            Memo.return (Some (module_artifact, impl_artifact))
           | None ->
             Log.info
               (sprintf
@@ -735,7 +870,13 @@ let discover_installed_lib_artifacts _sctx ctx ~pkg ~lib_name ~lib
               [];
             Memo.return None)
       in
-      List.filter_map all_module_artifacts ~f:Fun.id)
+      List.filter_map all_module_artifacts ~f:Fun.id
+      |> List.concat_map ~f:(fun (mod_art, impl_art) ->
+        mod_art
+        ::
+        (match impl_art with
+         | Some a -> [ a ]
+         | None -> [])))
 ;;
 
 let discover_lib_artifacts sctx ctx ~pkg ~lib_name ~lib : Odoc_artifact.t list Memo.t =
@@ -1044,7 +1185,7 @@ let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name
     else discover_installed_pkg_artifacts sctx ctx ~pkg
 ;;
 
-let collect_all_visible_odocls sctx ~mode () =
+let collect_all_visible_odocls sctx ~mode ~include_impl () =
   let ctx = Super_context.context sctx in
   let* workspace_pkgs = get_workspace_packages () in
   (* Only get private libraries for Full mode - Local_only should only document packages *)
@@ -1074,7 +1215,8 @@ let collect_all_visible_odocls sctx ~mode () =
            else (
              match Odoc_artifact.get_kind artifact with
              | Asset _ -> None
-             | Module _ | Page _ -> Some (Odoc_artifact.odocl_file ctx artifact)))))
+             | Impl _ when not include_impl -> None
+             | Module _ | Page _ | Impl _ -> Some (Odoc_artifact.odocl_file ctx artifact)))))
   in
   let* private_lib_odocl_files =
     Memo.List.concat_map private_local_libs ~f:(fun local_lib ->
@@ -1089,7 +1231,8 @@ let collect_all_visible_odocls sctx ~mode () =
            else (
              match Odoc_artifact.get_kind artifact with
              | Asset _ -> None
-             | Module _ | Page _ -> Some (Odoc_artifact.odocl_file ctx artifact)))))
+             | Impl _ when not include_impl -> None
+             | Module _ | Page _ | Impl _ -> Some (Odoc_artifact.odocl_file ctx artifact)))))
   in
   let* toplevel_artifact = toplevel_index_artifact ctx ~mode in
   let toplevel_odocl = Odoc_artifact.odocl_file ctx toplevel_artifact in

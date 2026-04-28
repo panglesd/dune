@@ -16,12 +16,15 @@ liba depends on pkgc.lib):
 
   $ find _build/default/_doc/_odocls -name '*.odocl' | sort
   _build/default/_doc/_odocls/pkga/page-index.odocl
+  _build/default/_doc/_odocls/pkga/pkga.lib/impl-liba.odocl
   _build/default/_doc/_odocls/pkga/pkga.lib/liba.odocl
   _build/default/_doc/_odocls/pkga/pkga.lib/page-index.odocl
   _build/default/_doc/_odocls/pkgb/page-index.odocl
+  _build/default/_doc/_odocls/pkgb/pkgb.lib/impl-libb.odocl
   _build/default/_doc/_odocls/pkgb/pkgb.lib/libb.odocl
   _build/default/_doc/_odocls/pkgb/pkgb.lib/page-index.odocl
   _build/default/_doc/_odocls/pkgc/page-index.odocl
+  _build/default/_doc/_odocls/pkgc/pkgc.lib/impl-libc.odocl
   _build/default/_doc/_odocls/pkgc/pkgc.lib/libc.odocl
   _build/default/_doc/_odocls/pkgc/pkgc.lib/page-index.odocl
 

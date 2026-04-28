@@ -10,9 +10,11 @@ Verify documentation was generated for both packages:
 
   $ find _build/default/_doc/_odocls/{pkga,pkgb} -name '*.odocl' | sort -n
   _build/default/_doc/_odocls/pkga/page-index.odocl
+  _build/default/_doc/_odocls/pkga/pkga.lib/impl-liba.odocl
   _build/default/_doc/_odocls/pkga/pkga.lib/liba.odocl
   _build/default/_doc/_odocls/pkga/pkga.lib/page-index.odocl
   _build/default/_doc/_odocls/pkgb/page-index.odocl
+  _build/default/_doc/_odocls/pkgb/pkgb.lib/impl-libb.odocl
   _build/default/_doc/_odocls/pkgb/pkgb.lib/libb.odocl
   _build/default/_doc/_odocls/pkgb/pkgb.lib/page-index.odocl
 

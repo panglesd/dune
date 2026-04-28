@@ -23,10 +23,15 @@ module Odoc : sig
     | Root
     | Per_package
 
+  type source_rendering =
+    | Enabled
+    | Disabled
+
   type t =
     { warnings : warnings option
     ; sidebar : sidebar option
     ; support : support option
+    ; source_rendering : source_rendering option
     ; flags : Ordered_set_lang.Unexpanded.t
     ; link_flags : Ordered_set_lang.Unexpanded.t
     ; html_flags : Ordered_set_lang.Unexpanded.t
