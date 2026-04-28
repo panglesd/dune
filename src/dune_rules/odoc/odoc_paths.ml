@@ -75,5 +75,10 @@ let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
 let lib_mld_dir ctx pkg lib_name = gen_mld_dir ctx pkg ++ Lib_name.to_string lib_name
 let lib_index_mld ctx pkg lib_name = lib_mld_dir ctx pkg lib_name ++ "index.mld"
 let odoc_support ctx mode = output_root ctx mode Html ++ odoc_support_dirname
+
+let odoc_support_for_pkg ctx mode pkg =
+  output_root ctx mode Html ++ pkg ++ odoc_support_dirname
+;;
+
 let toplevel_index_mld ctx mode = index_root ctx mode ++ "index.mld"
 let remap_file ctx = root ctx ++ "_remap" ++ "remap.txt"
