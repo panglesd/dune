@@ -2,10 +2,6 @@
 
 open Import
 
-module Paths : sig
-  val toplevel_index : Context.t -> Path.Build.t
-end
-
 val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_builder.t
 val libs_of_pkg : Context_name.t -> pkg:Package.Name.t -> Lib.Local.t list Memo.t
 
