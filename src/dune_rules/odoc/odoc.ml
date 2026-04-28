@@ -36,12 +36,13 @@ module Output_format = struct
     | Markdown -> Command.Args.empty
   ;;
 
-  let alias t ~dir =
-    match t with
-    | Html -> Alias.make Alias0.doc ~dir
-    | Json -> Alias.make Alias0.doc_json ~dir
-    | Markdown -> Alias.make Alias0.doc_markdown ~dir
+  let alias_name = function
+    | Html -> Alias0.doc
+    | Json -> Alias0.doc_json
+    | Markdown -> Alias0.doc_markdown
   ;;
+
+  let alias t ~dir = Alias.make (alias_name t) ~dir
 
   let toplevel_index_path format ctx =
     let base = Paths.output_root ctx format in
@@ -72,11 +73,21 @@ module Dep : sig
     These dependencies may be used using the [deps] function *)
   val setup_deps : Context.t -> 'a Target.t -> Path.Set.t -> unit Memo.t
 end = struct
-  let format_alias : type a. Output_format.t -> Context.t -> a Target.t -> Alias.t =
-    fun f ctx m -> Output_format.alias f ~dir:(Paths.output ctx f m)
+  let odoc_all_alias ~dir = Alias.make (Alias.Name.of_string ".odoc-all") ~dir
+
+  let odoc_all_alias_for_target : type a. Context.t -> a Target.t -> Alias.t =
+    fun ctx target -> odoc_all_alias ~dir:(Paths.odocs ctx target)
   ;;
 
-  let alias = Alias.make (Alias.Name.of_string ".odoc-all")
+  let format_alias : type a. Output_format.t -> Context.t -> a Target.t -> Alias.t =
+    fun f ctx m ->
+    let dir = Paths.output ctx f m in
+    Output_format.alias f ~dir
+  ;;
+
+  let add_file_deps alias files =
+    Rules.Produce.Alias.add_deps alias (Action_builder.paths files)
+  ;;
 
   let deps ctx pkg requires =
     let open Action_builder.O in
@@ -84,7 +95,8 @@ end = struct
     Action_builder.deps
       (let init =
          match pkg with
-         | Some p -> Dep.Set.singleton (Dep.alias (alias ~dir:(Paths.odocs ctx (Pkg p))))
+         | Some p ->
+           Dep.Set.singleton (Dep.alias (odoc_all_alias ~dir:(Paths.odocs ctx (Pkg p))))
          | None -> Dep.Set.empty
        in
        List.fold_left libs ~init ~f:(fun acc (lib : Lib.t) ->
@@ -92,17 +104,12 @@ end = struct
          | None -> acc
          | Some lib ->
            let dir = Paths.odocs ctx (Target.Lib lib) in
-           let alias = alias ~dir in
-           Dep.Set.add acc (Dep.alias alias)))
-  ;;
-
-  let alias : type a. Context.t -> a Target.t -> Alias.t =
-    fun ctx m -> alias ~dir:(Paths.odocs ctx m)
+           Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir))))
   ;;
 
   let setup_deps : type a. Context.t -> a Target.t -> Path.Set.t -> unit Memo.t =
     fun ctx m files ->
-    Rules.Produce.Alias.add_deps (alias ctx m) (Action_builder.path_set files)
+    add_file_deps (odoc_all_alias_for_target ctx m) (Path.Set.to_list files)
   ;;
 end
 
