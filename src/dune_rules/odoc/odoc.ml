@@ -299,6 +299,53 @@ let odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery =
      Command.Args.S lib_args)
 ;;
 
+(* Get package dependencies from odoc-config.sexp for a set of packages *)
+let get_config_package_deps pkg_discovery pkgs =
+  List.concat_map pkgs ~f:(fun pkg ->
+    let config = Package_discovery.config_of_package pkg_discovery pkg in
+    config.Odoc_config.deps.packages)
+;;
+
+(* Generate -P package:path flags for odoc link.
+   These tell odoc where to find .odoc files for package dependencies.
+   In addition to explicit config deps, we derive packages from the library
+   closure (requires) so that transitive library dependencies like odoc-parser
+   (a dependency of odoc) get -P flags even when they aren't listed explicitly
+   in :with-doc deps or in odoc-config.sexp. *)
+let odoc_pkg_flags ctx pkg_discovery ~current_pkg_opt ~artifact_config ~requires =
+  let doc_root = Paths.root ctx in
+  Resolve.args
+    (let open Resolve.O in
+     let+ libs = requires in
+     (* Collect direct packages (config deps + current package) and their transitive config deps *)
+     let direct_pkgs =
+       artifact_config.Odoc_config.deps.packages @ Option.to_list current_pkg_opt
+     in
+     let config_pkgs = get_config_package_deps pkg_discovery direct_pkgs in
+     (* Also derive packages from the library closure *)
+     let pkgs_from_libs =
+       List.filter_map libs ~f:(fun lib ->
+         match Lib.Local.of_lib lib with
+         | Some local_lib -> Lib_info.package (Lib.info (Lib.Local.to_lib local_lib))
+         | None -> Package_discovery.package_of_library pkg_discovery lib)
+     in
+     let all_pkgs = direct_pkgs @ config_pkgs @ pkgs_from_libs in
+     (* Build unique package map with their odoc paths *)
+     let pkg_paths =
+       List.fold_left all_pkgs ~init:Package.Name.Map.empty ~f:(fun acc pkg ->
+         let odoc_dir = Paths.odocs ctx (Pkg pkg) in
+         let path = Path.reach (Path.build odoc_dir) ~from:(Path.build doc_root) in
+         Package.Name.Map.set acc pkg path)
+     in
+     (* Generate -P pkg:path flags *)
+     let flags =
+       Package.Name.Map.to_list_map pkg_paths ~f:(fun pkg path ->
+         [ Command.Args.A "-P"; A (Package.Name.to_string pkg ^ ":" ^ path) ])
+       |> List.concat
+     in
+     Command.Args.S flags)
+;;
+
 (* Compute library dependencies for an artifact.
 
    Returns a pair (closure, external_requires):
@@ -481,6 +528,9 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       (List.concat_map ("__private_lib__" :: all_pkg_names) ~f:(fun pkg_name ->
          [ Command.Args.A "--warnings-tags"; Command.Args.A pkg_name ]))
   in
+  let artifact_config =
+    { Odoc_config.deps = { packages = extra_packages; libraries = [] } }
+  in
   let run_odoc =
     run_odoc
       sctx
@@ -488,6 +538,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       ~quiet:false
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
       [ odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery
+      ; odoc_pkg_flags ctx pkg_discovery ~current_pkg_opt:pkg ~artifact_config ~requires
       ; A "--enable-missing-root-warning"
       ; warnings_tags_args
       ; A "-o"

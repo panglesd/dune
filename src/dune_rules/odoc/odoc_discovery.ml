@@ -19,6 +19,11 @@ let find_local_package pkg =
   Package.Name.Map.find packages pkg
 ;;
 
+let stdlib_lib ctx =
+  let* public_libs = Scope.DB.public_libs ctx in
+  Lib.DB.find public_libs (Lib_name.of_string "stdlib")
+;;
+
 let libs_of_pkg (ctx : Context.t) ~pkg =
   let* packages = Dune_load.packages () in
   if Package.Name.Map.mem packages pkg
@@ -127,6 +132,77 @@ let resolve_odoc_config_deps ctx ~deps ~validate_packages =
 let resolve_pkg_odoc_config ctx ~pkg_discovery ~pkg =
   let* deps, is_local = get_odoc_config_deps_for_pkg pkg_discovery pkg in
   resolve_odoc_config_deps ctx ~deps ~validate_packages:is_local
+;;
+
+(* Expand a set of packages with their odoc-config dependencies transitively.
+   Takes initial packages and private libraries (libraries without packages).
+   Returns the expanded set of packages.
+
+   Algorithm:
+   1. Get all libraries from the packages
+   2. Get extra libraries from odoc-config for each package
+   3. Union with private libraries
+   4. Get transitive closure of library dependencies
+   5. Find packages for all those libraries
+   6. If there are new packages, repeat until fixed point *)
+let expand_packages_with_odoc_config ctx ~packages ~private_libs =
+  Log.info
+    (sprintf
+       "DEBUG: expand_packages_with_odoc_config called with packages: %s"
+       (packages |> List.map ~f:Package.Name.to_string |> String.concat ~sep:", "))
+    [];
+  let* pkg_discovery = Package_discovery.create ~context:ctx in
+  (* Use public_libs which includes both local and installed libs, preferring local *)
+  let* lib_db = Scope.DB.public_libs (Context.name ctx) in
+  (* Get stdlib once - it's implicitly required by all OCaml code *)
+  let* stdlib_opt = stdlib_lib (Context.name ctx) in
+  let rec expand_until_fixpoint seen_pkgs =
+    (* Get all libraries from current packages *)
+    let* pkg_libs =
+      Package.Name.Set.to_list seen_pkgs
+      |> Memo.List.concat_map ~f:(fun pkg -> libs_of_pkg ctx ~pkg)
+    in
+    (* Get extra libraries from odoc-config for each package *)
+    let* odoc_config_libs =
+      Package.Name.Set.to_list seen_pkgs
+      |> Memo.List.concat_map ~f:(fun pkg ->
+        let* deps, _is_local = get_odoc_config_deps_for_pkg pkg_discovery pkg in
+        resolve_odoc_config_libraries lib_db ~deps)
+    in
+    (* Union all libraries: package libs + odoc-config libs + private libs + stdlib *)
+    let all_libs =
+      pkg_libs @ odoc_config_libs @ private_libs @ Option.to_list stdlib_opt
+    in
+    (* Get transitive closure of library dependencies.
+       We use descriptive_closure rather than closure because we may have
+       conflicting implementations of virtual libraries when documenting
+       multiple packages together - that's fine for documentation purposes. *)
+    let* lib_closure =
+      Lib.descriptive_closure all_libs ~with_pps:false ~for_:Compilation_mode.Ocaml
+    in
+    let* pkgs_from_libs =
+      Memo.List.filter_map lib_closure ~f:(fun lib ->
+        match Lib.Local.of_lib lib with
+        | Some _ -> Memo.return (Lib_info.package (Lib.info lib))
+        | None -> Memo.return (Package_discovery.package_of_library pkg_discovery lib))
+    in
+    let* odoc_config_pkgs =
+      Package.Name.Set.to_list seen_pkgs
+      |> Memo.List.concat_map ~f:(fun pkg ->
+        let* deps, _is_local = get_odoc_config_deps_for_pkg pkg_discovery pkg in
+        Memo.return deps.packages)
+    in
+    let all_new_pkgs =
+      Package.Name.Set.union
+        (Package.Name.Set.of_list pkgs_from_libs)
+        (Package.Name.Set.of_list odoc_config_pkgs)
+    in
+    let new_pkgs = Package.Name.Set.diff all_new_pkgs seen_pkgs in
+    if Package.Name.Set.is_empty new_pkgs
+    then Memo.return seen_pkgs
+    else expand_until_fixpoint (Package.Name.Set.union seen_pkgs new_pkgs)
+  in
+  expand_until_fixpoint (Package.Name.Set.of_list packages)
 ;;
 
 module Toplevel_index = struct
