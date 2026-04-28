@@ -26,8 +26,12 @@ a lockdir containing an "ocaml" lockfile.
   - odoc.0.0.1
   hello from fake odoc
   hello from fake odoc
+  hello from fake odoc
   File "_doc/_html/_unknown_", line 1, characters 0-0:
   Error: Rule failed to produce directory "_doc/_html/odoc.support"
+  File "_doc/_index/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_index/page-index.odoc
   File "_doc/_odoc/foo/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/foo/page-index.odoc

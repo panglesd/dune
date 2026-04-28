@@ -2,16 +2,21 @@ open Import
 
 val get_workspace_packages : unit -> Package.Name.t list Memo.t
 val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
+val toplevel_index_artifact : Context.t -> Odoc_artifact.t Memo.t
 
 module Toplevel_index : sig
-  type item =
+  type pkg_item =
     { name : string
     ; version : Package_version.t option
-    ; link : string
     }
 
-  val of_packages : Package.t Package.Name.Map.t -> Odoc_paths.output_format -> item list
-  val content : Odoc_paths.output_format -> item list -> string
+  type item = Package of pkg_item
+
+  (** Get items to display in the toplevel index. *)
+  val get_items : Context.t -> item list Memo.t
+
+  (** Generate mld content for the toplevel index. *)
+  val mld_content : item list -> string
 end
 
 val discover_package_artifacts

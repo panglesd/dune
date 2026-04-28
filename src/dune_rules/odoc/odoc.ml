@@ -40,14 +40,6 @@ module Output_format = struct
   ;;
 
   let alias t ~dir = Alias.make (alias_name t) ~dir
-
-  let toplevel_index_path format ctx =
-    let base = Paths.output_root ctx format in
-    match format with
-    | Html -> base ++ "index.html"
-    | Json -> base ++ "index.html.json"
-    | Markdown -> base ++ "index.md"
-  ;;
 end
 
 module Artifact = Odoc_artifact
@@ -436,7 +428,8 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                   | Module (_, Private_lib _) ->
                     Command.Args.As [ "--warnings-tag"; "__private_lib__" ]
                   | Page (_, Pkg pkg) ->
-                    Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ])
+                    Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ]
+                  | Page (_, Toplevel) -> Command.Args.S [])
                ; Command.Args.Dep source_file
                ])
     in
@@ -577,7 +570,7 @@ let compute_link_requires sctx ~artifact =
   | Module (_, Private_lib (_, lib)) ->
     let+ closure = closure [ lib ] in
     Resolve.map closure ~f:(fun libs -> lib :: libs)
-  | Page ({ pkg_libs; _ }, Pkg _) ->
+  | Page ({ pkg_libs; _ }, (Pkg _ | Toplevel)) ->
     if List.is_empty pkg_libs
     then Memo.return (Resolve.return [])
     else
@@ -590,24 +583,45 @@ let link_artifact sctx ~artifact =
   link_odoc_rules sctx artifact ~requires
 ;;
 
-let setup_toplevel_index_rule sctx output =
-  let* packages = Dune_load.packages () in
-  let items = Odoc_discovery.Toplevel_index.of_packages packages output in
-  let content = Odoc_discovery.Toplevel_index.content output items in
+let setup_toplevel_index_artifact sctx =
   let ctx = Super_context.context sctx in
-  let path = Output_format.toplevel_index_path output ctx in
-  add_rule sctx (Action_builder.write_file path content)
+  let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
+  let* () =
+    match Artifact.generated_content artifact with
+    | Some content ->
+      let output_path = Artifact.source_file artifact in
+      add_rule
+        sctx
+        (Action_builder.write_file (Path.as_in_build_dir_exn output_path) content)
+    | None -> Memo.return ()
+  in
+  let* () =
+    compile_artifact
+      sctx
+      ~artifact
+      ~lib_artifacts_by_module:Module_name.Map.empty
+      ~package_lib_names:Lib_name.Set.empty
+  in
+  link_artifact sctx ~artifact
+;;
+
+(* Generate the toplevel index artifact in the given format. *)
+let setup_toplevel_index sctx format =
+  let ctx = Super_context.context sctx in
+  let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
+  generate_html_artifact sctx ~artifact ~output_format:format ()
 ;;
 
 let setup_toplevel_index_deps sctx output =
   let ctx = Super_context.context sctx in
   let root = Paths.output_root ctx output in
   let alias_of_dir dir = Output_format.alias output ~dir in
-  let* packages = Dune_load.packages () in
+  let* items = Odoc_discovery.Toplevel_index.get_items ctx in
   let deps =
-    Package.Name.Map.foldi packages ~init:Dune_engine.Dep.Set.empty ~f:(fun name _ acc ->
-      let pkg_dir = root ++ Package.Name.to_string name in
-      Dune_engine.Dep.Set.add acc (Dune_engine.Dep.alias (alias_of_dir pkg_dir)))
+    Dune_engine.Dep.Set.of_list_map
+      items
+      ~f:(fun (Odoc_discovery.Toplevel_index.Package { name; _ }) ->
+        Dune_engine.Dep.alias (alias_of_dir (root ++ name)))
   in
   Rules.Produce.Alias.add_deps (alias_of_dir root) (Action_builder.deps deps)
 ;;
@@ -866,15 +880,14 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
       Action_builder.of_memo
         (let open Memo.O in
          let+ workspace_pkgs = get_workspace_packages () in
-         let pkg_aliases =
-           List.map workspace_pkgs ~f:(fun p ->
-             Dep.format_alias output ctx (Target.Pkg p))
+         let pkg_targets =
+           List.map workspace_pkgs ~f:(fun p -> Target.Any (Target.Pkg p))
          in
-         let toplevel_alias =
-           Output_format.alias output ~dir:(Paths.output_root ctx output)
-         in
-         toplevel_alias :: pkg_aliases
-         |> Dune_engine.Dep.Set.of_list_map ~f:Dune_engine.Dep.alias)
+         let all_targets = pkg_targets @ [ Target.Any Target.Toplevel ] in
+         let unique_targets = List.sort_uniq all_targets ~compare:Target.compare_any in
+         unique_targets
+         |> List.map ~f:(fun (Target.Any t) -> Dep.format_alias output ctx t)
+         |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f))
     in
     Action_builder.deps dep_set
   in
@@ -1004,15 +1017,14 @@ let handle_output_root sctx ~output_format =
          Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx Html)
          >>> setup_css_rule sctx
        | Output_format.Json | Output_format.Markdown -> Memo.return ())
-      >>> setup_toplevel_index_rule sctx output_format
+      >>> setup_toplevel_index sctx output_format
       >>>
+      let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
+      let output_file = Artifact.output_file ctx output_format artifact in
+      let alias = Dep.format_alias output_format ctx Toplevel in
+      Dep.add_file_deps alias [ Path.build output_file ]
       (* Add dependencies on all child directories so the alias builds
          everything. *)
-      let alias =
-        Output_format.alias output_format ~dir:(Paths.output_root ctx output_format)
-      in
-      let toplevel_path = Output_format.toplevel_index_path output_format ctx in
-      Dep.add_file_deps alias [ Path.build toplevel_path ]
       >>> setup_toplevel_index_deps sctx output_format)
   in
   Memo.return (Build_config.Gen_rules.make ~directory_targets rules)
@@ -1042,6 +1054,10 @@ let gen_rules sctx ~dir rest =
               (Subdir_set.of_list lib_subdirs))
          rules)
   in
+  let toplevel_index_rules =
+    let rules = Rules.collect_unit (fun () -> setup_toplevel_index_artifact sctx) in
+    Memo.return (Build_config.Gen_rules.make rules)
+  in
   match rest with
   | [] ->
     Memo.return
@@ -1063,6 +1079,8 @@ let gen_rules sctx ~dir rest =
   | [ "_odocls"; pkg_or_lib_name ] -> handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name
   | [ "_mlds"; pkg_name ] -> handle_mlds_pkg pkg_name
   | ("_odoc" | "_odocls" | "_mlds") :: _ :: _ :: _ -> redirect ()
+  (* Toplevel index (mld + compile + link) *)
+  | [ "_index" ] -> toplevel_index_rules
   (* Sherlodoc search DB *)
   | [ "_sherlodoc" ] ->
     let rules =

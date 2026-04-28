@@ -9,6 +9,10 @@ Set up some fake environment without sherlodoc
   $ ln -s $(command -v ocamldep) _path/
   $ ln -s $(command -v odoc) _path/
   $ PATH=$(realpath ./_path) dune build @doc
+  File "_index/index.mld", line 4, characters 2-25:
+  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
+  File "_index/index.mld", line 3, characters 2-25:
+  Warning: Failed to resolve reference /bar/index Path '/bar/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -76,25 +80,7 @@ This test if `.odocl` files are generated
 
   $ PATH=$(realpath ./_path) dune runtest
   <!DOCTYPE html>
-  <html xmlns="http://www.w3.org/1999/xhtml">
-    <head>
-      <title>index</title>
-      <link rel="stylesheet" href="./odoc.support/odoc.css"/>
-      <meta charset="utf-8"/>
-      <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-    </head>
-    <body>
-      <main class="content">
-        <div class="by-name">
-        <h2>OCaml package documentation</h2>
-        <ol>
-        <li><a href="bar/index.html">bar</a></li>
-        <li><a href="foo/index.html">foo</a></li>
-        </ol>
-        </div>
-      </main>
-    </body>
-  </html>
+  <html xmlns="http://www.w3.org/1999/xhtml"><head><title>index (index)</title><meta charset="utf-8"/><link rel="stylesheet" href="odoc.support/odoc.css"/><meta name="generator" content="odoc 3.1.0"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="odoc.support/highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"></nav><header class="odoc-preamble"><h1 id="ocaml-package-documentation"><a href="#ocaml-package-documentation" class="anchor"></a>OCaml package documentation</h1><ul><li><span class="xref-unresolved" title="/bar/index">bar</span></li><li><span class="xref-unresolved" title="/foo/index">foo</span></li></ul></header><div class="odoc-content"></div></body></html>
 
   $ PATH=$(realpath ./_path) dune build @foo-mld
   {0 foo index}

@@ -43,103 +43,36 @@ let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   else Memo.return []
 ;;
 
-let sp = Printf.sprintf
-
 module Toplevel_index = struct
-  type item =
+  type pkg_item =
     { name : string
     ; version : Package_version.t option
-    ; link : string
     }
 
-  let of_packages packages output_format =
+  type item = Package of pkg_item
+
+  let of_packages packages =
     Package.Name.Map.to_list_map packages ~f:(fun name package ->
       let name = Package.Name.to_string name in
-      let extension =
-        match (output_format : Odoc_paths.output_format) with
-        | Markdown -> "md"
-        | Html | Json -> "html"
-      in
-      { name; version = Package.version package; link = sp "%s/index.%s" name extension })
+      Package { name; version = Package.version package })
   ;;
 
-  let html_list_items t =
-    List.map t ~f:(fun { name; version; link } ->
-      let link = sp {|<a href="%s">%s</a>|} link name in
+  let mld_content t =
+    let b = Buffer.create 1024 in
+    Printf.bprintf b "{0 OCaml package documentation}\n\n";
+    List.iter t ~f:(fun (Package { name; version }) ->
       let version_suffix =
         match version with
         | None -> ""
-        | Some v -> sp {| <span class="version">%s</span>|} (Package_version.to_string v)
+        | Some v -> sprintf " (%s)" (Package_version.to_string v)
       in
-      sp "<li>%s%s</li>" link version_suffix)
-    |> String.concat ~sep:"\n      "
-  ;;
-
-  let html t =
-    sp
-      {|<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <title>index</title>
-    <link rel="stylesheet" href="./%s/odoc.css"/>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-  </head>
-  <body>
-    <main class="content">
-      <div class="by-name">
-      <h2>OCaml package documentation</h2>
-      <ol>
-      %s
-      </ol>
-      </div>
-    </main>
-  </body>
-</html>|}
-      Odoc_paths.odoc_support_dirname
-      (html_list_items t)
-  ;;
-
-  let string_to_json s = `String s
-  let list_to_json ~f l = `List (List.map ~f l)
-
-  let option_to_json ~f = function
-    | None -> `Null
-    | Some x -> f x
-  ;;
-
-  let item_to_json { name; version; link } =
-    `Assoc
-      [ "name", string_to_json name
-      ; ( "version"
-        , Option.map ~f:Package_version.to_string version
-          |> option_to_json ~f:string_to_json )
-      ; "link", string_to_json link
-      ]
-  ;;
-
-  (** This format is public API. *)
-  let to_json items = `Assoc [ "packages", list_to_json items ~f:item_to_json ]
-
-  let json t = Json.to_string (to_json t)
-
-  let markdown t =
-    let b = Buffer.create 256 in
-    Buffer.add_string b "# OCaml Package Documentation\n\n";
-    List.iter t ~f:(fun { name; version; link } ->
-      Buffer.add_string b (sp "- [%s](%s)" name link);
-      (match version with
-       | None -> ()
-       | Some v -> Buffer.add_string b (sp " (version %s)" (Package_version.to_string v)));
-      Buffer.add_char b '\n');
+      Printf.bprintf b "- {{!/%s/page-index}%s}%s\n" name name version_suffix);
     Buffer.contents b
   ;;
 
-  let content (output : Odoc_paths.output_format) t =
-    match output with
-    | Html -> html t
-    | Json -> json t
-    | Markdown -> markdown t
+  let get_items _ctx =
+    let+ packages = Dune_load.packages () in
+    of_packages packages
   ;;
 end
 
@@ -272,6 +205,16 @@ let discover_local_lib_artifacts sctx _ctx ~lib_name ~local_lib
       create_artifact_module ~target ~local_lib ~module_ ~cmti_obj_dir)
   in
   Memo.return artifacts
+;;
+
+let toplevel_index_artifact ctx =
+  let output_path = Odoc_paths.toplevel_index_mld ctx in
+  let page = { Odoc_target.name = "index"; pkg_libs = [] } in
+  let kind = Odoc_artifact.Page (page, Odoc_target.Toplevel) in
+  let+ items = Toplevel_index.get_items ctx in
+  let content = Toplevel_index.mld_content items in
+  let source = Odoc_artifact.Generated { content; output_path } in
+  Odoc_artifact.create ~kind ~source
 ;;
 
 let discover_pkg_mld_artifacts ~pkg ~pkg_libs ~mld_infos =
@@ -637,5 +580,8 @@ let collect_all_visible_odocls sctx () =
            then None
            else Some (Odoc_artifact.odocl_file ctx artifact))))
   in
-  Memo.return (workspace_pkgs, pkg_odocl_files)
+  let* toplevel_artifact = toplevel_index_artifact ctx in
+  let toplevel_odocl = Odoc_artifact.odocl_file ctx toplevel_artifact in
+  let all_odocl_files = toplevel_odocl :: pkg_odocl_files in
+  Memo.return (workspace_pkgs, all_odocl_files)
 ;;

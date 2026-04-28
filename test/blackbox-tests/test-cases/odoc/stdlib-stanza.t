@@ -22,6 +22,8 @@ Demonstrate how odoc interops with the `stdlib` stanza
   > EOF
 
   $ dune build @doc
+  File "_index/index.mld", line 3, characters 2-21:
+  Warning: Failed to resolve reference /l/index Path '/l/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -74,6 +76,7 @@ Demonstrate how odoc interops with the `stdlib` stanza
 
 Bar is compiled
   $ find _build/default -name '*.odoc' | sort -n
+  _build/default/_doc/_index/page-index.odoc
   _build/default/_doc/_odoc/l/l/l.odoc
   _build/default/_doc/_odoc/l/l/l__Bar.odoc
   _build/default/_doc/_odoc/l/l/page-index.odoc
@@ -152,6 +155,7 @@ Bar is compiled
 
 Bar is not linked
   $ find _build/default -name '*.odocl' | sort -n
+  _build/default/_doc/_index/page-index.odocl
   _build/default/_doc/_odocls/l/l/l.odocl
   _build/default/_doc/_odocls/l/l/page-index.odocl
   _build/default/_doc/_odocls/l/page-index.odocl

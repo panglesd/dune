@@ -52,6 +52,12 @@ Test markdown with multiple packages and dependencies
   > EOF
 
   $ dune build @doc-markdown
+  File "_index/index.mld", line 5, characters 2-37:
+  Warning: Failed to resolve reference /utils_lib/index Path '/utils_lib/index' not found
+  File "_index/index.mld", line 4, characters 2-35:
+  Warning: Failed to resolve reference /core_lib/index Path '/core_lib/index' not found
+  File "_index/index.mld", line 3, characters 2-33:
+  Warning: Failed to resolve reference /app_lib/index Path '/app_lib/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -125,8 +131,9 @@ Test markdown with multiple packages and dependencies
   _build/default/_doc/_markdown/utils_lib/utils_lib/index.md
 
   $ cat _build/default/_doc/_markdown/index.md
-  # OCaml Package Documentation
   
-  - [app_lib](app_lib/index.md)
-  - [core_lib](core_lib/index.md)
-  - [utils_lib](utils_lib/index.md)
+  # OCaml package documentation
+  
+  - `app_lib`
+  - `core_lib`
+  - `utils_lib`
