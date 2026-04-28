@@ -3,24 +3,59 @@ open Memo.O
 
 let ( ++ ) = Path.Build.relative
 
-let create_artifact_module ~local_lib ~module_ =
+let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
+  let* packages = Dune_load.packages () in
+  if Package.Name.Map.mem packages pkg
+  then
+    let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
+      Scope.DB.lib_entries_of_package (Context.name ctx) pkg
+    in
+    List.filter libraries ~f:(fun impl_local_lib ->
+      Lib.Local.to_lib impl_local_lib |> Lib.implements |> Option.is_some)
+  else Memo.return []
+;;
+
+let create_artifact_module ~local_lib ~module_ ~cmti_obj_dir =
   let mod_ =
     { Odoc_target.visible = Module.visibility module_ = Visibility.Public
     ; module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none
     }
   in
   let kind = Odoc_artifact.Module (mod_, Odoc_target.Lib local_lib) in
-  let obj_dir = Lib.Local.obj_dir local_lib in
+  let obj_dir =
+    match cmti_obj_dir with
+    | Some d -> d
+    | None -> Lib.Local.obj_dir local_lib
+  in
   let source_file = Obj_dir.Module.cmti_file obj_dir module_ ~cm_kind:(Ocaml Cmi) in
   Odoc_artifact.create ~kind ~source:(Local_source source_file)
 ;;
 
-let discover_local_lib_artifacts sctx ~local_lib =
-  let+ all_modules =
+let discover_local_lib_artifacts sctx _ctx ~local_lib : Odoc_artifact.t list Memo.t =
+  let* all_modules =
     Dir_contents.modules_of_local_lib sctx local_lib ~for_:Compilation_mode.Ocaml
   in
   let modules = Modules.fold all_modules ~init:[] ~f:(fun m acc -> m :: acc) in
-  List.map modules ~f:(fun module_ -> create_artifact_module ~local_lib ~module_)
+  let lib_t = Lib.Local.to_lib local_lib in
+  let* vlib_obj_dir =
+    match Lib.implements lib_t with
+    | None -> Memo.return None
+    | Some vlib_resolve ->
+      let+ vlib = Resolve.Memo.read_memo vlib_resolve in
+      (match Lib.Local.of_lib vlib with
+       | Some local_vlib -> Some (Lib.Local.obj_dir local_vlib)
+       | None -> None)
+  in
+  let artifacts =
+    List.map modules ~f:(fun module_ ->
+      let cmti_obj_dir =
+        match vlib_obj_dir with
+        | Some _ when Module.file module_ ~ml_kind:Intf <> None -> vlib_obj_dir
+        | _ -> None
+      in
+      create_artifact_module ~local_lib ~module_ ~cmti_obj_dir)
+  in
+  Memo.return artifacts
 ;;
 
 let discover_pkg_mld_artifacts ~pkg ~pkg_libs ~mld_infos =
@@ -33,12 +68,12 @@ let discover_pkg_mld_artifacts ~pkg ~pkg_libs ~mld_infos =
 
 let auto_index_path ctx pkg = Odoc_paths.gen_mld_dir ctx pkg ++ "index.mld"
 
-let discover_all_lib_artifacts sctx ~libs =
+let discover_all_lib_artifacts sctx ctx ~libs =
   Memo.List.filter_map libs ~f:(fun lib ->
     match Lib.Local.of_lib lib with
     | None -> Memo.return None
     | Some local_lib ->
-      let+ artifacts = discover_local_lib_artifacts sctx ~local_lib in
+      let+ artifacts = discover_local_lib_artifacts sctx ctx ~local_lib in
       Some (lib, artifacts))
 ;;
 
@@ -73,7 +108,7 @@ let get_local_mld_infos sctx ~pkg =
 
 let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index =
   let lib_subdirs = List.map libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string) in
-  let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
+  let* lib_artifacts = discover_all_lib_artifacts sctx ctx ~libs in
   let has_pkg_index =
     List.exists mld_infos ~f:(fun (_, name) -> String.equal name "index")
   in
@@ -105,7 +140,7 @@ let discover_private_lib_artifacts sctx ctx ~lib_name ~project =
   match lib_opt with
   | None -> Memo.return ([], [])
   | Some local_lib ->
-    let+ module_artifacts = discover_local_lib_artifacts sctx ~local_lib in
+    let+ module_artifacts = discover_local_lib_artifacts sctx ctx ~local_lib in
     module_artifacts, []
 ;;
 
@@ -121,7 +156,15 @@ let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index =
       | Some _ -> None)
   in
   let* mld_infos = get_local_mld_infos sctx ~pkg in
-  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index
+  let* base_artifacts, lib_subdirs, gen_index =
+    discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index
+  in
+  let* impl_artifacts =
+    let* impl_libs = vlib_impl_libs_of_local_pkg ctx ~pkg in
+    Memo.List.concat_map impl_libs ~f:(fun local_lib ->
+      discover_local_lib_artifacts sctx ctx ~local_lib)
+  in
+  Memo.return (base_artifacts @ impl_artifacts, lib_subdirs, gen_index)
 ;;
 
 let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name =
