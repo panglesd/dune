@@ -171,6 +171,27 @@ let parent_id t =
      | None -> base_id)
 ;;
 
+let is_lib_vendored lib =
+  let lib_info = Lib.info lib in
+  match Lib_info.status lib_info with
+  | Installed_private | Installed -> Memo.return false
+  | Public _ | Private _ ->
+    let src_path = Path.drop_optional_build_context (Lib_info.src_dir lib_info) in
+    (match Path.as_in_source_tree src_path with
+     | Some src_dir -> Source_tree.is_vendored src_dir
+     | None -> Memo.return false)
+;;
+
+let should_suppress_output t =
+  match t.source with
+  | Installed_source _ -> Memo.return true
+  | Generated _ -> Memo.return true
+  | Local_source _ ->
+    (match t.kind with
+     | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> is_lib_vendored lib
+     | Page _ -> Memo.return false)
+;;
+
 let create ~kind ~source ~extra_libs ~extra_packages =
   { kind; source; extra_libs; extra_packages }
 ;;

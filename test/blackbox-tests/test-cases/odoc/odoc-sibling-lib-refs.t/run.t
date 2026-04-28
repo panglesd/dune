@@ -48,28 +48,7 @@ Create two libraries in the same package that don't depend on each other:
 Build the documentation - should succeed without unresolved reference warnings:
 
   $ dune build @doc 2>&1 | grep -i "unresolved\|warning" || echo "No warnings"
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: 'const' is deprecated, use 'constructor' instead.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Code blocks should be indented at the opening `{`.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Alert unsynchronized_access not expected here.
-  Warning: Code blocks should be indented at the opening `{`.
+  No warnings
 
 Verify both libraries are documented:
 

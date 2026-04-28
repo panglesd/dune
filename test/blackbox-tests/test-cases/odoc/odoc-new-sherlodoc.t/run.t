@@ -61,50 +61,6 @@ This test if the sherlodoc js files are generated
   /*   - --favored ../../odoc/local/foo/byte/foo_byte.odocl */
   /*   - --favored ../../index/local/foo/byte/page-byte.odocl */
   $ dune runtest
-  File "domain.mli", line 69, character 4 to line 74, character 6:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "fun.mli", line 92, characters 3-8:
-  Warning: 'const' is deprecated, use 'constructor' instead.
-  File "scanf.mli", line 86, character 0 to line 88, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "array.mli", line 449, character 1 to line 455, character 2:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "arrayLabels.mli", line 449, character 1 to line 455, character 2:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "buffer.mli", line 35, character 0 to line 37, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "bytes.mli", line 368, character 3 to line 373, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "bytes.mli", line 395, character 3 to line 398, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "bytes.mli", line 432, character 4 to line 435, character 6:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "bytesLabels.mli", line 368, character 3 to line 373, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "bytesLabels.mli", line 395, character 3 to line 398, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "bytesLabels.mli", line 432, character 4 to line 435, character 6:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "dynarray.mli", line 47, character 0 to line 49, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "hashtbl.mli", line 47, character 0 to line 49, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "queue.mli", line 24, character 0 to line 26, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "stack.mli", line 23, character 0 to line 25, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "format.mli", line 363, character 3 to line 369, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "format.mli", line 372, character 3 to line 375, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "format.mli", line 1575, character 2 to line 1579, character 6:
-  Warning: Code blocks should be indented at the opening `{`.
-  File "ephemeron.mli", line 70, character 0 to line 72, character 1:
-  Warning: Alert unsynchronized_access not expected here.
-  File "moreLabels.mli", line 64, character 2 to line 66, character 3:
-  Warning: Alert unsynchronized_access not expected here.
-  File "gc.mli", line 431, character 3 to line 440, character 5:
-  Warning: Code blocks should be indented at the opening `{`.
   <!DOCTYPE html>
   <html xmlns="http://www.w3.org/1999/xhtml"><head><title>index (index)</title><meta charset="utf-8"/><link rel="stylesheet" href="odoc.support/odoc.css"/><meta name="generator" content="odoc 3.1.0"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script src="odoc.support/highlight.pack.js"></script><script>hljs.initHighlightingOnLoad();</script></head><body class="odoc"><nav class="odoc-nav"></nav><header class="odoc-preamble"><h1 id="ocaml-package-documentation"><a href="#ocaml-package-documentation" class="anchor"></a>OCaml package documentation</h1><ul><li><a href="bar/index.html" title="index">bar</a></li><li><a href="foo/index.html" title="index">foo</a></li></ul></header><div class="odoc-content"></div></body></html>
 

@@ -471,6 +471,7 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
     in
     let* pkg_discovery = Package_discovery.create ~context:ctx in
     let* include_flags = odoc_include_flags ctx None closure pkg_discovery in
+    let* should_suppress = Artifact.should_suppress_output artifact in
     let lib_deps = Dep.deps ctx [] external_requires in
     let run_odoc =
       let open Action_builder.With_targets.O in
@@ -481,7 +482,7 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
             (run_odoc
                sctx
                "compile"
-               ~quiet:false
+               ~quiet:should_suppress
                ~flags_for:(Some (Artifact.odoc_file ctx artifact))
                [ include_flags
                ; (let parent = Artifact.parent_id artifact in
@@ -528,6 +529,8 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       (List.concat_map ("__private_lib__" :: all_pkg_names) ~f:(fun pkg_name ->
          [ Command.Args.A "--warnings-tags"; Command.Args.A pkg_name ]))
   in
+  (* Suppress output for installed packages and vendored libraries *)
+  let* quiet = Artifact.should_suppress_output odoc_file in
   let artifact_config =
     { Odoc_config.deps = { packages = extra_packages; libraries = [] } }
   in
@@ -535,7 +538,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
     run_odoc
       sctx
       "link"
-      ~quiet:false
+      ~quiet
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
       [ odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery
       ; odoc_pkg_flags ctx pkg_discovery ~current_pkg_opt:pkg ~artifact_config ~requires
@@ -589,11 +592,12 @@ let generate_output_action sctx ~artifact ?search_db ~output_format () =
       in
       "html-generate", args
   in
+  let+ quiet = Artifact.should_suppress_output artifact in
   let odocl_dep = Command.Args.Dep (Path.build (Artifact.odocl_file ctx artifact)) in
   run_odoc
     sctx
     subcommand
-    ~quiet:false
+    ~quiet
     ~flags_for:None
     [ A "-o"; A output_root_rel; odocl_dep; html_args ]
 ;;
@@ -602,7 +606,7 @@ let generate_html_artifact sctx ~artifact ?search_db ~output_format () =
   let ctx = Super_context.context sctx in
   match Artifact.get_kind artifact with
   | Module _ | Page _ ->
-    let action = generate_output_action sctx ~artifact ?search_db ~output_format () in
+    let* action = generate_output_action sctx ~artifact ?search_db ~output_format () in
     let rule =
       let file_target () =
         Action_builder.With_targets.add

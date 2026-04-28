@@ -30,8 +30,6 @@ Initially odoc will depend on ocaml-base-compiler.5.2.0 to match the project.
   - ocaml-compiler.5.2.0
   - odoc.0.0.1
   hello from fake odoc
-  hello from fake odoc
-  hello from fake odoc
   File "_doc/_html/_unknown_", line 1, characters 0-0:
   Error: Rule failed to produce directory "_doc/_html/odoc.support"
   File "_doc/_index/_unknown_", line 1, characters 0-0:
@@ -54,8 +52,6 @@ We can re-run "dune ocaml doc" without relocking or rebuilding.
   - ocaml-base-compiler.5.2.0
   - ocaml-compiler.5.2.0
   - odoc.0.0.1
-  hello from fake odoc
-  hello from fake odoc
   hello from fake odoc
   File "_doc/_html/_unknown_", line 1, characters 0-0:
   Error: Rule failed to produce directory "_doc/_html/odoc.support"
@@ -91,8 +87,6 @@ before running. Odoc now depends on ocaml.5.1.0.
   - ocaml-base-compiler.5.1.0
   - ocaml-compiler.5.1.0
   - odoc.0.0.1
-  hello from fake odoc
-  hello from fake odoc
   hello from fake odoc
   File "_doc/_html/_unknown_", line 1, characters 0-0:
   Error: Rule failed to produce directory "_doc/_html/odoc.support"
