@@ -55,8 +55,6 @@ Test that markdown generation includes all modules following naming conventions.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-29:
-  Warning: Failed to resolve reference /mylib/index Path '/mylib/index' not found
 
   $ find _build/default/_doc/_markdown -name "*.md" | sort
   _build/default/_doc/_markdown/index.md

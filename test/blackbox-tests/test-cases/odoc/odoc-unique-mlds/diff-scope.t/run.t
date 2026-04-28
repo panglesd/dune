@@ -44,7 +44,3 @@ Duplicate mld's in different scope
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 4, characters 2-31:
-  Warning: Failed to resolve reference /scope2/index Path '/scope2/index' not found
-  File "_index/index.mld", line 3, characters 2-31:
-  Warning: Failed to resolve reference /scope1/index Path '/scope1/index' not found

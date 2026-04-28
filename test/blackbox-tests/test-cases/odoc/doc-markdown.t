@@ -92,8 +92,6 @@ Build markdown documentation:
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-29:
-  Warning: Failed to resolve reference /mylib/index Path '/mylib/index' not found
   $ list_markdown_docs
   _build/default/_doc/_markdown/index.md
   _build/default/_doc/_markdown/mylib/index.md
@@ -107,4 +105,4 @@ Check the top-level index contains markdown:
   
   # OCaml package documentation
   
-  - `mylib`
+  - [mylib](./mylib/index.md)

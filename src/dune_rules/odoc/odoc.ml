@@ -539,6 +539,10 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
       [ odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery
       ; odoc_pkg_flags ctx pkg_discovery ~current_pkg_opt:pkg ~artifact_config ~requires
+      ; (match pkg with
+         | Some pkg_name ->
+           Command.Args.As [ "--current-package"; Package.Name.to_string pkg_name ]
+         | None -> Command.Args.S [])
       ; A "--enable-missing-root-warning"
       ; warnings_tags_args
       ; A "-o"

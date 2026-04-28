@@ -49,10 +49,6 @@ Build documentation:
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 4, characters 2-27:
-  Warning: Failed to resolve reference /pkgb/index Path '/pkgb/index' not found
-  File "_index/index.mld", line 3, characters 2-27:
-  Warning: Failed to resolve reference /pkga/index Path '/pkga/index' not found
 
 Verify documentation was generated for both packages:
 

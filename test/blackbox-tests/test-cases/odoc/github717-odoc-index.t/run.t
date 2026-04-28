@@ -45,5 +45,3 @@ Tests odoc index generation in legacy mode.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-41:
-  Warning: Failed to resolve reference /hello_world/index Path '/hello_world/index' not found
