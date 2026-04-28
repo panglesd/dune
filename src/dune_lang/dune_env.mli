@@ -22,6 +22,9 @@ module Odoc : sig
   type t =
     { warnings : warnings option
     ; support : support option
+    ; flags : Ordered_set_lang.Unexpanded.t
+    ; link_flags : Ordered_set_lang.Unexpanded.t
+    ; html_flags : Ordered_set_lang.Unexpanded.t
     }
 
   val decode : t Decoder.t

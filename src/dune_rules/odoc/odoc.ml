@@ -194,6 +194,38 @@ module Flags = struct
   let get ~dir = get_memo ~dir |> Action_builder.of_memo
 end
 
+(* Resolved CLI flags from the env stanza, with OSL expansion *)
+type cli_flags =
+  { compile : string list Action_builder.t
+  ; link : string list Action_builder.t
+  ; html : string list Action_builder.t
+  }
+
+let cli_flags_env =
+  let f =
+    Env_stanza_db_flags.flags
+      ~name:"odoc-cli-flags-env"
+      ~root:(fun _ctx _project ->
+        Memo.return
+          { compile = Action_builder.return []
+          ; link = Action_builder.return []
+          ; html = Action_builder.return []
+          })
+      ~f:(fun ~parent expander (config : Dune_env.config) ->
+        let+ parent = parent in
+        let eval osl ~default =
+          Expander.expand_and_eval_set expander osl ~standard:default
+        in
+        { compile = eval config.odoc.flags ~default:parent.compile
+        ; link = eval config.odoc.link_flags ~default:parent.link
+        ; html = eval config.odoc.html_flags ~default:parent.html
+        })
+  in
+  fun ~dir ->
+    let* () = Memo.return () in
+    (Staged.unstage f) dir
+;;
+
 let odoc_base_flags quiet build_dir =
   let open Action_builder.O in
   let+ conf = Flags.get ~dir:build_dir in
@@ -508,6 +540,7 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
     let* pkg_discovery = Package_discovery.create ~context:ctx in
     let* include_flags = odoc_include_flags ctx None closure pkg_discovery in
     let* should_suppress = Artifact.should_suppress_output artifact in
+    let* cli_flags = cli_flags_env ~dir:(Context.build_dir ctx) in
     let lib_deps = Dep.deps ctx [] external_requires in
     let run_odoc =
       let open Action_builder.With_targets.O in
@@ -544,6 +577,9 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                   | Page (_, Pkg pkg) ->
                     Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ]
                   | Page (_, Toplevel _) -> Command.Args.S [])
+               ; Dyn
+                   (Action_builder.map cli_flags.compile ~f:(fun flags ->
+                      Command.Args.As flags))
                ; Command.Args.Dep source_file
                ])
     in
@@ -567,6 +603,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   in
   (* Suppress output for installed packages and vendored libraries *)
   let* quiet = Artifact.should_suppress_output odoc_file in
+  let* cli_flags = cli_flags_env ~dir:(Context.build_dir ctx) in
   let artifact_config =
     { Odoc_config.deps = { packages = extra_packages; libraries = [] } }
   in
@@ -586,6 +623,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       ; warnings_tags_args
       ; A "-o"
       ; Target (Artifact.odocl_file ctx odoc_file)
+      ; Dyn (Action_builder.map cli_flags.link ~f:(fun flags -> Command.Args.As flags))
       ; Dep (Path.build (Artifact.odoc_file ctx odoc_file))
       ]
   in
@@ -619,6 +657,11 @@ let generate_output_action
   let doc_root = Paths.root ctx in
   let output_root = Paths.output_root ctx mode output_format in
   let output_root_rel = Path.reach (Path.build output_root) ~from:(Path.build doc_root) in
+  let* cli_flags = cli_flags_env ~dir:(Context.build_dir ctx) in
+  let cli_html_args =
+    Command.Args.Dyn
+      (Action_builder.map cli_flags.html ~f:(fun flags -> Command.Args.As flags))
+  in
   let* subcommand, html_args =
     match (output_format : Output_format.t) with
     | Markdown -> Memo.return ("markdown-generate", Command.Args.empty)
@@ -666,7 +709,7 @@ let generate_output_action
     subcommand
     ~quiet
     ~flags_for:None
-    [ A "-o"; A output_root_rel; odocl_dep; html_args ]
+    [ A "-o"; A output_root_rel; cli_html_args; odocl_dep; html_args ]
 ;;
 
 let generate_html_artifact
