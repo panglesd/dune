@@ -22,31 +22,35 @@ let add_rule sctx =
 ;;
 
 module Paths = struct
+  type output_format =
+    | Html
+    | Json
+    | Markdown
+
+  let output_subdir = function
+    | Html | Json -> "_html"
+    | Markdown -> "_markdown"
+  ;;
+
   let odoc_support_dirname = "odoc.support"
   let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
+  let add_pkg_lnu base = function
+    | Lib local_lib -> base ++ pkg_or_lnu local_lib
+    | Pkg pkg -> base ++ Package.Name.to_string pkg
+  ;;
+
   let odocs ctx = function
-    | Lib lib ->
-      let obj_dir = Lib.Local.obj_dir lib in
-      Obj_dir.odoc_dir obj_dir
-    | Pkg pkg -> root ctx ++ sprintf "_odoc/pkg/%s" (Package.Name.to_string pkg)
+    | Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
+    | Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
   ;;
 
-  let html_root ctx = root ctx ++ "_html"
-  let markdown_root ctx = root ctx ++ "_markdown"
+  let output_root ctx format = root ctx ++ output_subdir format
+  let html_root ctx = output_root ctx Html
+  let markdown_root ctx = output_root ctx Markdown
   let odocl_root ctx = root ctx ++ "_odocls"
-
-  let add_pkg_lnu base m =
-    base
-    ++
-    match m with
-    | Pkg pkg -> Package.Name.to_string pkg
-    | Lib lib -> pkg_or_lnu lib
-  ;;
-
-  let html ctx m = add_pkg_lnu (html_root ctx) m
-  let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
-  let odocl ctx m = add_pkg_lnu (odocl_root ctx) m
+  let output ctx format target = add_pkg_lnu (output_root ctx format) target
+  let odocl ctx target = add_pkg_lnu (odocl_root ctx) target
   let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
   let odoc_support ctx = html_root ctx ++ odoc_support_dirname
   let toplevel_index ctx = html_root ctx ++ "index.html"
@@ -54,7 +58,7 @@ module Paths = struct
 end
 
 module Output_format = struct
-  type t =
+  type t = Paths.output_format =
     | Html
     | Json
     | Markdown
@@ -89,12 +93,6 @@ module Output_format = struct
     | Markdown -> Paths.markdown_index ctx
   ;;
 end
-
-let output_dir_for_format ctx format target =
-  match (format : Output_format.t) with
-  | Html | Json -> Paths.html ctx target
-  | Markdown -> Paths.markdown ctx target
-;;
 
 module Artifact = struct
   type page = { name : string }
@@ -166,10 +164,10 @@ module Artifact = struct
   ;;
 
   let output_file ctx format t =
-    let base = output_dir_for_format ctx format (target t) in
+    let base = Paths.output ctx format (target t) in
     let basename = get_basename t in
     let suffix = Filename.of_string_exn (Output_format.extension format) in
-    match t.kind, (format : Output_format.t) with
+    match t.kind, (format : Paths.output_format) with
     | Module _, (Html | Json) ->
       let dir = base ++ Stdune.String.capitalize basename in
       dir ++ ("index" ^ suffix)
@@ -210,7 +208,7 @@ module Dep : sig
     These dependencies may be used using the [deps] function *)
   val setup_deps : Context.t -> target -> Path.Set.t -> unit Memo.t
 end = struct
-  let format_alias f ctx m = Output_format.alias f ~dir:(output_dir_for_format ctx f m)
+  let format_alias f ctx m = Output_format.alias f ~dir:(Paths.output ctx f m)
   let alias = Alias.make (Alias.Name.of_string ".odoc-all")
 
   let deps ctx pkg requires =
@@ -850,32 +848,23 @@ let setup_pkg_odocl_rules sctx ~pkg ~for_ : unit Memo.t =
 ;;
 
 let out_file ctx (output : Output_format.t) artifact =
-  Artifact.output_file ctx output artifact
+  Path.build (Artifact.output_file ctx output artifact)
 ;;
 
 let out_files ctx (output : Output_format.t) artifacts =
   let extra_files =
     match output with
     | Html -> [ Path.build (Paths.odoc_support ctx) ]
-    | Json -> []
-    | Markdown -> []
+    | Json | Markdown -> []
   in
   Path.build (Output_format.toplevel_index_path output ctx)
-  :: List.rev_append
-       extra_files
-       (List.map artifacts ~f:(fun artifact -> Path.build (out_file ctx output artifact)))
+  :: List.rev_append extra_files (List.map artifacts ~f:(out_file ctx output))
 ;;
 
-let add_format_alias_deps ctx format target odocs =
-  match (format : Output_format.t) with
-  | Markdown ->
-    (* skip alias deps for markdown since package directories are directory targets *)
-    Memo.return ()
-  | Html | Json ->
-    let paths = out_files ctx format odocs in
-    Rules.Produce.Alias.add_deps
-      (Dep.format_alias format ctx target)
-      (Action_builder.paths paths)
+let add_format_alias_deps ctx format target artifacts =
+  Rules.Produce.Alias.add_deps
+    (Dep.format_alias format ctx target)
+    (Action_builder.paths (out_files ctx format artifacts))
 ;;
 
 let setup_lib_html_rules_def =
@@ -907,7 +896,7 @@ let setup_lib_html_rules_def =
 let search_db_for_lib sctx lib =
   let target = Lib lib in
   let ctx = Super_context.context sctx in
-  let dir = Paths.html ctx target in
+  let dir = Paths.output ctx Html target in
   let* odocs = odoc_artefacts sctx target in
   let odocls = List.map odocs ~f:(fun a -> Artifact.odocl_file ctx a) in
   Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls
@@ -928,7 +917,7 @@ let setup_pkg_html_rules_def =
   let f (sctx, pkg, _for_) =
     let ctx = Super_context.context sctx in
     let* libs = libs_of_pkg (Context.name ctx) ~pkg in
-    let dir = Paths.html ctx (Pkg pkg) in
+    let dir = Paths.output ctx Html (Pkg pkg) in
     let* pkg_odocs = odoc_artefacts sctx (Pkg pkg) in
     let* lib_odocs =
       Memo.List.concat_map libs ~f:(fun lib -> odoc_artefacts sctx (Lib lib))
