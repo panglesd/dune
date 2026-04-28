@@ -29,3 +29,20 @@ val collect_all_visible_odocls
   :  Super_context.t
   -> unit
   -> (Package.Name.t list * Path.Build.t list) Memo.t
+
+(** {1 Dependency Expansion} *)
+
+(** Expand packages with their odoc-config dependencies transitively.
+
+    Starting from the initial packages and private libraries, follows
+    library dependencies and odoc-config [(documentation (depends ...))]
+    declarations to find all packages needed for complete documentation.
+
+    Uses [Lib.descriptive_closure] rather than [Lib.closure] because
+    multiple implementations of virtual libraries may be present when
+    documenting multiple packages together. *)
+val expand_packages_with_odoc_config
+  :  Context.t
+  -> packages:Package.Name.t list
+  -> private_libs:Lib.t list
+  -> Package.Name.Set.t Memo.t
