@@ -23,10 +23,11 @@ let discover_local_lib_artifacts sctx ~local_lib =
   List.map modules ~f:(fun module_ -> create_artifact_module ~local_lib ~module_)
 ;;
 
-let discover_pkg_mld_artifacts ~pkg ~mld_infos =
+let discover_pkg_mld_artifacts ~pkg ~pkg_libs ~mld_infos =
   let target = Odoc_target.Pkg pkg in
   List.map mld_infos ~f:(fun (source, name) ->
-    let kind = Odoc_artifact.Page ({ Odoc_target.name }, target) in
+    let page = { Odoc_target.name; pkg_libs } in
+    let kind = Odoc_artifact.Page (page, target) in
     Odoc_artifact.create ~kind ~source)
 ;;
 
@@ -84,7 +85,7 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index 
       let content = default_index ~pkg ~lib_artifacts in
       mld_infos @ [ Odoc_artifact.Local_source path, "index" ], Some (path, content))
   in
-  let mld_artifacts = discover_pkg_mld_artifacts ~pkg ~mld_infos in
+  let mld_artifacts = discover_pkg_mld_artifacts ~pkg ~pkg_libs:libs ~mld_infos in
   let all_module_artifacts = List.concat_map lib_artifacts ~f:snd in
   let all_artifacts = mld_artifacts @ all_module_artifacts in
   Memo.return (all_artifacts, lib_subdirs, gen_index)
@@ -116,11 +117,8 @@ let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name =
   match lib_opt with
   | Some local_lib when Option.is_none (Lib_info.package (Lib.Local.info local_lib)) ->
     let+ module_artifacts = discover_local_lib_artifacts sctx ~local_lib in
-    module_artifacts, [], None, None
+    module_artifacts, [], None
   | _ ->
     let pkg = Package.Name.of_string pkg_or_lib_unique_name in
-    let+ artifacts, lib_subdirs, gen_index =
-      discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
-    in
-    artifacts, lib_subdirs, gen_index, Some pkg
+    discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
 ;;

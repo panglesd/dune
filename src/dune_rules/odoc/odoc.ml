@@ -556,9 +556,7 @@ let compute_link_requires sctx ~artifact =
        let+ pkg_libs = libs_of_pkg (Context.name ctx) ~pkg in
        let pkg_libs = List.map pkg_libs ~f:Lib.Local.to_lib in
        Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs))
-  | Page (_, Pkg pkg) ->
-    let* pkg_libs = libs_of_pkg (Context.name ctx) ~pkg in
-    let pkg_libs = List.map pkg_libs ~f:Lib.Local.to_lib in
+  | Page ({ pkg_libs; _ }, Pkg _) ->
     if List.is_empty pkg_libs
     then Memo.return (Resolve.return [])
     else
@@ -746,9 +744,16 @@ let default_index ~pkg ~lib_artifacts =
   Buffer.contents b
 ;;
 
-let with_package_artifacts sctx ~pkg_or_lib_name ~f =
+let is_private_lib_name s = String.contains s '@'
+
+let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let ctx = Super_context.context sctx in
-  let+ all_artifacts, lib_subdirs, _gen_index, pkg =
+  let pkg =
+    if is_private_lib_name pkg_or_lib_name
+    then None
+    else Some (Package.Name.of_string pkg_or_lib_name)
+  in
+  let+ all_artifacts, lib_subdirs, _gen_index =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
@@ -759,6 +764,7 @@ let with_package_artifacts sctx ~pkg_or_lib_name ~f =
     List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
   in
   let rules = f ~ctx ~pkg ~all_artifacts ~all_lib_names in
+  let _ = dir in
   Build_config.Gen_rules.make rules
 ;;
 
@@ -795,10 +801,11 @@ let compile_and_setup_deps
     | Page (_, target) -> Dep.setup_deps ctx target (Path.Set.singleton odoc_file))
 ;;
 
-let handle_odoc_artifacts sctx ~pkg_or_lib_name =
+let handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name =
   Log.info (sprintf "handle_odoc_artifacts: %s" pkg_or_lib_name) [];
   with_package_artifacts
     sctx
+    ~dir
     ~pkg_or_lib_name
     ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
       Rules.collect_unit (fun () ->
@@ -830,7 +837,7 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
   let pkg = Package.Name.of_string pkg_name in
   let rules =
     Rules.collect_unit (fun () ->
-      let* all_artifacts, lib_subdirs, _gen_index, _pkg =
+      let* all_artifacts, lib_subdirs, _gen_index =
         Odoc_discovery.discover_package_artifacts
           sctx
           ctx
@@ -868,9 +875,10 @@ let handle_odoc_pkg_pages sctx ~dir:_ ~pkg_name =
   Memo.return (Build_config.Gen_rules.make rules)
 ;;
 
-let handle_odocl_artifacts sctx ~pkg_or_lib_name =
+let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
   with_package_artifacts
     sctx
+    ~dir
     ~pkg_or_lib_name
     ~f:(fun ~ctx ~pkg ~all_artifacts ~all_lib_names ->
       Rules.collect_unit (fun () ->
@@ -898,7 +906,7 @@ let handle_odocl_artifacts sctx ~pkg_or_lib_name =
 let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
   let ctx = Super_context.context sctx in
   let pkg = Package.Name.of_string pkg_or_lib_name in
-  let* all_artifacts, lib_subdirs, _gen_index, _pkg =
+  let* all_artifacts, lib_subdirs, _gen_index =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
@@ -1034,7 +1042,7 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
 
 let handle_mlds_dir sctx ~pkg_name =
   let ctx = Super_context.context sctx in
-  let* _all_artifacts, _lib_subdirs, gen_index, _pkg =
+  let* _all_artifacts, _lib_subdirs, gen_index =
     Odoc_discovery.discover_package_artifacts
       sctx
       ctx
@@ -1114,8 +1122,8 @@ let gen_rules sctx ~dir rest =
   (* Compiled/linked odoc trees *)
   | [ "_odoc" ] | [ "_odoc"; "pkg" ] | [ "_odocls" ] | [ "_mlds" ] -> empty_rules ()
   | [ "_odoc"; "pkg"; pkg_name ] -> handle_odoc_pkg_pages sctx ~dir ~pkg_name
-  | [ "_odoc"; pkg_or_lib_name ] -> handle_odoc_artifacts sctx ~pkg_or_lib_name
-  | [ "_odocls"; pkg_or_lib_name ] -> handle_odocl_artifacts sctx ~pkg_or_lib_name
+  | [ "_odoc"; pkg_or_lib_name ] -> handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name
+  | [ "_odocls"; pkg_or_lib_name ] -> handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name
   | [ "_mlds"; pkg_name ] -> handle_mlds_pkg pkg_name
   | ("_odoc" | "_odocls" | "_mlds") :: _ :: _ :: _ -> redirect ()
   | _ -> empty_rules ()

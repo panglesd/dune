@@ -1,6 +1,9 @@
 open Import
 
-type page = { name : string }
+type page =
+  { name : string
+  ; pkg_libs : Lib.t list
+  }
 
 type mod_ =
   { visible : bool
