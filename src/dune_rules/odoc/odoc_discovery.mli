@@ -1,5 +1,6 @@
 open Import
 
+val get_workspace_packages : unit -> Package.Name.t list Memo.t
 val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
 
 val discover_package_artifacts
@@ -14,5 +15,5 @@ val collect_all_visible_odocls
   :  Super_context.t
   -> default_index:
        (pkg:Package.Name.t -> lib_artifacts:(Lib.t * Odoc_artifact.t list) list -> string)
-  -> workspace_pkgs:Package.Name.t list
-  -> Path.Build.t list Memo.t
+  -> unit
+  -> (Package.Name.t list * Path.Build.t list) Memo.t
