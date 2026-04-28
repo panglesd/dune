@@ -36,8 +36,6 @@ Test markdown generation with package documentation (.mld files)
   > EOF
 
   $ dune build @doc-markdown
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /example/index Path '/example/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -82,6 +80,8 @@ Test markdown generation with package documentation (.mld files)
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_index/index.mld", line 3, characters 2-33:
+  Warning: Failed to resolve reference /example/index Path '/example/index' not found
   File "_mlds/example/index.mld", line 4, characters 0-26:
   Warning: Failed to resolve reference /example/Example Path '/example/Example' not found
 

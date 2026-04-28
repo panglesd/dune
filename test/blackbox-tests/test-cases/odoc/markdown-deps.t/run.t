@@ -52,12 +52,6 @@ Test markdown with multiple packages and dependencies
   > EOF
 
   $ dune build @doc-markdown
-  File "_index/index.mld", line 5, characters 2-37:
-  Warning: Failed to resolve reference /utils_lib/index Path '/utils_lib/index' not found
-  File "_index/index.mld", line 4, characters 2-35:
-  Warning: Failed to resolve reference /core_lib/index Path '/core_lib/index' not found
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /app_lib/index Path '/app_lib/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -106,6 +100,12 @@ Test markdown with multiple packages and dependencies
   Warning: Failed to resolve reference /core_lib/Core_lib Path '/core_lib/Core_lib' not found
   File "_mlds/utils_lib/index.mld", line 4, characters 0-30:
   Warning: Failed to resolve reference /utils_lib/Utils_lib Path '/utils_lib/Utils_lib' not found
+  File "_index/index.mld", line 5, characters 2-37:
+  Warning: Failed to resolve reference /utils_lib/index Path '/utils_lib/index' not found
+  File "_index/index.mld", line 4, characters 2-35:
+  Warning: Failed to resolve reference /core_lib/index Path '/core_lib/index' not found
+  File "_index/index.mld", line 3, characters 2-33:
+  Warning: Failed to resolve reference /app_lib/index Path '/app_lib/index' not found
   File "_mlds/app_lib/index.mld", line 4, characters 0-26:
   Warning: Failed to resolve reference /app_lib/App_lib Path '/app_lib/App_lib' not found
 

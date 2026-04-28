@@ -1,9 +1,5 @@
 Duplicate mld's in different scope
   $ dune build @doc
-  File "_index/index.mld", line 4, characters 2-31:
-  Warning: Failed to resolve reference /scope2/index Path '/scope2/index' not found
-  File "_index/index.mld", line 3, characters 2-31:
-  Warning: Failed to resolve reference /scope1/index Path '/scope1/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -50,5 +46,9 @@ Duplicate mld's in different scope
   Warning: Code blocks should be indented at the opening `{`.
   File "_mlds/scope1/index.mld", line 4, characters 0-24:
   Warning: Failed to resolve reference /scope1/Scope1 Path '/scope1/Scope1' not found
+  File "_index/index.mld", line 4, characters 2-31:
+  Warning: Failed to resolve reference /scope2/index Path '/scope2/index' not found
+  File "_index/index.mld", line 3, characters 2-31:
+  Warning: Failed to resolve reference /scope1/index Path '/scope1/index' not found
   File "_mlds/scope2/index.mld", line 4, characters 0-24:
   Warning: Failed to resolve reference /scope2/Scope2 Path '/scope2/Scope2' not found
