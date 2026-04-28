@@ -91,6 +91,24 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index 
   Memo.return (all_artifacts, lib_subdirs, gen_index)
 ;;
 
+(* Discover artifacts for a private library.
+   Takes the fields from Scope_id.Private_lib directly to make invalid calls impossible. *)
+let discover_private_lib_artifacts sctx ctx ~lib_name ~project =
+  let* lib_db =
+    let+ scope = Scope.DB.find_by_project (Context.name ctx) project in
+    Scope.libs scope
+  in
+  let* lib_opt =
+    let+ lib = Lib.DB.find lib_db lib_name in
+    Option.bind ~f:Lib.Local.of_lib lib
+  in
+  match lib_opt with
+  | None -> Memo.return ([], [])
+  | Some local_lib ->
+    let+ module_artifacts = discover_local_lib_artifacts sctx ~local_lib in
+    module_artifacts, []
+;;
+
 let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index =
   let* { Scope.DB.Lib_entry.Set.libraries; _ } =
     Scope.DB.lib_entries_of_package (Context.name ctx) pkg
@@ -107,19 +125,14 @@ let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index =
 ;;
 
 let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name =
-  let* lib_name, lib_db =
-    Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_unique_name
-  in
-  let* lib_opt =
-    let+ lib = Lib.DB.find lib_db lib_name in
-    Option.bind ~f:Lib.Local.of_lib lib
-  in
-  match lib_opt with
-  | Some local_lib when Option.is_none (Lib_info.package (Lib.Local.info local_lib)) ->
-    let+ module_artifacts = discover_local_lib_artifacts sctx ~local_lib in
-    module_artifacts, [], None
-  | _ ->
-    let pkg = Package.Name.of_string pkg_or_lib_unique_name in
+  let* scope_id = Odoc_scope.Scope_id.of_string pkg_or_lib_unique_name in
+  match scope_id with
+  | Odoc_scope.Scope_id.Private_lib { unique_name = _; lib_name; project } ->
+    let+ artifacts, lib_subdirs =
+      discover_private_lib_artifacts sctx ctx ~lib_name ~project
+    in
+    artifacts, lib_subdirs, None
+  | Odoc_scope.Scope_id.Package pkg ->
     discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
 ;;
 
