@@ -18,3 +18,6 @@ val odoc_support : Context.t -> Path.Build.t
 
 (** Path to toplevel index.mld (generated). *)
 val toplevel_index_mld : Context.t -> Path.Build.t
+
+(** Path to the remap.txt file for URL remapping. *)
+val remap_file : Context.t -> Path.Build.t

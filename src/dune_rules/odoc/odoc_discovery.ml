@@ -14,6 +14,11 @@ let get_workspace_packages () =
     Memo.return (List.filter all_pkgs ~f:(Package.Name.Set.mem visible_pkgs))
 ;;
 
+let is_local_package pkg =
+  let+ packages = Dune_load.packages () in
+  Package.Name.Map.mem packages pkg
+;;
+
 let find_local_package pkg =
   let+ packages = Dune_load.packages () in
   Package.Name.Map.find packages pkg

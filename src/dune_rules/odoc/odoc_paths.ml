@@ -58,3 +58,4 @@ let lib_mld_dir ctx pkg lib_name = gen_mld_dir ctx pkg ++ Lib_name.to_string lib
 let lib_index_mld ctx pkg lib_name = lib_mld_dir ctx pkg lib_name ++ "index.mld"
 let odoc_support ctx = output_root ctx Html ++ odoc_support_dirname
 let toplevel_index_mld ctx = index_root ctx ++ "index.mld"
+let remap_file ctx = root ctx ++ "_remap" ++ "remap.txt"
