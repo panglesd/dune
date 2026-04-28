@@ -22,6 +22,9 @@ Demonstrate how odoc interops with the `stdlib` stanza
   > EOF
 
   $ dune build @doc
+  File "../.l.objs/byte/l.odoc":
+  Warning: Couldn't find the following modules:
+    Bar
 
 Bar is compiled
   $ find _build/default -name '*.odoc' | sort -n
