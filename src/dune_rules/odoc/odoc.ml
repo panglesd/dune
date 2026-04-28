@@ -691,14 +691,14 @@ let setup_toplevel_index_deps sctx output =
   Rules.Produce.Alias.add_deps (alias_of_dir root) (Action_builder.deps deps)
 ;;
 
-let generate_html_for_package sctx ~ctx ~pkg ~search_db ~all_artifacts ~output_format () =
+let generate_html_for_package sctx ~ctx ~pkg ~all_artifacts ~output_format () =
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
   let output_file a = Path.build (Artifact.output_file ctx output_format a) in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-      generate_html_artifact sctx ~artifact ?search_db ~output_format ())
+      generate_html_artifact sctx ~artifact ~output_format ())
   in
   let artifact_paths = List.map visible_artifacts ~f:output_file in
   let pkg_alias = Dep.format_alias output_format ctx (Pkg pkg) in
@@ -920,34 +920,11 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_formats =
     List.filter Output_format.all ~f:(fun f ->
       not (List.mem output_formats f ~equal:Poly.equal))
   in
-  let needs_search_db =
-    List.exists output_formats ~f:(fun f ->
-      match (f : Output_format.t) with
-      | Html | Json -> true
-      | Markdown -> false)
-  in
   let rules =
     Rules.collect_unit (fun () ->
-      let* search_db =
-        if needs_search_db
-        then (
-          let visible = List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a)) in
-          let dir = Paths.output ctx Html (Pkg pkg) in
-          let odocls = List.map visible ~f:(fun a -> Artifact.odocl_file ctx a) in
-          let+ db = Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls in
-          Some db)
-        else Memo.return None
-      in
       let* () =
         Memo.parallel_iter output_formats ~f:(fun output_format ->
-          generate_html_for_package
-            sctx
-            ~ctx
-            ~pkg
-            ~search_db
-            ~all_artifacts
-            ~output_format
-            ())
+          generate_html_for_package sctx ~ctx ~pkg ~all_artifacts ~output_format ())
       in
       Memo.parallel_iter other_formats ~f:(fun other_format ->
         let other_alias = Output_format.alias other_format ~dir in
@@ -1126,5 +1103,20 @@ let gen_rules sctx ~dir rest =
   | [ "_odocls"; pkg_or_lib_name ] -> handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name
   | [ "_mlds"; pkg_name ] -> handle_mlds_pkg pkg_name
   | ("_odoc" | "_odocls" | "_mlds") :: _ :: _ :: _ -> redirect ()
+  (* Sherlodoc search DB *)
+  | [ "_sherlodoc" ] ->
+    let rules =
+      Rules.collect_unit (fun () ->
+        let* workspace_pkgs = get_workspace_packages () in
+        let* all_odocl_files =
+          Odoc_discovery.collect_all_visible_odocls sctx ~default_index ~workspace_pkgs
+        in
+        let dir = Paths.sherlodoc_root ctx in
+        let+ _db =
+          Sherlodoc.search_db_marshal sctx ~dir ~external_odocls:[] all_odocl_files
+        in
+        ())
+    in
+    Memo.return (Gen_rules.make rules)
   | _ -> empty_rules ()
 ;;
