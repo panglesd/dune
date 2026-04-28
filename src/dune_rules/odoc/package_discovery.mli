@@ -7,6 +7,7 @@ val create : context:Context.t -> t Memo.t
 val package_of_library : t -> Lib.t -> Package.Name.t option
 val libraries_of_package : t -> Package.Name.t -> Lib.t list
 val mlds_of_package : t -> Package.Name.t -> (Path.t * string) list
+val assets_of_package : t -> Package.Name.t -> Path.t list
 val module_source_file : t -> lib:Lib.t -> module_name:string -> Path.t option
 val module_cmt_file : t -> lib:Lib.t -> module_name:string -> Path.t option
 val module_ml_file : t -> lib:Lib.t -> module_name:string -> Path.t option
