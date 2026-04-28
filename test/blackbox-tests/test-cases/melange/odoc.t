@@ -64,8 +64,6 @@ Works for "universal" libraries
   Warning: Code blocks should be indented at the opening `{`.
   File "_index/index.mld", line 3, characters 2-25:
   Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
-  File "_mlds/foo/index.mld", line 4, characters 0-18:
-  Warning: Failed to resolve reference /foo/Foo Path '/foo/Foo' not found
 
   $ cat _build/default/_doc/_mlds/foo/index.mld
   {0 foo index}

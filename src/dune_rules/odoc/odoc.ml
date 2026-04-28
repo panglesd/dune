@@ -269,6 +269,36 @@ let stdlib_lib ctx =
   Lib.DB.find public_libs (Lib_name.of_string "stdlib")
 ;;
 
+(* Generate -L library:path flags for odoc link
+   These tell odoc where to find .odocl files for library dependencies *)
+let odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery =
+  Resolve.args
+    (let open Resolve.O in
+     let+ lib_paths = get_lib_paths ctx ~stdlib_opt requires pkg_discovery in
+     (* Deduplicate by library name and make paths relative *)
+     let doc_root = Paths.root ctx in
+     let lib_paths_map =
+       List.fold_left lib_paths ~init:Lib_name.Map.empty ~f:(fun acc (lib, odoc_dir) ->
+         let lib_name = Lib.name lib in
+         if Lib_name.Map.mem acc lib_name
+         then acc
+         else (
+           let lib_name_str = Lib_name.to_string lib_name in
+           (* Compute path relative to doc_root using proper path functions *)
+           let odoc_path_rel =
+             Path.reach (Path.build odoc_dir) ~from:(Path.build doc_root)
+           in
+           let lib_path_arg = lib_name_str ^ ":" ^ odoc_path_rel in
+           Lib_name.Map.set acc lib_name lib_path_arg))
+     in
+     (* Convert map to args *)
+     let lib_args =
+       Lib_name.Map.values lib_paths_map
+       |> List.concat_map ~f:(fun lib_path_arg -> [ Command.Args.A "-L"; A lib_path_arg ])
+     in
+     Command.Args.S lib_args)
+;;
+
 (* Compute library dependencies for an artifact.
 
    Returns a pair (closure, external_requires):
@@ -442,8 +472,8 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let* extra_packages = Artifact.extra_packages odoc_file in
   let all_pkgs = Option.to_list pkg @ extra_packages in
   let deps = Dep.deps ctx all_pkgs requires in
+  let* stdlib_opt = stdlib_lib (Context.name ctx) in
   let* pkg_discovery = Package_discovery.create ~context:ctx in
-  let* include_flags = odoc_include_flags ctx pkg requires pkg_discovery in
   let* workspace_pkgs = get_workspace_packages () in
   let all_pkg_names = List.map workspace_pkgs ~f:Package.Name.to_string in
   let warnings_tags_args =
@@ -457,7 +487,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       "link"
       ~quiet:false
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
-      [ include_flags
+      [ odoc_lib_flags ctx ~stdlib_opt requires pkg_discovery
       ; A "--enable-missing-root-warning"
       ; warnings_tags_args
       ; A "-o"

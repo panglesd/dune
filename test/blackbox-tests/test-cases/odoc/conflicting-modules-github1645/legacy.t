@@ -73,10 +73,6 @@ built. See #1645.
   Warning: Code blocks should be indented at the opening `{`.
   File "_index/index.mld", line 3, characters 2-21:
   Warning: Failed to resolve reference /l/index Path '/l/index' not found
-  File "_mlds/l/index.mld", line 7, characters 0-23:
-  Warning: Failed to resolve reference /l.two/Module Path '/l.two/Module' not found
-  File "_mlds/l/index.mld", line 4, characters 0-23:
-  Warning: Failed to resolve reference /l.one/Module Path '/l.one/Module' not found
   File "Module":
   Ambiguous lookup. Possible files: Module
   Module

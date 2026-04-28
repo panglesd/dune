@@ -53,14 +53,10 @@ Set up some fake environment without sherlodoc
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_mlds/bar/index.mld", line 4, characters 0-18:
-  Warning: Failed to resolve reference /bar/Bar Path '/bar/Bar' not found
   File "_index/index.mld", line 4, characters 2-25:
   Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
   File "_index/index.mld", line 3, characters 2-25:
   Warning: Failed to resolve reference /bar/index Path '/bar/index' not found
-  File "_mlds/foo/index.mld", line 7, characters 0-28:
-  Warning: Failed to resolve reference /foo.byte/Foo_byte Path '/foo.byte/Foo_byte' not found
 
 This test if `.odocl` files are generated
   $ find _build/default/_doc/_odocls -name '*.odocl' | sort -n

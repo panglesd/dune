@@ -94,8 +94,6 @@ Build markdown documentation:
   Warning: Code blocks should be indented at the opening `{`.
   File "_index/index.mld", line 3, characters 2-29:
   Warning: Failed to resolve reference /mylib/index Path '/mylib/index' not found
-  File "_mlds/mylib/index.mld", line 4, characters 0-22:
-  Warning: Failed to resolve reference /mylib/Mylib Path '/mylib/Mylib' not found
   $ list_markdown_docs
   _build/default/_doc/_markdown/index.md
   _build/default/_doc/_markdown/mylib/index.md
