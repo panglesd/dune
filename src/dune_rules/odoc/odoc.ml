@@ -119,6 +119,12 @@ end = struct
   ;;
 end
 
+let get_workspace_packages () =
+  let* packages = Dune_load.packages () in
+  let+ mask = Dune_load.mask () in
+  Package.Name.Map.keys packages |> List.filter ~f:(Only_packages.mem mask)
+;;
+
 module Flags = struct
   type warnings = Dune_env.Odoc.warnings =
     | Fatal
@@ -278,6 +284,13 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let pkg = Artifact.pkg odoc_file in
   let deps = Dep.deps ctx (Option.to_list pkg) requires in
   let include_flags = odoc_include_flags ctx pkg requires in
+  let* workspace_pkgs = get_workspace_packages () in
+  let all_pkg_names = List.map workspace_pkgs ~f:Package.Name.to_string in
+  let warnings_tags_args =
+    Command.Args.S
+      (List.concat_map ("__private_lib__" :: all_pkg_names) ~f:(fun pkg_name ->
+         [ Command.Args.A "--warnings-tags"; Command.Args.A pkg_name ]))
+  in
   let run_odoc =
     run_odoc
       sctx
@@ -285,6 +298,8 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
       ~quiet:false
       ~flags_for:(Some (Artifact.odoc_file ctx odoc_file))
       [ include_flags
+      ; A "--enable-missing-root-warning"
+      ; warnings_tags_args
       ; A "-o"
       ; Target (Artifact.odocl_file ctx odoc_file)
       ; Dep (Path.build (Artifact.odoc_file ctx odoc_file))
