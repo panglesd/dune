@@ -25,7 +25,7 @@ let lib_dir base local_lib =
 let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
   fun ctx -> function
   | Odoc_target.Lib local_lib -> lib_dir (root ctx ++ "_odoc") local_lib
-  | Odoc_target.Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
+  | Odoc_target.Pkg pkg -> root ctx ++ "_odoc" ++ Package.Name.to_string pkg
 ;;
 
 let output_root ctx format = root ctx ++ output_subdir format

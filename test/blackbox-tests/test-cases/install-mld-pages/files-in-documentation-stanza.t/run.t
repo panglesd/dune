@@ -42,7 +42,10 @@ resist building the doc to check what happens: currently, only top-level mld
 files are included in the doc generation.
 
   $ dune build @doc
-  File "_doc/_odoc/pkg/testing_mld/_unknown_", line 1, characters 0-0:
+  File "_doc/_odoc/testing_mld/_unknown_", line 1, characters 0-0:
+  Error: Rule failed to generate the following targets:
+  - _doc/_odoc/testing_mld/page-index.odoc
+  File "_doc/_odoc/testing_mld/_unknown_", line 1, characters 0-0:
   ERROR: Unknown extension, expected one of: cmti, cmt, cmi or mld.
   [1]
   $ ls _build/default/_doc/_html/testing_mld
