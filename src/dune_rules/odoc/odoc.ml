@@ -286,13 +286,13 @@ module Flags = struct
 
   let default = { warnings = Nonfatal }
 
-  let get ~dir =
+  let get_memo ~dir =
     Env_stanza_db.value ~default ~dir ~f:(fun config ->
-      match config.odoc.warnings with
-      | None -> Memo.return None
-      | Some warnings -> Memo.return (Some { warnings }))
-    |> Action_builder.of_memo
+      let warnings = Option.value config.odoc.warnings ~default:default.warnings in
+      Memo.return (Some { warnings }))
   ;;
+
+  let get ~dir = get_memo ~dir |> Action_builder.of_memo
 end
 
 let odoc_base_flags quiet build_dir =
