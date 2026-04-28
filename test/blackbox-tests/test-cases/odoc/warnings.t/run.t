@@ -34,10 +34,10 @@ These packages are in a nested env, the option is disabled, should success with 
 In release mode, no error:
 
   $ dune build -p foo_doc,foo_lib @doc
-  (cd _build/default/_doc && odoc compile -o _odoc/pkg/foo_doc/page-foo.odoc --pkg foo_doc --warnings-tag foo_doc ../foo_doc/foo.mld)
+  (cd _build/default/_doc && odoc compile -o _odoc/pkg/foo_doc/page-foo.odoc --pkg foo_doc --enable-missing-root-warning --warnings-tag foo_doc ../foo_doc/foo.mld)
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Warning: End of text is not allowed in '[...]' (code).
-  (cd _build/default/_doc && odoc compile -I _odoc/foo_lib --output-dir _odoc --parent-id foo_lib --warnings-tag foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
+  (cd _build/default/_doc && odoc compile -I _odoc/foo_lib --output-dir _odoc --parent-id foo_lib --enable-missing-root-warning --warnings-tag foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
   File "_doc/_odocls/foo_doc/_unknown_", line 1, characters 0-0:
