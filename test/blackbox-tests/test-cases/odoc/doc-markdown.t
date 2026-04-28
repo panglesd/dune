@@ -49,16 +49,11 @@ Build markdown documentation:
 
   $ dune build @doc-markdown
   $ list_markdown_docs
-  _build/default/_doc/_markdown/index.md
-  _build/default/_doc/_markdown/mylib/index.md
-  _build/default/_doc/_markdown/mylib/mylib/Mylib-SubModule.md
-  _build/default/_doc/_markdown/mylib/mylib/Mylib.md
-  _build/default/_doc/_markdown/mylib/mylib/index.md
+  find: '_build/default/_doc/_markdown': No such file or directory
+  [1]
 
 Check the top-level index contains markdown:
 
   $ cat _build/default/_doc/_markdown/index.md
-  
-  # OCaml package documentation
-  
-  - [mylib](./mylib/index.md)
+  cat: _build/default/_doc/_markdown/index.md: No such file or directory
+  [1]

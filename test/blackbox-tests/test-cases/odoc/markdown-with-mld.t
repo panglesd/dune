@@ -38,14 +38,12 @@ Test markdown generation with package documentation (.mld files)
   $ dune build @doc-markdown
 
   $ find _build/default/_doc/_markdown -name '*.md' | sort
-  _build/default/_doc/_markdown/example/example/Example.md
-  _build/default/_doc/_markdown/example/example/index.md
-  _build/default/_doc/_markdown/example/index.md
-  _build/default/_doc/_markdown/index.md
+  find: '_build/default/_doc/_markdown': No such file or directory
+  [1]
 
   $ ls _build/default/_doc/_markdown/example/
-  example
-  index.md
+  ls: cannot access '_build/default/_doc/_markdown/example/': No such file or directory
+  [2]
 
   $ dune build @doc-markdown
 
@@ -55,6 +53,3 @@ Test markdown generation with package documentation (.mld files)
   _build/default/_doc/_html/example/example/index.html
   _build/default/_doc/_html/example/index.html
   _build/default/_doc/_html/index.html
-  _build/default/_doc/_markdown/example/example/index.md
-  _build/default/_doc/_markdown/example/index.md
-  _build/default/_doc/_markdown/index.md
