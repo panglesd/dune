@@ -6,6 +6,7 @@ type kind =
 
 type source =
   | Local_source of Path.Build.t
+  | Installed_source of { src_path : Path.t }
   | Generated of
       { content : string
       ; output_path : Path.Build.t

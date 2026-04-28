@@ -102,6 +102,7 @@ end = struct
   let deps ctx pkgs requires =
     let open Action_builder.O in
     let* libs = Resolve.read requires in
+    let* pkg_discovery = Action_builder.of_memo (Package_discovery.create ~context:ctx) in
     Action_builder.deps
       (let init =
          List.fold_left pkgs ~init:Dep.Set.empty ~f:(fun acc p ->
@@ -114,7 +115,18 @@ end = struct
          | Some _ -> acc
          | None ->
            (match Lib.Local.of_lib lib with
-            | None -> acc
+            | None ->
+              let lib_pkg_opt = Package_discovery.package_of_library pkg_discovery lib in
+              (match lib_pkg_opt with
+               | Some lib_pkg ->
+                 let dir =
+                   Paths.root ctx
+                   ++ "_odoc"
+                   ++ Package.Name.to_string lib_pkg
+                   ++ Lib_name.to_string (Lib.name lib)
+                 in
+                 Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir))
+               | None -> acc)
             | Some local_lib ->
               let lib_t = Lib.Local.to_lib local_lib in
               let target =
@@ -230,7 +242,7 @@ let run_odoc sctx ?dir command ~quiet ~flags_for args =
   else run
 ;;
 
-let get_lib_paths ctx ~stdlib_opt requires =
+let get_lib_paths ctx ~stdlib_opt requires pkg_discovery =
   let open Resolve.O in
   let+ libs = requires in
   let libs =
@@ -243,7 +255,10 @@ let get_lib_paths ctx ~stdlib_opt requires =
   in
   List.filter_map libs ~f:(fun lib ->
     match Lib.Local.of_lib lib with
-    | None -> None
+    | None ->
+      let lib_pkg_opt = Package_discovery.package_of_library pkg_discovery lib in
+      Option.map lib_pkg_opt ~f:(fun lib_pkg ->
+        lib, Paths.odocs ctx (Target.Lib (lib_pkg, lib)))
     | Some local_lib ->
       let lib_t = Lib.Local.to_lib local_lib in
       let lib_info = Lib.info lib_t in
@@ -310,13 +325,13 @@ let compute_artifact_library_deps ctx ~artifact ~package_lib_names =
   Memo.return (closure, external_requires)
 ;;
 
-let odoc_include_flags ctx pkg requires =
+let odoc_include_flags ctx pkg requires pkg_discovery =
   let open Memo.O in
   let* stdlib_opt = stdlib_lib (Context.name ctx) in
   let args =
     Resolve.args
       (let open Resolve.O in
-       let+ lib_paths = get_lib_paths ctx ~stdlib_opt requires in
+       let+ lib_paths = get_lib_paths ctx ~stdlib_opt requires pkg_discovery in
        let paths =
          List.fold_left lib_paths ~init:Path.Set.empty ~f:(fun paths (_lib, path) ->
            Path.Set.add paths (Path.build path))
@@ -385,7 +400,8 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
     let* closure, external_requires =
       compute_artifact_library_deps ctx ~artifact ~package_lib_names
     in
-    let* include_flags = odoc_include_flags ctx None closure in
+    let* pkg_discovery = Package_discovery.create ~context:ctx in
+    let* include_flags = odoc_include_flags ctx None closure pkg_discovery in
     let lib_deps = Dep.deps ctx [] external_requires in
     let run_odoc =
       let open Action_builder.With_targets.O in
@@ -431,7 +447,8 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let ctx = Super_context.context sctx in
   let pkg = Artifact.pkg odoc_file in
   let deps = Dep.deps ctx (Option.to_list pkg) requires in
-  let* include_flags = odoc_include_flags ctx pkg requires in
+  let* pkg_discovery = Package_discovery.create ~context:ctx in
+  let* include_flags = odoc_include_flags ctx pkg requires pkg_discovery in
   let* workspace_pkgs = get_workspace_packages () in
   let all_pkg_names = List.map workspace_pkgs ~f:Package.Name.to_string in
   let warnings_tags_args =
@@ -1048,6 +1065,51 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
            (Dune_engine.Dep.Set.singleton (Dune_engine.Dep.alias html_alias))))
 ;;
 
+let has_rules ?(directory_targets = Path.Build.Map.empty) f =
+  let rules = Rules.collect_unit f in
+  Memo.return (Gen_rules.make ~directory_targets rules)
+;;
+
+let handle_classify_dir sctx ~pkg_name ~lib_name =
+  let pkg = Package.Name.of_string pkg_name in
+  let lib_name = Lib_name.of_string lib_name in
+  let ctx = Super_context.context sctx in
+  let* pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
+  let* lib_opt =
+    Memo.List.find_map pkg_libs ~f:(fun lib ->
+      if Lib_name.equal (Lib.name lib) lib_name
+      then Memo.return (Some lib)
+      else Memo.return None)
+  in
+  match lib_opt with
+  | None -> Memo.return ()
+  | Some lib ->
+    (match Lib.Local.of_lib lib with
+     | Some _ -> Memo.return ()
+     | None ->
+       let info = Lib.info lib in
+       let src_dir = Lib_info.src_dir info in
+       let classify_output =
+         Paths.root ctx
+         ++ "classify"
+         ++ pkg_name
+         ++ Lib_name.to_string lib_name
+         ++ "odoc.classify"
+       in
+       let run_classify =
+         let program = odoc_program sctx (Context.build_dir ctx) in
+         let deps = Action_builder.env_var "ODOC_SYNTAX" in
+         let open Action_builder.With_targets.O in
+         Action_builder.with_no_targets deps
+         >>> Command.run_dyn_prog
+               ~dir:(Path.build (Context.build_dir ctx))
+               ~stdout_to:classify_output
+               program
+               [ A "classify"; A (Path.to_string src_dir) ]
+       in
+       add_rule sctx run_classify)
+;;
+
 let handle_mlds_dir sctx ~pkg_name =
   let ctx = Super_context.context sctx in
   let* all_artifacts, _lib_subdirs =
@@ -1154,5 +1216,7 @@ let gen_rules sctx ~dir rest =
         ())
     in
     Memo.return (Gen_rules.make rules)
+  | [ "classify"; pkg_name; lib_name ] ->
+    has_rules (fun () -> handle_classify_dir sctx ~pkg_name ~lib_name)
   | _ -> empty_rules ()
 ;;
