@@ -27,6 +27,9 @@ val ml : t -> for_:Compilation_mode.t -> Ml_sources.t Memo.t
 (** All mld files attached to this documentation stanza *)
 val mlds : t -> stanza:Documentation.t -> Doc_sources.mld list Memo.t
 
+(** All asset files attached to this documentation stanza *)
+val assets : t -> stanza:Documentation.t -> Doc_sources.asset list Memo.t
+
 val rocq : t -> Rocq_sources.t Memo.t
 
 (** Get the directory contents of the given directory. *)
