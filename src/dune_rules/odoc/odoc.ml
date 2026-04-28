@@ -12,20 +12,7 @@ let pkg_or_lnu (local_lib : Lib.Local.t) =
   | None -> Odoc_scope.lib_unique_name local_lib
 ;;
 
-module Target = struct
-  type page = { name : string }
-
-  type mod_ =
-    { visible : bool
-    ; module_name : Module_name.t
-    }
-
-  type _ t =
-    | Lib : Lib.Local.t -> mod_ t
-    | Pkg : Package.Name.t -> page t
-end
-
-open Target
+module Target = Odoc_target
 
 let add_rule sctx =
   let dir = Super_context.context sctx |> Context.build_dir in
@@ -48,14 +35,14 @@ module Paths = struct
 
   let add_pkg_lnu : type a. Path.Build.t -> a Target.t -> Path.Build.t =
     fun base -> function
-    | Lib local_lib -> base ++ pkg_or_lnu local_lib
-    | Pkg pkg -> base ++ Package.Name.to_string pkg
+    | Target.Lib local_lib -> base ++ pkg_or_lnu local_lib
+    | Target.Pkg pkg -> base ++ Package.Name.to_string pkg
   ;;
 
   let odocs : type a. Context.t -> a Target.t -> Path.Build.t =
     fun ctx -> function
-    | Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
-    | Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
+    | Target.Lib local_lib -> Obj_dir.odoc_dir (Lib.Local.obj_dir local_lib)
+    | Target.Pkg pkg -> root ctx ++ "_odoc" ++ "pkg" ++ Package.Name.to_string pkg
   ;;
 
   let output_root ctx format = root ctx ++ output_subdir format
@@ -109,8 +96,8 @@ end
 
 module Artifact = struct
   type kind =
-    | Module : mod_ * mod_ Target.t -> kind
-    | Page : page * page Target.t -> kind
+    | Module : Target.mod_ * Target.mod_ Target.t -> kind
+    | Page : Target.page * Target.page Target.t -> kind
 
   type source = Local_source of Path.Build.t
 
@@ -235,7 +222,7 @@ end = struct
          match Lib.Local.of_lib lib with
          | None -> acc
          | Some lib ->
-           let dir = Paths.odocs ctx (Lib lib) in
+           let dir = Paths.odocs ctx (Target.Lib lib) in
            let alias = alias ~dir in
            Dep.Set.add acc (Dep.alias alias)))
   ;;
@@ -413,7 +400,7 @@ let odoc_include_flags ctx pkg requires =
        List.fold_left libs ~init:Path.Set.empty ~f:(fun paths lib ->
          match Lib.Local.of_lib lib with
          | None -> paths
-         | Some lib -> Path.Set.add paths (Path.build (Paths.odocs ctx (Lib lib))))
+         | Some lib -> Path.Set.add paths (Path.build (Paths.odocs ctx (Target.Lib lib))))
      in
      let paths =
        match pkg with
@@ -675,11 +662,11 @@ let libs_of_pkg ctx ~pkg =
 
 let module_artifact ~local_lib module_ =
   let mod_ =
-    { visible = Module.visibility module_ = Visibility.Public
+    { Target.visible = Module.visibility module_ = Visibility.Public
     ; module_name = Module_name.Unique.to_name (Module.obj_name module_) ~loc:Loc.none
     }
   in
-  let kind = Artifact.Module (mod_, Lib local_lib) in
+  let kind = Artifact.Module (mod_, Target.Lib local_lib) in
   let obj_dir = Lib.Local.obj_dir local_lib in
   let source_file = Obj_dir.Module.cmti_file obj_dir module_ ~cm_kind:(Ocaml Cmi) in
   Artifact.create ~kind ~source:(Local_source source_file)
@@ -745,7 +732,7 @@ let odoc_artefacts : type a. _ -> a Target.t -> _ =
     in
     String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
       Artifact.create
-        ~kind:(Artifact.Page ({ name }, Pkg pkg))
+        ~kind:(Artifact.Page ({ Target.name }, Target.Pkg pkg))
         ~source:(Local_source path))
   | Lib local_lib ->
     let+ all_modules =
@@ -868,7 +855,7 @@ let setup_lib_html_rules_def =
   in
   let f (sctx, lib) =
     let ctx = Super_context.context sctx in
-    let target = Lib lib in
+    let target = Target.Lib lib in
     let* odocs = odoc_artefacts sctx target in
     let visible = List.filter odocs ~f:(fun a -> not (Artifact.hidden a)) in
     let* () = add_format_alias_deps ctx Html target visible in
@@ -882,7 +869,7 @@ let setup_lib_html_rules_def =
 ;;
 
 let search_db_for_lib sctx lib =
-  let target = Lib lib in
+  let target = Target.Lib lib in
   let ctx = Super_context.context sctx in
   let dir = Paths.output ctx Html target in
   let* odocs = odoc_artefacts sctx target in
@@ -891,7 +878,7 @@ let search_db_for_lib sctx lib =
 ;;
 
 let setup_lib_html_rules sctx ~search_db lib =
-  let target = Lib lib in
+  let target = Target.Lib lib in
   let* odocs = odoc_artefacts sctx target in
   let visible = List.filter odocs ~f:(fun a -> not (Artifact.hidden a)) in
   let* () =
@@ -936,7 +923,7 @@ let setup_pkg_html_rules sctx ~pkg ~for_ : unit Memo.t =
 ;;
 
 let setup_lib_markdown_rules sctx lib =
-  let target = Lib lib in
+  let target = Target.Lib lib in
   let* odocs = odoc_artefacts sctx target in
   let visible = List.filter odocs ~f:(fun a -> not (Artifact.hidden a)) in
   let* () =
@@ -972,8 +959,10 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
   in
   let* libs = libs_of_pkg (Context.name ctx) ~pkg:name in
   let deps =
-    let pkg_alias = Dep.format_alias output ctx (Pkg name) in
-    let lib_aliases = List.map libs ~f:(fun l -> Dep.format_alias output ctx (Lib l)) in
+    let pkg_alias = Dep.format_alias output ctx (Target.Pkg name) in
+    let lib_aliases =
+      List.map libs ~f:(fun l -> Dep.format_alias output ctx (Target.Lib l))
+    in
     pkg_alias :: lib_aliases
     |> Dune_engine.Dep.Set.of_list_map ~f:Dune_engine.Dep.alias
     |> Action_builder.deps
@@ -1082,7 +1071,7 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
         (Local (Library.to_lib_id ~src_dir l))
       >>| Option.value_exn
     in
-    let lib = Lib (Lib.Local.of_lib_exn lib) in
+    let lib = Target.Lib (Lib.Local.of_lib_exn lib) in
     Rules.Produce.Alias.add_deps
       (Alias.make ~dir Alias0.private_doc)
       (lib |> Dep.format_alias Html ctx |> Dune_engine.Dep.alias |> Action_builder.dep)
