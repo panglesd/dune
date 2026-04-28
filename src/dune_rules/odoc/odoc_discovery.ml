@@ -2,6 +2,7 @@ open Import
 open Memo.O
 
 let ( ++ ) = Path.Build.relative
+let sprintf = Printf.sprintf
 
 let get_workspace_packages () =
   let* packages = Dune_load.packages () in
@@ -14,14 +15,20 @@ let get_workspace_packages () =
 ;;
 
 let libs_of_pkg (ctx : Context.t) ~pkg =
-  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
-    Scope.DB.lib_entries_of_package (Context.name ctx) pkg
-  in
-  List.filter_map libraries ~f:(fun lib ->
-    let lib_t = Lib.Local.to_lib lib in
-    match Lib.info lib_t |> Lib_info.implements with
-    | None -> Some lib_t
-    | Some _ -> None)
+  let* packages = Dune_load.packages () in
+  if Package.Name.Map.mem packages pkg
+  then
+    let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
+      Scope.DB.lib_entries_of_package (Context.name ctx) pkg
+    in
+    List.filter_map libraries ~f:(fun lib ->
+      let lib_t = Lib.Local.to_lib lib in
+      match Lib.info lib_t |> Lib_info.implements with
+      | None -> Some lib_t
+      | Some _ -> None)
+  else
+    let* pkg_discovery = Package_discovery.create ~context:ctx in
+    Memo.return (Package_discovery.libraries_of_package pkg_discovery pkg)
 ;;
 
 let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
@@ -121,14 +128,129 @@ let create_pkg_index_artifact ctx ~pkg ~pkg_libs ~content =
   Odoc_artifact.create ~kind ~source
 ;;
 
-let discover_all_lib_artifacts sctx ctx ~libs =
-  Memo.List.filter_map libs ~f:(fun lib ->
+(* Extract page name from installed mld path by finding odoc-pages ancestor.
+   E.g., /lib/pkg/odoc-pages/foo/bar.mld -> "foo/bar" *)
+let page_name_from_installed_mld_path mld_path =
+  let rec find_odoc_pages_ancestor p =
+    match Path.parent p with
+    | None -> None
+    | Some parent ->
+      if Path.basename parent = "odoc-pages"
+      then Some parent
+      else find_odoc_pages_ancestor parent
+  in
+  match find_odoc_pages_ancestor mld_path with
+  | Some odoc_pages_dir ->
+    (match Path.drop_prefix mld_path ~prefix:odoc_pages_dir with
+     | Some rel_path ->
+       let rel_str = Path.Local.to_string rel_path in
+       Filename.remove_extension rel_str
+     | None -> Path.basename mld_path |> Filename.remove_extension)
+  | None -> Path.basename mld_path |> Filename.remove_extension
+;;
+
+(* Get archive names for a library (used to filter odoc classify output) *)
+let get_archive_names lib_name archives =
+  let byte_archives = Mode.Dict.get archives Mode.Byte in
+  match byte_archives with
+  | [] ->
+    if Lib_name.equal lib_name (Lib_name.of_string "stdlib") then [ "stdlib" ] else []
+  | archives ->
+    List.map archives ~f:(fun p -> Path.basename p |> Filename.remove_extension)
+;;
+
+(* Parse odoc classify output to extract module names for specific archives *)
+let parse_classify_output ~archive_names classify_content =
+  let classify_lines = String.split_lines classify_content in
+  List.concat_map classify_lines ~f:(fun line ->
+    match
+      String.split line ~on:' ' |> List.filter ~f:(fun s -> not (String.is_empty s))
+    with
+    | [] -> []
+    | archive :: mods ->
+      if List.mem archive_names archive ~equal:String.equal then mods else [])
+;;
+
+let discover_installed_lib_artifacts _sctx ctx ~pkg ~lib_name ~lib
+  : Odoc_artifact.t list Memo.t
+  =
+  Log.info
+    (sprintf
+       "discover_installed_lib_artifacts: pkg=%s lib=%s"
+       (Package.Name.to_string pkg)
+       (Lib_name.to_string lib_name))
+    [];
+  let pkg_name_str = Package.Name.to_string pkg in
+  let lib_name_str = Lib_name.to_string lib_name in
+  let info = Lib.info lib in
+  let archive_names = get_archive_names lib_name (Lib_info.archives info) in
+  if List.is_empty archive_names
+  then (
+    Log.info
+      (sprintf
+         "odoc v3: No archives found for installed library %s/%s, skipping"
+         pkg_name_str
+         lib_name_str)
+      [];
+    Memo.return [])
+  else (
+    (* Read and parse classify file to get module names *)
+    let classify_path =
+      Odoc_paths.root ctx ++ "classify" ++ pkg_name_str ++ lib_name_str ++ "odoc.classify"
+    in
+    let* classify_content = Build_system.read_file (Path.build classify_path) in
+    let all_module_names = parse_classify_output ~archive_names classify_content in
+    Log.info
+      (sprintf
+         "odoc v3: Found %d modules for installed library %s/%s via odoc classify"
+         (List.length all_module_names)
+         pkg_name_str
+         lib_name_str)
+      [];
+    if List.is_empty all_module_names
+    then Memo.return []
+    else
+      let* pkg_discovery = Package_discovery.create ~context:ctx in
+      let target = Odoc_target.Lib (pkg, lib) in
+      let+ all_module_artifacts =
+        Memo.parallel_map all_module_names ~f:(fun module_name ->
+          match Package_discovery.module_source_file pkg_discovery ~lib ~module_name with
+          | Some src_path ->
+            let mod_ =
+              { Odoc_target.visible = not (String.contains_double_underscore module_name)
+              ; module_name = Module_name.of_checked_string module_name
+              }
+            in
+            let module_artifact =
+              Odoc_artifact.create
+                ~kind:(Module (mod_, target))
+                ~source:(Installed_source { src_path })
+            in
+            Memo.return (Some module_artifact)
+          | None ->
+            Log.info
+              (sprintf
+                 "odoc v3: Could not find source file for module %s in %s/%s"
+                 module_name
+                 pkg_name_str
+                 lib_name_str)
+              [];
+            Memo.return None)
+      in
+      List.filter_map all_module_artifacts ~f:Fun.id)
+;;
+
+let discover_lib_artifacts sctx ctx ~pkg ~lib_name ~lib : Odoc_artifact.t list Memo.t =
+  match Lib.Local.of_lib lib with
+  | Some local_lib -> discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib
+  | None -> discover_installed_lib_artifacts sctx ctx ~pkg ~lib_name ~lib
+;;
+
+let discover_all_lib_artifacts sctx ctx ~pkg ~libs =
+  Memo.List.map libs ~f:(fun lib ->
     let lib_name = Lib.name lib in
-    match Lib.Local.of_lib lib with
-    | None -> Memo.return None
-    | Some local_lib ->
-      let+ artifacts = discover_local_lib_artifacts sctx ctx ~lib_name ~local_lib in
-      Some (lib, artifacts))
+    let+ artifacts = discover_lib_artifacts sctx ctx ~pkg ~lib_name ~lib in
+    lib, artifacts)
 ;;
 
 let check_mlds_no_dupes ~pkg ~mlds =
@@ -165,7 +287,7 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index 
   let mld_artifacts, has_pkg_index =
     discover_pkg_mld_artifacts ~pkg ~pkg_libs:libs ~mld_infos
   in
-  let* lib_artifacts = discover_all_lib_artifacts sctx ctx ~libs in
+  let* lib_artifacts = discover_all_lib_artifacts sctx ctx ~pkg ~libs in
   let pkg_index_artifact =
     if has_pkg_index
     then []
@@ -219,6 +341,34 @@ let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
   Memo.return (base_artifacts @ impl_artifacts, lib_subdirs)
 ;;
 
+let discover_installed_pkg_artifacts sctx ctx ~pkg ~default_index
+  : (Odoc_artifact.t list * string list) Memo.t
+  =
+  Log.info
+    (sprintf "discover_installed_pkg_artifacts: pkg=%s" (Package.Name.to_string pkg))
+    [];
+  let* pkg_discovery = Package_discovery.create ~context:ctx in
+  let all_libs = Package_discovery.libraries_of_package pkg_discovery pkg in
+  let libs =
+    List.filter all_libs ~f:(fun lib ->
+      Option.is_none (Lib_info.implements (Lib.info lib)))
+  in
+  Log.info
+    (sprintf
+       "discover_installed_pkg_artifacts(%s): got %d libs"
+       (Package.Name.to_string pkg)
+       (List.length libs))
+    [];
+  let mld_files = Package_discovery.mlds_of_package pkg_discovery pkg in
+  let mld_infos =
+    List.map mld_files ~f:(fun (mld_path, _dst) ->
+      let name = page_name_from_installed_mld_path mld_path in
+      let source = Odoc_artifact.Installed_source { src_path = mld_path } in
+      source, name)
+  in
+  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index
+;;
+
 let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name
   : (Odoc_artifact.t list * string list) Memo.t
   =
@@ -227,7 +377,19 @@ let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name
   | Odoc_scope.Scope_id.Private_lib { unique_name = _; lib_name; project } ->
     discover_private_lib_artifacts sctx ctx ~lib_name ~project
   | Odoc_scope.Scope_id.Package pkg ->
-    discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
+    let* is_project_pkg =
+      let* packages = Dune_load.packages () in
+      Memo.return (Package.Name.Map.mem packages pkg)
+    in
+    Log.info
+      (sprintf
+         "discover_package_artifacts(%s): is_project_pkg=%b"
+         pkg_or_lib_unique_name
+         is_project_pkg)
+      [];
+    if is_project_pkg
+    then discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
+    else discover_installed_pkg_artifacts sctx ctx ~pkg ~default_index
 ;;
 
 let collect_all_visible_odocls sctx ~default_index () =
