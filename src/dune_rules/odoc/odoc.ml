@@ -776,18 +776,26 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
   match l.visibility with
   | Public _ -> Memo.return ()
   | Private _ ->
-    let ctx = Super_context.context sctx in
-    let* lib =
-      let src_dir = Path.drop_optional_build_context_src_exn (Path.build dir) in
-      Lib.DB.find_lib_id_even_when_hidden
-        (Scope.libs scope)
-        (Local (Library.to_lib_id ~src_dir l))
-      >>| Option.value_exn
-    in
-    let lib = Target.Lib (Lib.Local.of_lib_exn lib) in
-    Rules.Produce.Alias.add_deps
-      (Alias.make ~dir Alias0.private_doc)
-      (lib |> Dep.format_alias Html ctx |> Dune_engine.Dep.alias |> Action_builder.dep)
+    let* is_vendored = Source_tree.is_vendored (Path.Build.drop_build_context_exn dir) in
+    if is_vendored
+    then Memo.return ()
+    else (
+      let ctx = Super_context.context sctx in
+      let* lib =
+        let src_dir = Path.drop_optional_build_context_src_exn (Path.build dir) in
+        Lib.DB.find_lib_id_even_when_hidden
+          (Scope.libs scope)
+          (Local (Library.to_lib_id ~src_dir l))
+        >>| Option.value_exn
+      in
+      (* Create target for this private library and add its HTML to doc-private.
+         Dependencies are handled transitively through the odoc pipeline. *)
+      let local_lib = Lib.Local.of_lib_exn lib in
+      let html_alias = Dep.format_alias Html ctx (Target.Lib local_lib) in
+      Rules.Produce.Alias.add_deps
+        (Alias.make ~dir Alias0.private_doc)
+        (Action_builder.deps
+           (Dune_engine.Dep.Set.singleton (Dune_engine.Dep.alias html_alias))))
 ;;
 
 let handle_mlds_dir sctx ~pkg_name =
