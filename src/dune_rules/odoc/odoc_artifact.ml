@@ -43,7 +43,7 @@ let pkg t =
   | Module (_, Lib (pkg, _)) -> Some pkg
   | Module (_, Private_lib _) -> None
   | Page (_, Pkg pkg) -> Some pkg
-  | Page (_, Toplevel) -> None
+  | Page (_, Toplevel _) -> None
 ;;
 
 let lib t =
@@ -56,7 +56,7 @@ let lib_name t =
   match t.kind with
   | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
   | Page (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
-  | Page (_, Toplevel) -> Lib_name.of_string "index"
+  | Page (_, Toplevel _) -> Lib_name.of_string "index"
 ;;
 
 let odoc_dir ctx t =
@@ -106,10 +106,10 @@ let odocl_file ctx t =
     base_dir ++ (basename ^ ".odocl")
 ;;
 
-let output_base ctx format t =
+let output_base ctx mode format t =
   match t.kind with
-  | Module (_, target) -> Odoc_paths.output ctx format target
-  | Page (_, target) -> Odoc_paths.output ctx format target
+  | Module (_, target) -> Odoc_paths.output ctx mode format target
+  | Page (_, target) -> Odoc_paths.output ctx mode format target
 ;;
 
 let output_extension : Odoc_paths.output_format -> string = function
@@ -118,8 +118,8 @@ let output_extension : Odoc_paths.output_format -> string = function
   | Markdown -> ".md"
 ;;
 
-let output_file ctx format t =
-  let base = output_base ctx format t in
+let output_file ctx mode format t =
+  let base = output_base ctx mode format t in
   let basename = get_basename t in
   let suffix = Filename.of_string_exn (Output_format.extension format) in
   match t.kind, (format : Odoc_paths.output_format) with
@@ -136,13 +136,13 @@ let output_file ctx format t =
     Path.Build.extend_basename path ~suffix
 ;;
 
-let output_dir_target ctx format t =
+let output_dir_target ctx mode format t =
   match t.kind, (format : Odoc_paths.output_format) with
   | Module (_, target), (Html | Json) ->
     let basename = get_basename t in
-    let base = Odoc_paths.output ctx format target in
+    let base = Odoc_paths.output ctx mode format target in
     Some (base ++ Stdune.String.capitalize basename)
-  | Module (_, target), Markdown -> Some (Odoc_paths.output ctx format target)
+  | Module (_, target), Markdown -> Some (Odoc_paths.output ctx mode format target)
   | Page _, _ -> None
 ;;
 
@@ -161,7 +161,7 @@ let parent_id t =
       sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
     | Module (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
     | Page (_, Pkg pkg) -> Package.Name.to_string pkg
-    | Page (_, Toplevel) -> ""
+    | Page (_, Toplevel _) -> ""
   in
   match t.kind with
   | Module _ -> base_id

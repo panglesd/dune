@@ -29,6 +29,6 @@ Verify that Lwt documentation was also built (needed for cross-references):
 Check that the generated HTML contains links to Lwt types:
 
   $ grep -o "href=\"[^\"]*Lwt[^\"]*\"" _build/default/_doc/_html/mylib/mylib/Mylib/index.html | head -3
-  href="../../../lwt/lwt/Lwt/index.html#type-t"
-  href="../../../lwt/lwt/Lwt/index.html#type-t"
-  href="../../../lwt/lwt/Lwt/index.html#type-t"
+  href="https://ocaml.org/p/lwt/5.9.2/doc/lwt/Lwt/index.html#type-t"
+  href="https://ocaml.org/p/lwt/5.9.2/doc/lwt/Lwt/index.html#type-t"
+  href="https://ocaml.org/p/lwt/5.9.2/doc/lwt/Lwt/index.html#type-t"

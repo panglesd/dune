@@ -3,7 +3,12 @@ open Import
 val get_workspace_packages : unit -> Package.Name.t list Memo.t
 val is_local_package : Package.Name.t -> bool Memo.t
 val libs_of_pkg : Context.t -> pkg:Package.Name.t -> Lib.t list Memo.t
-val toplevel_index_artifact : Context.t -> Odoc_artifact.t Memo.t
+val get_private_libraries : Context.t -> Lib.Local.t list Memo.t
+
+val toplevel_index_artifact
+  :  Context.t
+  -> mode:Odoc_target.Doc_mode.t
+  -> Odoc_artifact.t Memo.t
 
 module Toplevel_index : sig
   type pkg_item =
@@ -11,10 +16,17 @@ module Toplevel_index : sig
     ; version : Package_version.t option
     }
 
-  type item = Package of pkg_item
+  type private_lib_item =
+    { unique_name : string
+    ; display_name : string
+    }
 
-  (** Get items to display in the toplevel index. *)
-  val get_items : Context.t -> item list Memo.t
+  type item =
+    | Package of pkg_item
+    | Private_lib of private_lib_item
+
+  (** Get items to display in the toplevel index for the given mode. *)
+  val get_items : mode:Odoc_target.Doc_mode.t -> Context.t -> item list Memo.t
 
   (** Generate mld content for the toplevel index. *)
   val mld_content : item list -> string
@@ -28,6 +40,7 @@ val discover_package_artifacts
 
 val collect_all_visible_odocls
   :  Super_context.t
+  -> mode:Odoc_target.Doc_mode.t
   -> unit
   -> (Package.Name.t list * Path.Build.t list) Memo.t
 

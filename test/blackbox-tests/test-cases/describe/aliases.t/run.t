@@ -78,6 +78,7 @@ Adding an OCaml library will introduce OCaml specific aliases:
   all
   check
   default
+  doc-full
   doc-private
   fmt
   ocaml-index

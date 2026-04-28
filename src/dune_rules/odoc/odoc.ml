@@ -5,6 +5,7 @@ module Gen_rules = Build_config.Gen_rules
 let ( ++ ) = Path.Build.relative
 
 module Target = Odoc_target
+module Doc_mode = Odoc_paths.Doc_mode
 module Scope_id = Odoc_scope.Scope_id
 
 type odoc_output =
@@ -25,7 +26,6 @@ module Output_format = struct
     | Markdown
 
   let all = [ Html; Json; Markdown ]
-  let iter ~f = Memo.parallel_iter all ~f
 
   let args = function
     | Html -> Command.Args.empty
@@ -33,24 +33,24 @@ module Output_format = struct
     | Markdown -> Command.Args.empty
   ;;
 
-  let alias_name = function
-    | Html -> Alias0.doc
-    | Json -> Alias0.doc_json
-    | Markdown -> Alias0.doc_markdown
+  let alias_name t mode =
+    match t, mode with
+    | Html, Doc_mode.Local_only -> Alias0.doc
+    | Html, Doc_mode.Full -> Alias0.doc_full
+    | Json, Doc_mode.Local_only -> Alias0.doc_json
+    | Json, Doc_mode.Full -> Alias0.doc_json_full
+    | Markdown, Doc_mode.Local_only -> Alias0.doc_markdown
+    | Markdown, Doc_mode.Full -> Alias0.doc_markdown_full
   ;;
 
-  let alias t ~dir = Alias.make (alias_name t) ~dir
+  let alias t ~mode ~dir = Alias.make (alias_name t mode) ~dir
 end
 
 module Artifact = Odoc_artifact
 
 module Dep : sig
   val odoc_all_alias : dir:Path.Build.t -> Alias.t
-
-  (** [format_alias output ctx target] returns the alias that depends on all
-      targets produced by odoc for [target] in output format [output]. *)
-  val format_alias : Output_format.t -> Context.t -> 'a Target.t -> Alias.t
-
+  val format_alias : Output_format.t -> Doc_mode.t -> Context.t -> 'a Target.t -> Alias.t
   val add_file_deps : Alias.t -> Path.t list -> unit Memo.t
   val add_odoc_all_deps : Alias.t -> dirs:Path.Build.t list -> unit Memo.t
 
@@ -73,10 +73,12 @@ end = struct
     fun ctx target -> odoc_all_alias ~dir:(Paths.odocs ctx target)
   ;;
 
-  let format_alias : type a. Output_format.t -> Context.t -> a Target.t -> Alias.t =
-    fun f ctx m ->
-    let dir = Paths.output ctx f m in
-    Output_format.alias f ~dir
+  let format_alias
+    : type a. Output_format.t -> Doc_mode.t -> Context.t -> a Target.t -> Alias.t
+    =
+    fun f mode ctx m ->
+    let dir = Paths.output ctx mode f m in
+    Output_format.alias f ~mode ~dir
   ;;
 
   let add_file_deps alias files =
@@ -533,7 +535,7 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
                     Command.Args.As [ "--warnings-tag"; "__private_lib__" ]
                   | Page (_, Pkg pkg) ->
                     Command.Args.As [ "--warnings-tag"; Package.Name.to_string pkg ]
-                  | Page (_, Toplevel) -> Command.Args.S [])
+                  | Page (_, Toplevel _) -> Command.Args.S [])
                ; Command.Args.Dep source_file
                ])
     in
@@ -590,19 +592,20 @@ let generate_output_action
       ~artifact
       ?search_db
       ?(remap_file : Path.Build.t option = None)
+      ~mode
       ~output_format
       ()
   =
   let ctx = Super_context.context sctx in
   let doc_root = Paths.root ctx in
-  let output_root = Paths.output_root ctx output_format in
+  let output_root = Paths.output_root ctx mode output_format in
   let output_root_rel = Path.reach (Path.build output_root) ~from:(Path.build doc_root) in
   let subcommand, html_args =
     match (output_format : Output_format.t) with
     | Markdown -> "markdown-generate", Command.Args.empty
     | Html | Json ->
-      let html_root = Paths.output_root ctx Html in
-      let odoc_support_path = Paths.odoc_support ctx in
+      let html_root = Paths.output_root ctx mode Html in
+      let odoc_support_path = Paths.odoc_support ctx mode in
       let odoc_support_uri =
         Path.reach (Path.build odoc_support_path) ~from:(Path.build html_root)
       in
@@ -643,6 +646,7 @@ let generate_html_artifact
       ~artifact
       ?search_db
       ?(remap_file : Path.Build.t option)
+      ?(mode = Doc_mode.Local_only)
       ~output_format
       ()
   =
@@ -650,18 +654,18 @@ let generate_html_artifact
   match Artifact.get_kind artifact with
   | Module _ | Page _ ->
     let* action =
-      generate_output_action sctx ~artifact ?search_db ~remap_file ~output_format ()
+      generate_output_action sctx ~artifact ?search_db ~remap_file ~mode ~output_format ()
     in
     let rule =
       let file_target () =
         Action_builder.With_targets.add
-          ~file_targets:[ Artifact.output_file ctx output_format artifact ]
+          ~file_targets:[ Artifact.output_file ctx mode output_format artifact ]
           action
       in
       match (output_format : Output_format.t) with
       | Markdown -> file_target ()
       | Html | Json ->
-        (match Artifact.output_dir_target ctx output_format artifact with
+        (match Artifact.output_dir_target ctx mode output_format artifact with
          | Some dir ->
            Action_builder.With_targets.add_directories ~directory_targets:[ dir ] action
          | None -> file_target ())
@@ -685,9 +689,9 @@ let setup_support_files_rule sctx ~dir =
     (Action_builder.With_targets.add_directories ~directory_targets:[ dir ] cmd)
 ;;
 
-let setup_css_rule sctx =
+let setup_css_rule sctx ~mode =
   let ctx = Super_context.context sctx in
-  setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx)
+  setup_support_files_rule sctx ~dir:(Paths.odoc_support ctx mode)
 ;;
 
 (* Compute requires for linking an artifact.
@@ -709,7 +713,7 @@ let compute_link_requires sctx ~artifact =
     | Module (_, Private_lib (_, lib)) ->
       let+ closure = closure [ lib ] in
       Resolve.map closure ~f:(fun libs -> lib :: libs)
-    | Page ({ pkg_libs; _ }, (Pkg _ | Toplevel)) ->
+    | Page ({ pkg_libs; _ }, (Pkg _ | Toplevel _)) ->
       if List.is_empty pkg_libs
       then Memo.return (Resolve.return [])
       else
@@ -726,9 +730,9 @@ let link_artifact sctx ~artifact =
   link_odoc_rules sctx artifact ~requires
 ;;
 
-let setup_toplevel_index_artifact sctx =
+let setup_toplevel_index_artifact sctx ~mode =
   let ctx = Super_context.context sctx in
-  let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
+  let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
   let* () =
     match Artifact.generated_content artifact with
     | Some content ->
@@ -748,23 +752,49 @@ let setup_toplevel_index_artifact sctx =
   link_artifact sctx ~artifact
 ;;
 
-(* Generate the toplevel index artifact in the given format. *)
-let setup_toplevel_index sctx format =
+(* Generate global search database from all visible odocl files *)
+let generate_global_search_db sctx ~mode =
   let ctx = Super_context.context sctx in
-  let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
-  generate_html_artifact sctx ~artifact ~output_format:format ()
+  let* _real_pkgs, all_odocl_files =
+    Odoc_discovery.collect_all_visible_odocls sctx ~mode ()
+  in
+  let dir = Paths.output_root ctx mode Html in
+  Sherlodoc.search_db sctx ~dir ~external_odocls:[] all_odocl_files
 ;;
 
-let setup_toplevel_index_deps sctx output =
+(* Generate the toplevel index artifact in the given format. For HTML/Full
+   mode, attach the global search database; otherwise go straight to the
+   common single-artifact entry. *)
+let setup_toplevel_index sctx mode format =
   let ctx = Super_context.context sctx in
-  let root = Paths.output_root ctx output in
-  let alias_of_dir dir = Output_format.alias output ~dir in
-  let* items = Odoc_discovery.Toplevel_index.get_items ctx in
+  let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
+  match (format : Output_format.t) with
+  | Markdown -> generate_html_artifact sctx ~artifact ~mode ~output_format:Markdown ()
+  | Json -> generate_html_artifact sctx ~artifact ~mode ~output_format:Json ()
+  | Html ->
+    let* search_db =
+      match mode with
+      | Doc_mode.Local_only -> Memo.return None
+      | Doc_mode.Full ->
+        let+ db = generate_global_search_db sctx ~mode in
+        Some db
+    in
+    generate_html_artifact sctx ~artifact ?search_db ~mode ~output_format:Html ()
+;;
+
+let setup_toplevel_index_deps sctx mode output =
+  let ctx = Super_context.context sctx in
+  let root = Paths.output_root ctx mode output in
+  let alias_of_dir dir = Output_format.alias output ~mode ~dir in
+  let* items = Odoc_discovery.Toplevel_index.get_items ~mode ctx in
   let deps =
-    Dune_engine.Dep.Set.of_list_map
-      items
-      ~f:(fun (Odoc_discovery.Toplevel_index.Package { name; _ }) ->
-        Dune_engine.Dep.alias (alias_of_dir (root ++ name)))
+    Dune_engine.Dep.Set.of_list_map items ~f:(fun item ->
+      let name =
+        match item with
+        | Odoc_discovery.Toplevel_index.Package { name; _ } -> name
+        | Odoc_discovery.Toplevel_index.Private_lib { unique_name; _ } -> unique_name
+      in
+      Dune_engine.Dep.alias (alias_of_dir (root ++ name)))
   in
   Rules.Produce.Alias.add_deps (alias_of_dir root) (Action_builder.deps deps)
 ;;
@@ -802,24 +832,44 @@ let handle_remap_artifacts sctx =
   Memo.return (Build_config.Gen_rules.make rules)
 ;;
 
-let generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format () =
+let generate_html_for_package
+      sctx
+      ~ctx
+      ~scope_id
+      ~all_artifacts
+      ~dir:_
+      ~mode
+      ~output_format
+      ()
+  =
   let pkg = Scope_id.as_package_name scope_id in
   let visible_artifacts =
     List.filter all_artifacts ~f:(fun a -> not (Artifact.hidden a))
   in
-  let output_file a = Path.build (Artifact.output_file ctx output_format a) in
-  let remap_file = Some (Paths.remap_file ctx) in
+  let output_file a = Path.build (Artifact.output_file ctx mode output_format a) in
+  let* search_db =
+    match output_format, mode with
+    | Json, _ | Markdown, _ | _, Doc_mode.Local_only -> Memo.return None
+    | Html, Doc_mode.Full ->
+      let html_root = Paths.output_root ctx mode Html in
+      Memo.return (Some (Path.Build.relative html_root "db.js"))
+  in
+  let remap_file =
+    match mode with
+    | Doc_mode.Local_only -> Some (Paths.remap_file ctx)
+    | Doc_mode.Full -> None
+  in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-      generate_html_artifact sctx ~artifact ?remap_file ~output_format ())
+      generate_html_artifact sctx ~artifact ?search_db ?remap_file ~mode ~output_format ())
   in
   let artifact_paths = List.map visible_artifacts ~f:output_file in
-  let pkg_alias = Dep.format_alias output_format ctx (Pkg pkg) in
+  let pkg_alias = Dep.format_alias output_format mode ctx (Pkg pkg) in
   let* () = Dep.add_file_deps pkg_alias artifact_paths in
   Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
     match Artifact.get_kind artifact with
     | Module (_, ((Lib _ | Private_lib _) as target)) ->
-      let lib_alias = Dep.format_alias output_format ctx target in
+      let lib_alias = Dep.format_alias output_format mode ctx target in
       Dep.add_file_deps lib_alias [ output_file artifact ]
     | Module _ | Page _ -> Memo.return ())
 ;;
@@ -972,7 +1022,7 @@ let handle_odocl_artifacts sctx ~dir ~pkg_or_lib_name =
           Dep.add_file_deps pkg_alias all_odocl_paths))
 ;;
 
-let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
+let handle_output_artifacts sctx ~dir ~mode ~pkg_or_lib_name ~output_format =
   let ctx = Super_context.context sctx in
   let* scope_id = Scope_id.of_string pkg_or_lib_name in
   let* all_artifacts, lib_subdirs =
@@ -994,7 +1044,7 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
       List.filter_map all_artifacts ~f:(fun artifact ->
         if Artifact.hidden artifact
         then None
-        else Artifact.output_dir_target ctx output_format artifact)
+        else Artifact.output_dir_target ctx mode output_format artifact)
       |> Path.Build.Set.of_list
       |> Path.Build.Set.to_list
   in
@@ -1005,13 +1055,25 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
   let other_formats = List.filter Output_format.all ~f:(fun f -> f <> output_format) in
   let rules =
     Rules.collect_unit (fun () ->
-      generate_html_for_package sctx ~ctx ~scope_id ~all_artifacts ~output_format ()
+      generate_html_for_package
+        sctx
+        ~ctx
+        ~scope_id
+        ~all_artifacts
+        ~dir
+        ~mode
+        ~output_format
+        ()
       >>> Memo.parallel_iter other_formats ~f:(fun other_format ->
-        let other_alias = Output_format.alias other_format ~dir in
+        let other_alias = Output_format.alias other_format ~mode ~dir in
         Rules.Produce.Alias.add_deps other_alias (Action_builder.return ())
-        >>> Memo.parallel_iter (Lib_name.Set.to_list all_lib_names) ~f:(fun lib_name ->
+        >>>
+        (* Add empty aliases for the other
+             format in library subdirectories
+             too *)
+        Memo.parallel_iter (Lib_name.Set.to_list all_lib_names) ~f:(fun lib_name ->
           let lib_dir = dir ++ Lib_name.to_string lib_name in
-          let lib_other_alias = Output_format.alias other_format ~dir:lib_dir in
+          let lib_other_alias = Output_format.alias other_format ~mode ~dir:lib_dir in
           Rules.Produce.Alias.add_deps lib_other_alias (Action_builder.return ()))))
   in
   let build_dir_only_sub_dirs =
@@ -1028,32 +1090,69 @@ let handle_output_artifacts sctx ~dir ~pkg_or_lib_name ~output_format =
     (Build_config.Gen_rules.make ~build_dir_only_sub_dirs ~directory_targets rules)
 ;;
 
-let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.t) =
+let setup_package_aliases_format
+      sctx
+      (pkg : Package.t)
+      (output : Output_format.t)
+      (mode : Doc_mode.t)
+  =
   let ctx = Super_context.context sctx in
+  let name = Package.name pkg in
   let alias =
     let pkg_dir = Package.dir pkg in
     let dir = Path.Build.append_source (Context.build_dir ctx) pkg_dir in
-    Output_format.alias output ~dir
+    Output_format.alias output ~mode ~dir
   in
   let deps_action =
     let open Action_builder.O in
     let* dep_set =
       Action_builder.of_memo
         (let open Memo.O in
-         let+ workspace_pkgs = get_workspace_packages () in
-         let pkg_targets =
-           List.map workspace_pkgs ~f:(fun p -> Target.Any (Target.Pkg p))
+         let* all_targets =
+           match mode with
+           | Doc_mode.Local_only ->
+             (* For Local_only, just use workspace packages directly.
+                No need to compute library closures - the actual file dependencies
+                are handled by the compilation rules. *)
+             let+ workspace_pkgs = get_workspace_packages () in
+             let pkg_targets =
+               List.map workspace_pkgs ~f:(fun p -> Target.Any (Target.Pkg p))
+             in
+             pkg_targets @ [ Target.Any (Target.Toplevel mode) ]
+           | Doc_mode.Full ->
+             (* For Full mode, expand to include all transitive dependencies *)
+             let with_doc = Package_variable_name.with_doc in
+             let doc_dep_packages =
+               Package.depends pkg
+               |> List.filter ~f:(Package_dependency.has_constraint_on with_doc)
+               |> List.map ~f:(fun (dep : Package_dependency.t) -> dep.name)
+             in
+             let+ all_packages =
+               Odoc_discovery.expand_packages_with_odoc_config
+                 ctx
+                 ~packages:(name :: doc_dep_packages)
+                 ~private_libs:[]
+             in
+             let pkg_targets =
+               Package.Name.Set.to_list all_packages
+               |> List.map ~f:(fun p -> Target.Any (Target.Pkg p))
+             in
+             pkg_targets @ [ Target.Any (Target.Toplevel mode) ]
          in
-         let all_targets = pkg_targets @ [ Target.Any Target.Toplevel ] in
          let unique_targets = List.sort_uniq all_targets ~compare:Target.compare_any in
-         unique_targets
-         |> List.map ~f:(fun (Target.Any t) -> Dep.format_alias output ctx t)
-         |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f))
+         Memo.return
+           (unique_targets
+            |> List.map ~f:(fun (Target.Any t) -> Dep.format_alias output mode ctx t)
+            |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f)))
     in
     let* dep_set_with_remap =
-      let remap_file = Paths.remap_file ctx in
-      let+ _ = Action_builder.path (Path.build remap_file) in
-      dep_set
+      match mode with
+      | Doc_mode.Local_only ->
+        (* Add remap file as dependency for Local_only mode *)
+        let remap_file = Paths.remap_file ctx in
+        let+ _ = Action_builder.path (Path.build remap_file) in
+        dep_set
+      | Doc_mode.Full -> Action_builder.return dep_set
     in
     Action_builder.deps dep_set_with_remap
   in
@@ -1061,7 +1160,10 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
 ;;
 
 let setup_package_aliases sctx (pkg : Package.t) =
-  Output_format.iter ~f:(setup_package_aliases_format sctx pkg)
+  (* Set up aliases for both modes *)
+  Memo.List.iter Doc_mode.all ~f:(fun mode ->
+    Memo.parallel_iter Output_format.all ~f:(fun output ->
+      setup_package_aliases_format sctx pkg output mode))
 ;;
 
 let gen_project_rules sctx project =
@@ -1097,16 +1199,22 @@ let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
           (Local (Library.to_lib_id ~src_dir l))
         >>| Option.value_exn
       in
-      (* Create target for this private library and add its HTML to doc-private.
-         Dependencies are handled transitively through the odoc pipeline. *)
+      (* Create target for this private library and add its HTML to doc-private and doc-full.
+       Dependencies are handled transitively through the odoc pipeline. *)
       let local_lib = Lib.Local.of_lib_exn lib in
       let lib_unique_name = Odoc_scope.lib_unique_name local_lib in
       let target = Target.Private_lib (lib_unique_name, lib) in
-      let html_alias = Dep.format_alias Html ctx target in
+      let html_alias_local = Dep.format_alias Html Doc_mode.Local_only ctx target in
+      let html_alias_full = Dep.format_alias Html Doc_mode.Full ctx target in
+      let alias_dep alias =
+        Action_builder.deps (Dune_engine.Dep.Set.singleton (Dune_engine.Dep.alias alias))
+      in
       Rules.Produce.Alias.add_deps
         (Alias.make ~dir Alias0.private_doc)
-        (Action_builder.deps
-           (Dune_engine.Dep.Set.singleton (Dune_engine.Dep.alias html_alias))))
+        (alias_dep html_alias_local)
+      >>> Rules.Produce.Alias.add_deps
+            (Alias.make ~dir Alias0.doc_full)
+            (alias_dep html_alias_full))
 ;;
 
 let has_rules ?(directory_targets = Path.Build.Map.empty) f =
@@ -1169,29 +1277,30 @@ let handle_mlds_dir sctx ~pkg_name =
         (Action_builder.write_file (Path.as_in_build_dir_exn output_path) content))
 ;;
 
-let handle_output_root sctx ~output_format =
+let handle_output_root sctx ~mode ~output_format =
   let ctx = Super_context.context sctx in
   let directory_targets =
     match output_format with
-    | Output_format.Html -> Path.Build.Map.singleton (Paths.odoc_support ctx) Loc.none
+    | Output_format.Html ->
+      Path.Build.Map.singleton (Paths.odoc_support ctx mode) Loc.none
     | Output_format.Json | Output_format.Markdown -> Path.Build.Map.empty
   in
   let rules =
     Rules.collect_unit (fun () ->
       (match output_format with
        | Output_format.Html ->
-         Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx Html)
-         >>> setup_css_rule sctx
+         Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx mode Html)
+         >>> setup_css_rule sctx ~mode
        | Output_format.Json | Output_format.Markdown -> Memo.return ())
-      >>> setup_toplevel_index sctx output_format
+      >>> setup_toplevel_index sctx mode output_format
       >>>
-      let* artifact = Odoc_discovery.toplevel_index_artifact ctx in
-      let output_file = Artifact.output_file ctx output_format artifact in
-      let alias = Dep.format_alias output_format ctx Toplevel in
+      let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
+      let output_file = Artifact.output_file ctx mode output_format artifact in
+      let alias = Dep.format_alias output_format mode ctx (Toplevel mode) in
       Dep.add_file_deps alias [ Path.build output_file ]
       (* Add dependencies on all child directories so the alias builds
          everything. *)
-      >>> setup_toplevel_index_deps sctx output_format)
+      >>> setup_toplevel_index_deps sctx mode output_format)
   in
   Memo.return (Build_config.Gen_rules.make ~directory_targets rules)
 ;;
@@ -1202,8 +1311,8 @@ let gen_rules sctx ~dir rest =
   let empty_rules () =
     Memo.return (Build_config.Gen_rules.make (Memo.return Rules.empty))
   in
-  let output_artifacts output_format pkg_or_lib_name =
-    handle_output_artifacts sctx ~dir ~output_format ~pkg_or_lib_name
+  let output_artifacts mode output_format pkg_or_lib_name =
+    handle_output_artifacts sctx ~dir ~output_format ~mode ~pkg_or_lib_name
   in
   let handle_mlds_pkg pkg_name =
     let pkg = Package.Name.of_string pkg_name in
@@ -1220,8 +1329,8 @@ let gen_rules sctx ~dir rest =
               (Subdir_set.of_list lib_subdirs))
          rules)
   in
-  let toplevel_index_rules =
-    let rules = Rules.collect_unit (fun () -> setup_toplevel_index_artifact sctx) in
+  let toplevel_index_rules mode =
+    let rules = Rules.collect_unit (fun () -> setup_toplevel_index_artifact sctx ~mode) in
     Memo.return (Build_config.Gen_rules.make rules)
   in
   match rest with
@@ -1232,13 +1341,37 @@ let gen_rules sctx ~dir rest =
            (Build_config.Gen_rules.Build_only_sub_dirs.singleton ~dir Subdir_set.all)
          (Memo.return Rules.empty))
   (* HTML/JSON/Markdown output trees *)
-  | [ "_html" ] -> handle_output_root sctx ~output_format:Output_format.Html
-  | [ "_html"; pkg_or_lib_name ] -> output_artifacts Html pkg_or_lib_name
-  | [ "_json" ] -> handle_output_root sctx ~output_format:Output_format.Json
-  | [ "_json"; pkg_or_lib_name ] -> output_artifacts Json pkg_or_lib_name
-  | [ "_markdown" ] -> handle_output_root sctx ~output_format:Output_format.Markdown
-  | [ "_markdown"; pkg_or_lib_name ] -> output_artifacts Markdown pkg_or_lib_name
-  | ("_html" | "_json" | "_markdown") :: _ :: _ :: _ -> redirect ()
+  | [ "_html" ] ->
+    handle_output_root sctx ~mode:Doc_mode.Local_only ~output_format:Output_format.Html
+  | [ "_html"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Local_only Html pkg_or_lib_name
+  | [ "_html_full" ] ->
+    handle_output_root sctx ~mode:Doc_mode.Full ~output_format:Output_format.Html
+  | [ "_html_full"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Full Html pkg_or_lib_name
+  | [ "_json" ] ->
+    handle_output_root sctx ~mode:Doc_mode.Local_only ~output_format:Output_format.Json
+  | [ "_json"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Local_only Json pkg_or_lib_name
+  | [ "_json_full" ] ->
+    handle_output_root sctx ~mode:Doc_mode.Full ~output_format:Output_format.Json
+  | [ "_json_full"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Full Json pkg_or_lib_name
+  | [ "_markdown" ] ->
+    handle_output_root
+      sctx
+      ~mode:Doc_mode.Local_only
+      ~output_format:Output_format.Markdown
+  | [ "_markdown"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Local_only Markdown pkg_or_lib_name
+  | [ "_markdown_full" ] ->
+    handle_output_root sctx ~mode:Doc_mode.Full ~output_format:Output_format.Markdown
+  | [ "_markdown_full"; pkg_or_lib_name ] ->
+    output_artifacts Doc_mode.Full Markdown pkg_or_lib_name
+  | ("_html" | "_html_full" | "_json" | "_json_full" | "_markdown" | "_markdown_full")
+    :: _
+    :: _
+    :: _ -> redirect ()
   (* Compiled/linked odoc trees *)
   | [ "_odoc" ] | [ "_odocls" ] | [ "_mlds" ] -> empty_rules ()
   | [ "_odoc"; pkg_or_lib_name ] -> handle_odoc_artifacts sctx ~dir ~pkg_or_lib_name
@@ -1246,14 +1379,15 @@ let gen_rules sctx ~dir rest =
   | [ "_mlds"; pkg_name ] -> handle_mlds_pkg pkg_name
   | ("_odoc" | "_odocls" | "_mlds") :: _ :: _ :: _ -> redirect ()
   (* Toplevel index (mld + compile + link) *)
-  | [ "_index" ] -> toplevel_index_rules
+  | [ "_index" ] -> toplevel_index_rules Doc_mode.Local_only
+  | [ "_index_full" ] -> toplevel_index_rules Doc_mode.Full
   (* Remap file and sherlodoc search DB *)
   | [ "_remap" ] -> handle_remap_artifacts sctx
   | [ "_sherlodoc" ] ->
     let rules =
       Rules.collect_unit (fun () ->
         let* _real_pkgs, all_odocl_files =
-          Odoc_discovery.collect_all_visible_odocls sctx ()
+          Odoc_discovery.collect_all_visible_odocls sctx ~mode:Doc_mode.Full ()
         in
         let dir = Paths.sherlodoc_root ctx in
         let+ _db =

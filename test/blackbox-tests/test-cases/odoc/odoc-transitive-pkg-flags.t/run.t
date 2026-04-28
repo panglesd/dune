@@ -34,7 +34,7 @@ Verify that Libc references in liba's HTML point to local paths:
 Verify that Odoc_parser references are remapped to ocaml.org (installed pkg):
 
   $ grep -o 'href="[^"]*Odoc_parser[^"]*"' _build/default/_doc/_html/pkga/pkga.lib/Liba/index.html | sed 's|/[0-9.]*-*[a-z0-9]*/doc|/VERSION/doc|g' | sort -u
-  href="../../../odoc-parser/odoc-parser/Odoc_parser/index.html#type-t"
+  href="https://ocaml.org/p/odoc-parser/VERSION/doc/odoc-parser/Odoc_parser/index.html#type-t"
 
 Inspect the link rule for liba to verify that -P flags include packages from
 the library closure. In particular, odoc-parser and pkgc must appear even
