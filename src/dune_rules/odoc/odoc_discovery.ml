@@ -122,3 +122,16 @@ let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name =
     let pkg = Package.Name.of_string pkg_or_lib_unique_name in
     discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
 ;;
+
+let collect_all_visible_odocls sctx ~default_index ~workspace_pkgs =
+  let ctx = Super_context.context sctx in
+  Memo.List.concat_map workspace_pkgs ~f:(fun pkg ->
+    let pkg_name = Package.Name.to_string pkg in
+    let+ all_artifacts, _lib_subdirs, _gen_index =
+      discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name:pkg_name
+    in
+    List.filter_map all_artifacts ~f:(fun artifact ->
+      if Odoc_artifact.hidden artifact
+      then None
+      else Some (Odoc_artifact.odocl_file ctx artifact)))
+;;

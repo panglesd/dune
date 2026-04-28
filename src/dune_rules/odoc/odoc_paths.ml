@@ -36,6 +36,7 @@ let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
 
 let output_root ctx format = root ctx ++ output_subdir format
 let odocl_root ctx = root ctx ++ "_odocls"
+let sherlodoc_root ctx = root ctx ++ "_sherlodoc"
 let output ctx format target = add_pkg_lnu (output_root ctx format) target
 let odocl ctx target = add_pkg_lnu (odocl_root ctx) target
 let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
