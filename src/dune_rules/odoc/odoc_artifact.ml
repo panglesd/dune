@@ -113,6 +113,16 @@ let output_file ctx format t =
     Path.Build.extend_basename path ~suffix
 ;;
 
+let output_dir_target ctx format t =
+  match t.kind, (format : Odoc_paths.output_format) with
+  | Module (_, target), (Html | Json) ->
+    let basename = get_basename t in
+    let base = Odoc_paths.output ctx format target in
+    Some (base ++ Stdune.String.capitalize basename)
+  | Module (_, target), Markdown -> Some (Odoc_paths.output ctx format target)
+  | Page _, _ -> None
+;;
+
 let hidden t =
   match t.kind with
   | Page _ -> false

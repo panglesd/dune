@@ -13,6 +13,7 @@ val odoc_file : Context.t -> t -> Path.Build.t
 val odocl_file : Context.t -> t -> Path.Build.t
 val odoc_dir : Context.t -> t -> Path.Build.t
 val output_file : Context.t -> Odoc_paths.output_format -> t -> Path.Build.t
+val output_dir_target : Context.t -> Odoc_paths.output_format -> t -> Path.Build.t option
 val pkg : t -> Package.Name.t option
 val lib_name : t -> Lib_name.t
 val lib : t -> Lib.t option
