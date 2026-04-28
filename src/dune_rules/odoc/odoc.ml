@@ -68,7 +68,7 @@ module Dep : sig
       the package are also returned*)
   val deps
     :  Context.t
-    -> Package.Name.t option
+    -> Package.Name.t list
     -> Lib.t list Resolve.t
     -> unit Action_builder.t
 
@@ -92,22 +92,25 @@ end = struct
     Rules.Produce.Alias.add_deps alias (Action_builder.paths files)
   ;;
 
-  let deps ctx pkg requires =
+  let deps ctx pkgs requires =
     let open Action_builder.O in
     let* libs = Resolve.read requires in
     Action_builder.deps
       (let init =
-         match pkg with
-         | Some p ->
-           Dep.Set.singleton (Dep.alias (odoc_all_alias ~dir:(Paths.odocs ctx (Pkg p))))
-         | None -> Dep.Set.empty
+         List.fold_left pkgs ~init:Dep.Set.empty ~f:(fun acc p ->
+           Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir:(Paths.odocs ctx (Pkg p)))))
        in
        List.fold_left libs ~init ~f:(fun acc (lib : Lib.t) ->
-         match Lib.Local.of_lib lib with
-         | None -> acc
-         | Some lib ->
-           let dir = Paths.odocs ctx (Target.Lib lib) in
-           Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir))))
+         let info = Lib.info lib in
+         (* Skip implementations of virtual libraries - they don't have docs *)
+         match Lib_info.implements info with
+         | Some _ -> acc
+         | None ->
+           (match Lib.Local.of_lib lib with
+            | None -> acc
+            | Some local_lib ->
+              let dir = Paths.odocs ctx (Target.Lib local_lib) in
+              Dep.Set.add acc (Dep.alias (odoc_all_alias ~dir)))))
   ;;
 
   let setup_deps : type a. Context.t -> a Target.t -> Path.Set.t -> unit Memo.t =
@@ -232,7 +235,9 @@ let compile_artifact sctx ~artifact ~module_deps ~requires =
       let flags =
         Command.Args.S [ A "-I"; Path self_dir; odoc_include_flags ctx pkg requires ]
       in
-      flags, Dep.deps ctx pkg requires, Command.Args.As [ "--pkg"; pkg_or_lnu local_lib ]
+      ( flags
+      , Dep.deps ctx (Option.to_list pkg) requires
+      , Command.Args.As [ "--pkg"; pkg_or_lnu local_lib ] )
     | Page (_, Pkg pkg) ->
       ( Command.Args.empty
       , Action_builder.return ()
@@ -262,7 +267,7 @@ let compile_artifact sctx ~artifact ~module_deps ~requires =
 let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let ctx = Super_context.context sctx in
   let pkg = Artifact.pkg odoc_file in
-  let deps = Dep.deps ctx pkg requires in
+  let deps = Dep.deps ctx (Option.to_list pkg) requires in
   let include_flags = odoc_include_flags ctx pkg requires in
   let run_odoc =
     run_odoc
