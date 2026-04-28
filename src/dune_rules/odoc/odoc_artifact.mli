@@ -25,6 +25,14 @@ val output_dir_target : Context.t -> Odoc_paths.output_format -> t -> Path.Build
 val pkg : t -> Package.Name.t option
 val lib_name : t -> Lib_name.t
 val lib : t -> Lib.t option
+val extra_libs : t -> Lib.t list Memo.t
+val extra_packages : t -> Package.Name.t list Memo.t
 val hidden : t -> bool
 val parent_id : t -> string
-val create : kind:kind -> source:source -> t
+
+val create
+  :  kind:kind
+  -> source:source
+  -> extra_libs:Lib.t list Memo.t
+  -> extra_packages:Package.Name.t list Memo.t
+  -> t

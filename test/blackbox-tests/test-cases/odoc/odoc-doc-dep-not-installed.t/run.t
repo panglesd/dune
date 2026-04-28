@@ -1,31 +1,6 @@
-We create two libraries `l.one` and `l.two` with a conflicting module.
-They build fine, are not co-linkable, but documentation should be able to be
-built. See #1645.
+Test that documentation dependencies on non-existent packages produce a
+sensible error message.
 
-  $ cat > dune-project << EOF
-  > (lang dune 1.0)
-  > (package (name l))
-  > EOF
-
-  $ mkdir one
-  $ cat > one/dune << EOF
-  > (library
-  >  (name l_one)
-  >  (public_name l.one)
-  >  (wrapped false))
-  > EOF
-  $ touch one/module.ml
-
-  $ mkdir two
-  $ cat > two/dune << EOF
-  > (library
-  >  (name l_two)
-  >  (public_name l.two)
-  >  (wrapped false))
-  > EOF
-  $ touch two/module.ml
-
-  $ dune build @install
   $ dune build @doc
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
@@ -71,15 +46,11 @@ built. See #1645.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "_index/index.mld", line 3, characters 2-21:
-  Warning: Failed to resolve reference /l/index Path '/l/index' not found
-  File "_mlds/l/index.mld", line 7, characters 0-23:
-  Warning: Failed to resolve reference /l.two/Module Path '/l.two/Module' not found
-  File "_mlds/l/index.mld", line 4, characters 0-23:
-  Warning: Failed to resolve reference /l.one/Module Path '/l.one/Module' not found
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
+  File "_index/index.mld", line 3, characters 2-33:
+  Warning: Failed to resolve reference /testpkg/index Path '/testpkg/index' not found
+  Error: Documentation dependency "nonexistent-package-that-does-not-exist" is
+  not installed.
+  -> required by _build/default/_doc/_html/testpkg/index.html
+  -> required by alias _doc/_html/testpkg/doc
+  -> required by alias doc
+  [1]

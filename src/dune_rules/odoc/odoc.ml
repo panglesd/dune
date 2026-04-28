@@ -439,7 +439,9 @@ let compile_artifact sctx ~artifact ~lib_artifacts_by_module ~package_lib_names 
 let link_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
   let ctx = Super_context.context sctx in
   let pkg = Artifact.pkg odoc_file in
-  let deps = Dep.deps ctx (Option.to_list pkg) requires in
+  let* extra_packages = Artifact.extra_packages odoc_file in
+  let all_pkgs = Option.to_list pkg @ extra_packages in
+  let deps = Dep.deps ctx all_pkgs requires in
   let* pkg_discovery = Package_discovery.create ~context:ctx in
   let* include_flags = odoc_include_flags ctx pkg requires pkg_discovery in
   let* workspace_pkgs = get_workspace_packages () in
@@ -558,24 +560,31 @@ let setup_css_rule sctx =
    - Modules in a library: the library's transitive closure plus sibling libs
      in the same package (allowing cross-references between siblings).
    - Private libraries (no package): just the library's transitive closure.
-   - Pages in a package: libs in the package plus their transitive deps. *)
+   - Pages in a package: libs in the package plus their transitive deps.
+   Extra libs resolved from odoc-config.sexp are appended, then the whole list
+   is deduplicated. *)
 let compute_link_requires sctx ~artifact =
   let ctx = Super_context.context sctx in
   let closure libs = Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml in
-  match Artifact.get_kind artifact with
-  | Module (_, Lib (pkg, lib)) ->
-    let* closure = closure [ lib ] in
-    let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
-    Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs)
-  | Module (_, Private_lib (_, lib)) ->
-    let+ closure = closure [ lib ] in
-    Resolve.map closure ~f:(fun libs -> lib :: libs)
-  | Page ({ pkg_libs; _ }, (Pkg _ | Toplevel)) ->
-    if List.is_empty pkg_libs
-    then Memo.return (Resolve.return [])
-    else
-      let+ closure = closure pkg_libs in
-      Resolve.map closure ~f:(fun closure_libs -> pkg_libs @ closure_libs)
+  let* base_requires =
+    match Artifact.get_kind artifact with
+    | Module (_, Lib (pkg, lib)) ->
+      let* closure = closure [ lib ] in
+      let+ pkg_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
+      Resolve.map closure ~f:(fun closure_libs -> (lib :: closure_libs) @ pkg_libs)
+    | Module (_, Private_lib (_, lib)) ->
+      let+ closure = closure [ lib ] in
+      Resolve.map closure ~f:(fun libs -> lib :: libs)
+    | Page ({ pkg_libs; _ }, (Pkg _ | Toplevel)) ->
+      if List.is_empty pkg_libs
+      then Memo.return (Resolve.return [])
+      else
+        let+ closure = closure pkg_libs in
+        Resolve.map closure ~f:(fun closure_libs -> pkg_libs @ closure_libs)
+  in
+  let+ extra_libs = Artifact.extra_libs artifact in
+  Resolve.map base_requires ~f:(fun libs ->
+    libs @ extra_libs |> Lib.Set.of_list |> Lib.Set.to_list)
 ;;
 
 let link_artifact sctx ~artifact =

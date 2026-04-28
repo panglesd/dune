@@ -13,8 +13,6 @@ Private libraries attached to packages shouldn't be displayed in the index
   > touch foo.ml bar.ml
 
   $ dune build @doc
-  File "_index/index.mld", line 3, characters 2-25:
-  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -59,6 +57,8 @@ Private libraries attached to packages shouldn't be displayed in the index
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_index/index.mld", line 3, characters 2-25:
+  Warning: Failed to resolve reference /foo/index Path '/foo/index' not found
   File "_mlds/foo/index.mld", line 4, characters 0-18:
   Warning: Failed to resolve reference /foo/Foo Path '/foo/Foo' not found
   $ cat _build/default/_doc/_mlds/foo/index.mld

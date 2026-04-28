@@ -42,8 +42,6 @@ resist building the doc to check what happens: currently, only top-level mld
 files are included in the doc generation.
 
   $ dune build @doc
-  File "_index/index.mld", line 3, characters 2-41:
-  Warning: Failed to resolve reference /testing_mld/index Path '/testing_mld/index' not found
   File "_doc/_odoc/testing_mld/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/testing_mld/page-index.odoc

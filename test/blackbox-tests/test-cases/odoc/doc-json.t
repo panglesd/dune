@@ -21,8 +21,6 @@
   > }
 
   $ dune build @doc-json
-  File "_index/index.mld", line 3, characters 2-21:
-  Warning: Failed to resolve reference /l/index Path '/l/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "fun.mli", line 92, characters 3-8:
@@ -67,6 +65,8 @@
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_index/index.mld", line 3, characters 2-21:
+  Warning: Failed to resolve reference /l/index Path '/l/index' not found
   File "_mlds/l/index.mld", line 4, characters 0-14:
   Warning: Failed to resolve reference /l/L Path '/l/L' not found
   $ list_docs

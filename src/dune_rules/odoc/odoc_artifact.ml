@@ -17,9 +17,13 @@ type source =
 type t =
   { kind : kind
   ; source : source
+  ; extra_libs : Lib.t list Memo.t
+  ; extra_packages : Package.Name.t list Memo.t
   }
 
 let get_kind t = t.kind
+let extra_libs t = t.extra_libs
+let extra_packages t = t.extra_packages
 
 let source_file t =
   match t.source with
@@ -167,4 +171,6 @@ let parent_id t =
      | None -> base_id)
 ;;
 
-let create ~kind ~source = { kind; source }
+let create ~kind ~source ~extra_libs ~extra_packages =
+  { kind; source; extra_libs; extra_packages }
+;;

@@ -3,8 +3,6 @@
 As configured in the `dune` file at the root, this should be an error:
 
   $ dune build --only-packages=foo_doc @doc
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /foo_doc/index Path '/foo_doc/index' not found
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Error: End of text is not allowed in '[...]' (code).
   ERROR: Warnings have been generated.
@@ -13,8 +11,6 @@ As configured in the `dune` file at the root, this should be an error:
 Same for documentation in mli files:
 
   $ dune build --only-packages=foo_lib @doc
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /foo_lib/index Path '/foo_lib/index' not found
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
   File "array.mli", line 449, character 1 to line 455, character 2:
@@ -61,10 +57,6 @@ Same for documentation in mli files:
 These packages are in a nested env, the option is disabled, should success with warning printed:
 
   $ dune build --only-packages=bar_doc,bar_lib @doc
-  File "_index/index.mld", line 4, characters 2-33:
-  Warning: Failed to resolve reference /bar_lib/index Path '/bar_lib/index' not found
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /bar_doc/index Path '/bar_doc/index' not found
   File "../sub_env/bar_doc/bar.mld", line 4, characters 0-0:
   Error: End of text is not allowed in '[...]' (code).
   ERROR: Warnings have been generated.
@@ -97,11 +89,6 @@ In release mode, no error:
   (cd _build/default/_doc && odoc compile -I _odoc/stdlib/stdlib --output-dir _odoc --parent-id foo_doc --enable-missing-root-warning --warnings-tag foo_doc ../foo_doc/foo.mld)
   File "../foo_doc/foo.mld", line 4, characters 0-0:
   Warning: End of text is not allowed in '[...]' (code).
-  (cd _build/default/_doc && odoc link -I _odoc/stdlib/stdlib --enable-missing-root-warning --warnings-tags __private_lib__ --warnings-tags foo_doc --warnings-tags foo_lib -o _index/page-index.odocl _index/page-index.odoc)
-  File "_index/index.mld", line 4, characters 2-33:
-  Warning: Failed to resolve reference /foo_lib/index Path '/foo_lib/index' not found
-  File "_index/index.mld", line 3, characters 2-33:
-  Warning: Failed to resolve reference /foo_doc/index Path '/foo_doc/index' not found
   (cd _build/default/_doc && odoc compile -I _odoc/stdlib/stdlib --output-dir _odoc --parent-id stdlib/stdlib --enable-missing-root-warning --warnings-tag stdlib /home/tarides/.opam/5.4.0/lib/ocaml/stdlib__Domain.cmti)
   File "domain.mli", line 69, character 4 to line 74, character 6:
   Warning: Code blocks should be indented at the opening `{`.
@@ -165,6 +152,11 @@ In release mode, no error:
   (cd _build/default/_doc && odoc compile -I _odoc/foo_lib/foo_lib -I _odoc/stdlib/stdlib --output-dir _odoc --parent-id foo_lib/foo_lib --enable-missing-root-warning --warnings-tag foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
+  (cd _build/default/_doc && odoc link -I _odoc/foo_lib/foo_lib -I _odoc/stdlib/stdlib --enable-missing-root-warning --warnings-tags __private_lib__ --warnings-tags foo_doc --warnings-tags foo_lib -o _index/page-index.odocl _index/page-index.odoc)
+  File "_index/index.mld", line 4, characters 2-33:
+  Warning: Failed to resolve reference /foo_lib/index Path '/foo_lib/index' not found
+  File "_index/index.mld", line 3, characters 2-33:
+  Warning: Failed to resolve reference /foo_doc/index Path '/foo_doc/index' not found
   (cd _build/default/_doc && odoc link -I _odoc/foo_lib -I _odoc/foo_lib/foo_lib -I _odoc/stdlib/stdlib --enable-missing-root-warning --warnings-tags __private_lib__ --warnings-tags foo_doc --warnings-tags foo_lib -o _odocls/foo_lib/page-index.odocl _odoc/foo_lib/page-index.odoc)
   File "_mlds/foo_lib/index.mld", line 4, characters 0-22:
   Warning: Failed to resolve reference /foo_lib/Foo Path '/foo_lib/Foo' not found
