@@ -101,7 +101,7 @@ let get_local_mld_infos =
   fun sctx ~pkg -> Memo.exec memo (sctx, pkg)
 ;;
 
-let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
+let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index =
   let lib_subdirs = List.map libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string) in
   let* lib_artifacts = discover_all_lib_artifacts sctx ~libs in
   let mld_infos, gen_index =
@@ -109,7 +109,8 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
     then mld_infos, None
     else (
       let path = auto_index_path ctx pkg in
-      String.Map.set mld_infos "index" (path, "index"), Some (path, lib_artifacts))
+      let content = default_index ~pkg ~lib_artifacts in
+      String.Map.set mld_infos "index" (path, "index"), Some (path, content))
   in
   let mld_artifacts =
     let mld_infos =
@@ -123,7 +124,7 @@ let discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos =
   Memo.return (all_artifacts, lib_subdirs, gen_index)
 ;;
 
-let discover_local_pkg_artifacts sctx ctx ~pkg =
+let discover_local_pkg_artifacts sctx ctx ~pkg ~default_index =
   let* { Scope.DB.Lib_entry.Set.libraries; _ } =
     Scope.DB.lib_entries_of_package (Context.name ctx) pkg
   in
@@ -135,10 +136,10 @@ let discover_local_pkg_artifacts sctx ctx ~pkg =
       | Some _ -> None)
   in
   let* mld_infos = get_local_mld_infos sctx ~pkg in
-  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos
+  discover_pkg_artifacts_common sctx ctx ~pkg ~libs ~mld_infos ~default_index
 ;;
 
-let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name =
+let discover_package_artifacts sctx ctx ~default_index ~pkg_or_lib_unique_name =
   let* lib_name, lib_db =
     Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_unique_name
   in
@@ -152,6 +153,8 @@ let discover_package_artifacts sctx ctx ~pkg_or_lib_unique_name =
     module_artifacts, [], None, None
   | _ ->
     let pkg = Package.Name.of_string pkg_or_lib_unique_name in
-    let+ artifacts, lib_subdirs, gen_index = discover_local_pkg_artifacts sctx ctx ~pkg in
+    let+ artifacts, lib_subdirs, gen_index =
+      discover_local_pkg_artifacts sctx ctx ~pkg ~default_index
+    in
     artifacts, lib_subdirs, gen_index, Some pkg
 ;;
