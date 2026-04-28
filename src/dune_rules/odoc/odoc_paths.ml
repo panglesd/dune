@@ -21,6 +21,10 @@ let output_subdir format mode =
   | Markdown, Doc_mode.Full -> "_markdown_full"
 ;;
 
+type sidebar_scope =
+  | Per_package of Package.Name.t
+  | Global
+
 let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
@@ -81,4 +85,35 @@ let odoc_support_for_pkg ctx mode pkg =
 ;;
 
 let toplevel_index_mld ctx mode = index_root ctx mode ++ "index.mld"
+
+let sidebar_root ctx mode =
+  let subdir =
+    match mode with
+    | Doc_mode.Local_only -> "_sidebar"
+    | Doc_mode.Full -> "_sidebar_full"
+  in
+  root ctx ++ subdir
+;;
+
+let index_file ctx mode scope =
+  match scope with
+  | Global -> sidebar_root ctx mode ++ "index.odoc-index"
+  | Per_package pkg ->
+    sidebar_root ctx mode ++ Package.Name.to_string pkg ++ "index.odoc-index"
+;;
+
+let sidebar_file ctx mode scope =
+  match scope with
+  | Global -> sidebar_root ctx mode ++ "sidebar.odoc-sidebar"
+  | Per_package pkg ->
+    sidebar_root ctx mode ++ Package.Name.to_string pkg ++ "sidebar.odoc-sidebar"
+;;
+
+let sidebar_json ctx mode scope output_format =
+  let root = output_root ctx mode output_format in
+  match scope with
+  | Global -> root ++ "sidebar.json"
+  | Per_package pkg -> root ++ Package.Name.to_string pkg ++ "sidebar.json"
+;;
+
 let remap_file ctx = root ctx ++ "_remap" ++ "remap.txt"

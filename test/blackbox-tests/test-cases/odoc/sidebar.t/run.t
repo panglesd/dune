@@ -49,8 +49,7 @@ Test 1: Default per-package sidebar with @doc
 Check that per-package sidebar files are generated:
 
   $ find _build/default/_doc/_sidebar -name "*.odoc-sidebar" | sort
-  find: '_build/default/_doc/_sidebar': No such file or directory
-  [1]
+  _build/default/_doc/_sidebar/sidebar.odoc-sidebar
 
 Check that HTML is generated for both packages:
 
@@ -76,20 +75,13 @@ Create workspace with global sidebar:
   > EOF
 
   $ dune build @doc
-  File "dune-workspace", line 5, characters 4-11:
-  5 |    (sidebar global))))
-          ^^^^^^^
-  Error: Unknown field "sidebar"
-  [1]
 
 Check that global sidebar is generated:
 
   $ ls _build/default/_doc/_sidebar/sidebar.odoc-sidebar
-  ls: cannot access '_build/default/_doc/_sidebar/sidebar.odoc-sidebar': No such file or directory
-  [2]
+  _build/default/_doc/_sidebar/sidebar.odoc-sidebar
 
 Check that sidebar.json is built by @doc when sidebar is global:
 
   $ ls _build/default/_doc/_html/sidebar.json
-  ls: cannot access '_build/default/_doc/_html/sidebar.json': No such file or directory
-  [2]
+  _build/default/_doc/_html/sidebar.json

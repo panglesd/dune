@@ -18,10 +18,13 @@ Verify the content was rendered:
 
   $ cat _build/default/_doc/_html/mypkg/tutorial/getting-started.html | grep -o 'Getting Started'
   Getting Started
+  Getting Started
+  Getting Started
 
 Verify the cross-references from mypkg.mld to the tutorial page resolved correctly:
 
   $ grep -o 'href="[^"]*getting-started[^"]*"' _build/default/_doc/_html/mypkg/mypkg.html
+  href="tutorial/getting-started.html"
   href="tutorial/getting-started.html"
   href="tutorial/getting-started.html"
   href="tutorial/getting-started.html"
