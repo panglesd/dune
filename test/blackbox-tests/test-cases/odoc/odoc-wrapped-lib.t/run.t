@@ -45,6 +45,8 @@ This test generates documentation for non-hidden modules only for a library:
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/foo/index.mld", line 4, characters 0-18:
+  Warning: Failed to resolve reference /foo/Foo Path '/foo/Foo' not found
 
  Hidden modules should be compiled
   $ find _build/default -name '*.odoc' | sort -n

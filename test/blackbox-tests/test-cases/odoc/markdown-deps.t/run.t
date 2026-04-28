@@ -96,6 +96,12 @@ Test markdown with multiple packages and dependencies
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/core_lib/index.mld", line 4, characters 0-28:
+  Warning: Failed to resolve reference /core_lib/Core_lib Path '/core_lib/Core_lib' not found
+  File "_mlds/utils_lib/index.mld", line 4, characters 0-30:
+  Warning: Failed to resolve reference /utils_lib/Utils_lib Path '/utils_lib/Utils_lib' not found
+  File "_mlds/app_lib/index.mld", line 4, characters 0-26:
+  Warning: Failed to resolve reference /app_lib/App_lib Path '/app_lib/App_lib' not found
 
   $ find _build/default/_doc/_markdown -type d | sort
   _build/default/_doc/_markdown

@@ -66,6 +66,8 @@ Demonstrate how odoc interops with the `stdlib` stanza
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/l/index.mld", line 4, characters 0-14:
+  Warning: Failed to resolve reference /l/L Path '/l/L' not found
   File "_odoc/l/l/l.odoc":
   Warning: Couldn't find the following modules:
     Bar
