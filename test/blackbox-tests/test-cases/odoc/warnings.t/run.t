@@ -152,3 +152,6 @@ In release mode, no error:
   (cd _build/default/_doc && odoc compile -I _odoc/foo_lib/foo_lib -I _odoc/stdlib/stdlib --output-dir _odoc --parent-id foo_lib/foo_lib --enable-missing-root-warning --warnings-tag foo_lib ../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
+  (cd _build/default/_doc && odoc link -I _odoc/foo_lib -I _odoc/foo_lib/foo_lib -I _odoc/stdlib/stdlib --enable-missing-root-warning --warnings-tags __private_lib__ --warnings-tags foo_doc --warnings-tags foo_lib -o _odocls/foo_lib/page-index.odocl _odoc/foo_lib/page-index.odoc)
+  File "_mlds/foo_lib/index.mld", line 4, characters 0-22:
+  Warning: Failed to resolve reference /foo_lib/Foo Path '/foo_lib/Foo' not found

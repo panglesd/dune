@@ -71,9 +71,7 @@ built. See #1645.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
-  File "Module":
-  Ambiguous lookup. Possible files: Module
-  Module
+  File "_mlds/l/index.mld", line 7, characters 0-23:
+  Warning: Failed to resolve reference /l.two/Module Path '/l.two/Module' not found
+  File "_mlds/l/index.mld", line 4, characters 0-23:
+  Warning: Failed to resolve reference /l.one/Module Path '/l.one/Module' not found

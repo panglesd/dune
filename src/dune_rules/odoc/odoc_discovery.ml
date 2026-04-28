@@ -43,12 +43,17 @@ let vlib_impl_libs_of_local_pkg (ctx : Context.t) ~pkg =
   else Memo.return []
 ;;
 
+(* Generate default package index.mld content from artifacts organized by library.
+   Lists entry modules for each library. *)
 let default_pkg_index ~pkg ~lib_artifacts =
   let b = Buffer.create 512 in
   Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
-  List.sort lib_artifacts ~compare:(fun (x, _) (y, _) ->
-    Lib_name.compare (Lib.name x) (Lib.name y))
-  |> List.iter ~f:(fun (lib, artifacts) ->
+  let sorted_libs =
+    List.sort lib_artifacts ~compare:(fun (lib1, _) (lib2, _) ->
+      Lib_name.compare (Lib.name lib1) (Lib.name lib2))
+  in
+  List.iter sorted_libs ~f:(fun (lib, artifacts) ->
+    let lib_name = Lib.name lib in
     let modules =
       List.filter_map artifacts ~f:(fun artifact ->
         if Odoc_artifact.hidden artifact
@@ -57,22 +62,26 @@ let default_pkg_index ~pkg ~lib_artifacts =
           match Odoc_artifact.get_kind artifact with
           | Module ({ visible = true; module_name; _ }, _) -> Some module_name
           | _ -> None))
+      |> List.sort ~compare:Module_name.compare
     in
-    Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string (Lib.name lib));
-    Buffer.add_string
-      b
-      (match modules with
-       | [ x ] ->
-         sprintf
-           "The entry point of this library is the module:\n{!module-%s}.\n"
-           (Module_name.to_string x)
-       | _ ->
-         sprintf
-           "This library exposes the following toplevel modules:\n{!modules:%s}\n"
-           (modules
-            |> List.sort ~compare:Module_name.compare
-            |> List.map ~f:Module_name.to_string
-            |> String.concat ~sep:" ")));
+    if not (List.is_empty modules)
+    then (
+      Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string lib_name);
+      Buffer.add_string
+        b
+        (match modules with
+         | [ x ] ->
+           sprintf
+             "The entry point of this library is the module:\n{!/%s/module-%s}.\n"
+             (Lib_name.to_string lib_name)
+             (Module_name.to_string x)
+         | _ ->
+           (* TODO: Use qualified paths like {!modules:/lib/Foo /lib/Bar} once odoc
+              supports this syntax in the {!modules:} directive. Currently only
+              bare module names are supported. *)
+           sprintf
+             "This library exposes the following toplevel modules:\n{!modules:%s}\n"
+             (modules |> List.map ~f:Module_name.to_string |> String.concat ~sep:" "))));
   Buffer.contents b
 ;;
 

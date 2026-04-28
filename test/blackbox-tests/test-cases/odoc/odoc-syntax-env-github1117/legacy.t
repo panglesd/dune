@@ -70,6 +70,8 @@ variable, and can rebuild as needed.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/l/index.mld", line 4, characters 0-14:
+  Warning: Failed to resolve reference /l/L Path '/l/L' not found
   $ detect _build/default/_doc/_html/l/L/index.html
   grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
   grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
@@ -120,6 +122,8 @@ variable, and can rebuild as needed.
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/l/index.mld", line 4, characters 0-14:
+  Warning: Failed to resolve reference /l/L Path '/l/L' not found
   $ detect _build/default/_doc/_html/l/L/index.html
   grep: _build/default/_doc/_html/l/L/index.html: No such file or directory
   grep: _build/default/_doc/_html/l/L/index.html: No such file or directory

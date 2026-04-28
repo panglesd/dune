@@ -62,12 +62,14 @@ Works for "universal" libraries
   Warning: Alert unsynchronized_access not expected here.
   File "gc.mli", line 431, character 3 to line 440, character 5:
   Warning: Code blocks should be indented at the opening `{`.
+  File "_mlds/foo/index.mld", line 4, characters 0-18:
+  Warning: Failed to resolve reference /foo/Foo Path '/foo/Foo' not found
 
   $ cat _build/default/_doc/_mlds/foo/index.mld
   {0 foo index}
   {1 Library foo}
   The entry point of this library is the module:
-  {!module-Foo}.
+  {!/foo/module-Foo}.
 
 Works for Melange-only libraries
 
@@ -91,4 +93,4 @@ Works for Melange-only libraries
   {0 foo index}
   {1 Library foo}
   The entry point of this library is the module:
-  {!module-Foo}.
+  {!/foo/module-Foo}.
