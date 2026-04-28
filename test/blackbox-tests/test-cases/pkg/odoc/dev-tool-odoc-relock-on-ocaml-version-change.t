@@ -36,6 +36,8 @@ Initially odoc will depend on ocaml-base-compiler.5.2.0 to match the project.
   File "_doc/_odoc/pkg/foo/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/pkg/foo/page-index.odoc
+  File "_doc/_odocls/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/foo/.odoc-all
   [1]
   $ grep "version" "${dev_tool_lock_dir}"/ocaml-base-compiler.pkg
   (version 5.2.0)
@@ -57,6 +59,8 @@ We can re-run "dune ocaml doc" without relocking or rebuilding.
   File "_doc/_odoc/pkg/foo/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/pkg/foo/page-index.odoc
+  File "_doc/_odocls/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/foo/.odoc-all
   [1]
 
 Change the version of ocaml that the project depends on.
@@ -90,6 +94,8 @@ before running. Odoc now depends on ocaml.5.1.0.
   File "_doc/_odoc/pkg/foo/_unknown_", line 1, characters 0-0:
   Error: Rule failed to generate the following targets:
   - _doc/_odoc/pkg/foo/page-index.odoc
+  File "_doc/_odocls/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for alias _doc/_odoc/foo/.odoc-all
   [1]
   $ grep "version" "${dev_tool_lock_dir}"/ocaml-base-compiler.pkg
   (version 5.1.0)

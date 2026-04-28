@@ -6,7 +6,6 @@ type output_format =
   | Markdown
 
 val odoc_support_dirname : string
-val pkg_or_lnu : Lib.Local.t -> string
 val root : Context.t -> Path.Build.t
 val odocs : Context.t -> 'a Odoc_target.t -> Path.Build.t
 val output_root : Context.t -> output_format -> Path.Build.t

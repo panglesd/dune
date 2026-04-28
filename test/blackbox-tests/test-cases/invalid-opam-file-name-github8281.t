@@ -22,3 +22,4 @@ Whenever an invalid package name is used, dune crashes when building @doc
   $ cd ..
 
   $ dune build @doc 2>&1 | awk '/Internal error/,/Raised/'
+  [1]

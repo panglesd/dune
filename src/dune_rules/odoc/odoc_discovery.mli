@@ -1,10 +1,5 @@
 open Import
 
-val discover_local_lib_artifacts
-  :  Super_context.t
-  -> local_lib:Lib.Local.t
-  -> Odoc_artifact.t list Memo.t
-
 val discover_package_artifacts
   :  Super_context.t
   -> Context.t

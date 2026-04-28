@@ -121,4 +121,22 @@ let hidden t =
     String.contains_double_underscore basename
 ;;
 
+let parent_id t =
+  let base_id =
+    match t.kind with
+    | Module (_, Lib local_lib) ->
+      let lib = Lib.Local.to_lib local_lib in
+      (match Lib_info.package (Lib.info lib) with
+       | Some pkg -> Package.Name.to_string pkg
+       | None -> Odoc_scope.lib_unique_name local_lib)
+    | Page (_, Pkg pkg) -> Package.Name.to_string pkg
+  in
+  match t.kind with
+  | Module _ -> base_id
+  | Page (page, _) ->
+    (match fst (split_page_name page.name) with
+     | Some parent_path -> sprintf "%s/%s" base_id parent_path
+     | None -> base_id)
+;;
+
 let create ~kind ~source = { kind; source }
