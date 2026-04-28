@@ -32,6 +32,7 @@ built. See #1645.
   - <internal location>
   - <internal location>
   -> required by alias _doc/_html/l/doc
+  -> required by alias _doc/_html/doc
   -> required by alias doc
   Error: Multiple rules generated for
   _build/default/_doc/_odocls/l/module.odocl:
@@ -39,5 +40,6 @@ built. See #1645.
   - <internal location>
   -> required by _build/default/_doc/_html/l/index.html
   -> required by alias _doc/_html/l/doc
+  -> required by alias _doc/_html/doc
   -> required by alias doc
   [1]
