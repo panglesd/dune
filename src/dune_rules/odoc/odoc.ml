@@ -747,11 +747,20 @@ let setup_package_aliases sctx (pkg : Package.t) =
 ;;
 
 let gen_project_rules sctx project =
+  let* mask = Dune_load.mask () in
+  (* Set up package aliases *)
   Dune_project.packages project
   |> Dune_lang.Package_name.Map.to_seq
   |> Memo.parallel_iter_seq ~f:(fun (_, (pkg : Package.t)) ->
-    (* setup @doc to build the correct html for the package *)
-    setup_package_aliases sctx pkg)
+    (* Check if this package is in the mask (honors -p flag) *)
+    let should_build =
+      Only_packages.mem_all mask || Only_packages.mem mask (Package.name pkg)
+    in
+    if should_build
+    then
+      (* setup @doc to build the correct html for the package *)
+      setup_package_aliases sctx pkg
+    else Memo.return ())
 ;;
 
 let setup_private_library_doc_alias sctx ~scope ~dir (l : Library.t) =
