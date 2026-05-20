@@ -88,7 +88,7 @@ let get_basename t =
   | Page (page, _), _ -> snd (split_page_name page.name)
   | Asset (asset, _), _ -> snd (split_page_name asset.asset_rel_path)
   | Module (_, _), Local_source src_path ->
-    Path.Build.basename src_path |> Filename.remove_extension
+    Path.Build.basename src_path |> Filename.remove_extension |> Filename.to_string
   | Module (mod_, _), (Installed_source _ | Generated _) ->
     Module_name.to_string mod_.module_name |> String.uncapitalize_ascii
   | Impl (impl, _), _ ->
@@ -149,31 +149,31 @@ let output_base ctx mode format t =
   | Asset (_, target), _ -> Odoc_paths.output ctx mode format target
 ;;
 
-let output_extension : Odoc_paths.output_format -> string = function
-  | Html -> ".html"
-  | Json -> ".html.json"
-  | Markdown -> ".md"
+let output_extension : Odoc_paths.output_format -> Filename.Extension.t = function
+  | Html -> Filename.Extension.html
+  | Json -> Filename.Extension.html_json
+  | Markdown -> Filename.Extension.md
 ;;
 
 let output_file ctx mode format t =
   let base = output_base ctx mode format t in
   let basename = get_basename t in
-  let suffix = Filename.of_string_exn (Output_format.extension format) in
+  let suffix = output_extension format in
   match t.kind, (format : Odoc_paths.output_format) with
   | Module _, (Html | Json) ->
     let dir = base ++ Stdune.String.capitalize basename in
-    dir ++ ("index" ^ suffix)
-  | Module _, Markdown -> base ++ (Stdune.String.capitalize basename ^ suffix)
+    dir ++ ("index" ^ Filename.Extension.to_string suffix)
+  | Module _, Markdown -> base ++ (Stdune.String.capitalize basename ^ Filename.Extension.to_string suffix)
   | Impl (impl, _), _ ->
-    let src_basename = Path.basename impl.src_path in
-    base ++ (src_basename ^ suffix)
+    let src_basename = Path.basename impl.src_path |> Filename.to_string in
+    base ++ (src_basename ^ Filename.Extension.to_string suffix)
   | Page (page, _), _ ->
     let path =
       match fst (split_page_name page.name) with
       | Some parent_path -> base ++ parent_path ++ basename
       | None -> base ++ basename
     in
-    Path.Build.extend_basename path ~suffix
+    Path.Build.set_extension path ~ext:suffix
   | Asset (asset, _), (Html | Json) ->
     (match fst (split_page_name asset.asset_rel_path) with
      | Some parent_path -> base ++ parent_path ++ basename

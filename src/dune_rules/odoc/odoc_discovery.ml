@@ -463,13 +463,13 @@ let create_artifact_impl
     let src_id =
       match target with
       | Odoc_target.Private_lib (lib_unique_name, _) ->
-        sprintf "%s/%s" lib_unique_name (Path.basename src_path)
+        sprintf "%s/%s" lib_unique_name (Path.basename src_path |> Filename.to_string)
       | Odoc_target.Lib (pkg, _) ->
         sprintf
           "%s/src/%s/%s"
           (Package.Name.to_string pkg)
           (Lib_name.to_string (Lib.name id_lib))
-          (Path.basename src_path)
+          (Path.basename src_path |> Filename.to_string)
     in
     let impl = { Odoc_target.src_id; src_path; module_name } in
     let kind = Odoc_artifact.Impl (impl, target) in
@@ -732,7 +732,7 @@ let page_name_from_installed_mld_path mld_path =
     match Path.parent p with
     | None -> None
     | Some parent ->
-      if Path.basename parent = "odoc-pages"
+      if Filename.to_string (Path.basename parent) = "odoc-pages"
       then Some parent
       else find_odoc_pages_ancestor parent
   in
@@ -741,9 +741,9 @@ let page_name_from_installed_mld_path mld_path =
     (match Path.drop_prefix mld_path ~prefix:odoc_pages_dir with
      | Some rel_path ->
        let rel_str = Path.Local.to_string rel_path in
-       Filename.remove_extension rel_str
-     | None -> Path.basename mld_path |> Filename.remove_extension)
-  | None -> Path.basename mld_path |> Filename.remove_extension
+       Stdlib.Filename.remove_extension (rel_str)
+     | None -> Path.basename mld_path |> Filename.remove_extension |> Filename.to_string)
+  | None -> Path.basename mld_path |> Filename.remove_extension |> Filename.to_string
 ;;
 
 (* Get archive names for a library (used to filter odoc classify output) *)
@@ -753,7 +753,7 @@ let get_archive_names lib_name archives =
   | [] ->
     if Lib_name.equal lib_name (Lib_name.of_string "stdlib") then [ "stdlib" ] else []
   | archives ->
-    List.map archives ~f:(fun p -> Path.basename p |> Filename.remove_extension)
+    List.map archives ~f:(fun p -> Path.basename p |> Filename.remove_extension  |> Filename.to_string)
 ;;
 
 (* Parse odoc classify output to extract module names for specific archives *)
@@ -843,7 +843,7 @@ let discover_installed_lib_artifacts _sctx ctx ~pkg ~lib_name ~lib
               with
               | Some cmt_path, Some ml_path ->
                 let src_id =
-                  sprintf "%s/src/%s/%s" pkg_name_str lib_name_str (Path.basename ml_path)
+                  sprintf "%s/src/%s/%s" pkg_name_str lib_name_str (Path.basename ml_path |> Filename.to_string)
                 in
                 let impl =
                   { Odoc_target.src_id
@@ -896,7 +896,7 @@ let check_mlds_no_dupes ~pkg ~mlds =
   match
     List.map mlds ~f:(fun (mld : Doc_sources.mld) ->
       let in_doc_str = Path.Local.to_string mld.in_doc in
-      let name = Filename.remove_extension in_doc_str |> Filename.to_string in
+      let name = Stdlib.Filename.remove_extension in_doc_str in
       name, mld.path)
     |> String.Map.of_list
   with
@@ -916,7 +916,7 @@ let get_local_mld_infos sctx ~pkg =
   check_mlds_no_dupes ~pkg ~mlds:source_mlds;
   List.map source_mlds ~f:(fun (mld : Doc_sources.mld) ->
     let in_doc_str = Path.Local.to_string mld.in_doc in
-    let name = Filename.remove_extension in_doc_str |> Filename.to_string in
+    let name = Stdlib.Filename.remove_extension in_doc_str in
     let source = Odoc_artifact.Local_source mld.path in
     source, name)
 ;;
@@ -926,7 +926,7 @@ let get_local_asset_infos sctx ~pkg =
   List.map source_assets ~f:(fun (asset : Doc_sources.asset) ->
     let in_doc_str = Path.Local.to_string asset.in_doc in
     let asset_target =
-      { Odoc_target.asset_name = Path.Local.basename asset.in_doc
+      { Odoc_target.asset_name = Path.Local.basename asset.in_doc |> Filename.to_string
       ; asset_rel_path = in_doc_str
       }
     in
@@ -1139,7 +1139,7 @@ let discover_installed_pkg_artifacts sctx ctx ~pkg
       (* Unlike mld files, we keep the file extension for assets since odoc
          compile-asset uses the full filename (e.g. "ocaml_console.png") as the
          asset name, and the generated .odoc file is "asset-<name>.odoc". *)
-      let asset_name = Path.basename asset_path in
+      let asset_name = Path.basename asset_path |> Filename.to_string in
       let rel_path = asset_name in
       let asset_target = { Odoc_target.asset_name; asset_rel_path = rel_path } in
       let source = Odoc_artifact.Installed_source { src_path = asset_path } in
