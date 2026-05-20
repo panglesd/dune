@@ -1278,6 +1278,7 @@ let handle_sidebar_root sctx ~dir ~mode =
     List.map private_local_libs ~f:(fun local_lib -> Odoc_scope.lib_unique_name local_lib)
   in
   let all_subdirs = pkg_subdirs @ private_lib_subdirs in
+  let all_subdirs = List.map ~f:Filename.of_string_exn all_subdirs in
   let rules =
     match flags.sidebar with
     | Flags.Global ->
@@ -1430,6 +1431,7 @@ let with_package_artifacts sctx ~dir ~pkg_or_lib_name ~f =
   let all_lib_names =
     List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
   in
+  let lib_subdirs = List.map ~f:Filename.of_string_exn lib_subdirs in
   let rules = f ~ctx ~scope_id ~all_artifacts ~all_lib_names in
   Build_config.Gen_rules.make
     ~build_dir_only_sub_dirs:
@@ -1581,6 +1583,7 @@ let handle_output_artifacts sctx ~dir ~mode ~pkg_or_lib_name ~output_format =
   let all_lib_names =
     List.map lib_subdirs ~f:Lib_name.of_string |> Lib_name.Set.of_list
   in
+  let lib_subdirs = List.map ~f:Filename.of_string_exn lib_subdirs in
   (* Check if we need per-package support files (HTML only) *)
   let needs_pkg_support =
     match flags.support, output_format with
@@ -1898,7 +1901,7 @@ let gen_rules sctx ~dir rest =
     let pkg = Package.Name.of_string pkg_name in
     let* all_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
     let lib_subdirs =
-      List.map all_libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string)
+      List.map all_libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string |> Filename.of_string_exn)
     in
     let rules = Rules.collect_unit (fun () -> handle_mlds_dir sctx ~pkg_name) in
     Memo.return

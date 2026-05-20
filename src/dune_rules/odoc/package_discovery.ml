@@ -93,11 +93,11 @@ let module_files_in_dir dir =
         (match extension_priority ext with
          | None -> acc
          | Some prio ->
-           let base = Filename.remove_extension name in
+           let base = Filename.remove_extension name |> Filename.to_string in
            (match Module_name.of_string_user_error (Loc.none, base) with
             | Error _ -> acc
             | Ok mod_name ->
-              let path = Path.relative dir name in
+              let path = Path.relative_fname dir name in
               Module_name.Map.update acc mod_name ~f:(function
                 | None -> Some (prio, path)
                 | Some (existing_prio, _) when prio < existing_prio -> Some (prio, path)
