@@ -1901,7 +1901,8 @@ let gen_rules sctx ~dir rest =
     let pkg = Package.Name.of_string pkg_name in
     let* all_libs = Odoc_discovery.libs_of_pkg ctx ~pkg in
     let lib_subdirs =
-      List.map all_libs ~f:(fun lib -> Lib.name lib |> Lib_name.to_string |> Filename.of_string_exn)
+      List.map all_libs ~f:(fun lib ->
+        Lib.name lib |> Lib_name.to_string |> Filename.of_string_exn)
     in
     let rules = Rules.collect_unit (fun () -> handle_mlds_dir sctx ~pkg_name) in
     Memo.return

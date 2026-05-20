@@ -163,7 +163,8 @@ let output_file ctx mode format t =
   | Module _, (Html | Json) ->
     let dir = base ++ Stdune.String.capitalize basename in
     dir ++ ("index" ^ Filename.Extension.to_string suffix)
-  | Module _, Markdown -> base ++ (Stdune.String.capitalize basename ^ Filename.Extension.to_string suffix)
+  | Module _, Markdown ->
+    base ++ (Stdune.String.capitalize basename ^ Filename.Extension.to_string suffix)
   | Impl (impl, _), _ ->
     let src_basename = Path.basename impl.src_path |> Filename.to_string in
     base ++ (src_basename ^ Filename.Extension.to_string suffix)

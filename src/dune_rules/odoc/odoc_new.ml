@@ -959,7 +959,9 @@ let classify_rule sctx ~all modules_dir dir =
     | Ok x ->
       Fs_memo.Dir_contents.to_list x
       |> List.filter_map ~f:(function
-        | x, Unix.S_REG -> Some (Path.append_local modules_dir (Path.Local.of_string (Filename.to_string x)))
+        | x, Unix.S_REG ->
+          Some
+            (Path.append_local modules_dir (Path.Local.of_string (Filename.to_string x)))
         | _ -> None)
     | Error _ -> []
   in
