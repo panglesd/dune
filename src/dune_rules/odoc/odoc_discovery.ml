@@ -741,7 +741,7 @@ let page_name_from_installed_mld_path mld_path =
     (match Path.drop_prefix mld_path ~prefix:odoc_pages_dir with
      | Some rel_path ->
        let rel_str = Path.Local.to_string rel_path in
-       Stdlib.Filename.remove_extension (rel_str)
+       Stdlib.Filename.remove_extension rel_str
      | None -> Path.basename mld_path |> Filename.remove_extension |> Filename.to_string)
   | None -> Path.basename mld_path |> Filename.remove_extension |> Filename.to_string
 ;;
@@ -753,7 +753,8 @@ let get_archive_names lib_name archives =
   | [] ->
     if Lib_name.equal lib_name (Lib_name.of_string "stdlib") then [ "stdlib" ] else []
   | archives ->
-    List.map archives ~f:(fun p -> Path.basename p |> Filename.remove_extension  |> Filename.to_string)
+    List.map archives ~f:(fun p ->
+      Path.basename p |> Filename.remove_extension |> Filename.to_string)
 ;;
 
 (* Parse odoc classify output to extract module names for specific archives *)
@@ -843,7 +844,11 @@ let discover_installed_lib_artifacts _sctx ctx ~pkg ~lib_name ~lib
               with
               | Some cmt_path, Some ml_path ->
                 let src_id =
-                  sprintf "%s/src/%s/%s" pkg_name_str lib_name_str (Path.basename ml_path |> Filename.to_string)
+                  sprintf
+                    "%s/src/%s/%s"
+                    pkg_name_str
+                    lib_name_str
+                    (Path.basename ml_path |> Filename.to_string)
                 in
                 let impl =
                   { Odoc_target.src_id
