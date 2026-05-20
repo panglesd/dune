@@ -73,6 +73,9 @@ module Extension : sig
   val js : t
   val mlg : t
   val json : t
+  val html : t
+  val html_json : t
+  val md : t
   val of_string : string -> t option
   val of_string_exn : string -> t
   val to_string : t -> string
