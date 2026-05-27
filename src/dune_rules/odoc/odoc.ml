@@ -158,40 +158,77 @@ let output_dir_for_format ctx format target =
 ;;
 
 module Artifact = struct
+  type page = { name : string }
+
+  type kind =
+    | Module of Lib.Local.t
+    | Page of page * Package.Name.t
+
+  type source = Local_source of Path.Build.t
+
   type t =
-    { odoc_file : Path.Build.t
-    ; target : target
+    { kind : kind
+    ; source : source
     }
 
-  let make ~target odoc_file = { odoc_file; target }
-  let odoc_file t = t.odoc_file
+  let create ~kind ~source = { kind; source }
 
-  let basename t =
-    Path.Build.basename t.odoc_file |> Filename.remove_extension |> Filename.to_string
+  let target t =
+    match t.kind with
+    | Module local_lib -> Lib local_lib
+    | Page (_, pkg) -> Pkg pkg
   ;;
 
-  let odocl_file ctx t = Paths.odocl ctx t.target ++ (basename t ^ ".odocl")
+  let pkg t =
+    match t.kind with
+    | Module local_lib -> Lib_info.package (Lib.Local.info local_lib)
+    | Page (_, pkg) -> Some pkg
+  ;;
+
+  let split_page_name name =
+    match String.rsplit2 name ~on:'/' with
+    | Some (parent, leaf) -> Some parent, leaf
+    | None -> None, name
+  ;;
+
+  let get_basename t =
+    match t.kind, t.source with
+    | Page (page, _), _ -> snd (split_page_name page.name)
+    | Module _, Local_source src_path ->
+      Path.Build.basename src_path |> Filename.remove_extension |> Filename.to_string
+  ;;
+
+  let o_file base_dir ext ctx t =
+    let basename = get_basename t in
+    let base_dir = base_dir ctx (target t) in
+    match t.kind with
+    | Page (page, _) ->
+      (match fst (split_page_name page.name) with
+       | Some parent_path -> base_dir ++ parent_path ++ ("page-" ^ basename ^ ext)
+       | None -> base_dir ++ ("page-" ^ basename ^ ext))
+    | Module _ -> base_dir ++ (basename ^ ext)
+  ;;
+
+  let odoc_file = o_file Paths.odocs ".odoc"
+  let odocl_file = o_file Paths.odocl ".odocl"
 
   let output_file ctx (output : Output_format.t) t =
-    let basename = basename t in
+    let base = output_dir_for_format ctx output (target t) in
+    let basename = get_basename t in
     let suffix = Filename.of_string_exn (Output_format.extension output) in
-    match t.target with
-    | Lib _ ->
-      (match output with
-       | Html | Json ->
-         Paths.html ctx t.target ++ Stdune.String.capitalize basename ++ "index"
-         |> Path.Build.extend_basename ~suffix
-       | Markdown ->
-         Paths.markdown ctx t.target ++ Stdune.String.capitalize basename
-         |> Path.Build.extend_basename ~suffix)
-    | Pkg _ ->
-      let base =
-        match output with
-        | Markdown -> Paths.markdown ctx t.target
-        | Html | Json -> Paths.html ctx t.target
-      in
-      base ++ (basename |> String.drop_prefix ~prefix:"page-" |> Option.value_exn)
+    match t.kind, output with
+    | Module _, (Html | Json) ->
+      base ++ Stdune.String.capitalize basename ++ "index"
       |> Path.Build.extend_basename ~suffix
+    | Module _, Markdown ->
+      base ++ Stdune.String.capitalize basename |> Path.Build.extend_basename ~suffix
+    | Page (page, _), _ ->
+      let path =
+        match fst (split_page_name page.name) with
+        | Some parent_path -> base ++ parent_path ++ basename
+        | None -> base ++ basename
+      in
+      Path.Build.extend_basename path ~suffix
   ;;
 end
 
@@ -445,21 +482,22 @@ let odoc_include_flags ctx pkg requires =
           [ Command.Args.A "-I"; Path dir ])))
 ;;
 
-let link_odoc_rules sctx (odoc_file : Artifact.t) ~pkg ~requires =
+let link_odoc_rules sctx (artifact : Artifact.t) ~requires =
+  let pkg = Artifact.pkg artifact in
   let ctx = Super_context.context sctx in
   let deps = Dep.deps ctx pkg requires in
-  let dir = Path.build (Path.Build.parent_exn (Artifact.odocl_file ctx odoc_file)) in
+  let dir = Path.build (Path.Build.parent_exn (Artifact.odocl_file ctx artifact)) in
   let run_odoc =
     run_odoc
       sctx
       ~dir
       "link"
       ~quiet:false
-      ~flags_for:(Some (Artifact.odoc_file odoc_file))
+      ~flags_for:(Some (Artifact.odoc_file ctx artifact))
       [ odoc_include_flags ctx pkg requires
       ; A "-o"
-      ; Target (Artifact.odocl_file ctx odoc_file)
-      ; Dep (Path.build (Artifact.odoc_file odoc_file))
+      ; Target (Artifact.odocl_file ctx artifact)
+      ; Dep (Path.build (Artifact.odoc_file ctx artifact))
       ]
   in
   add_rule
@@ -762,9 +800,14 @@ let mlds sctx pkg =
     | _ -> Right mld)
 ;;
 
+let module_artifact ~local_lib module_ =
+  let obj_dir = Lib.Local.obj_dir local_lib in
+  let source_file = Obj_dir.Module.cmti_file obj_dir module_ ~cm_kind:(Ocaml Cmi) in
+  Artifact.create ~kind:(Artifact.Module local_lib) ~source:(Local_source source_file)
+;;
+
 let odoc_artefacts sctx target =
   let ctx = Super_context.context sctx in
-  let dir = Paths.odocs ctx target in
   match target with
   | Pkg pkg ->
     let+ mlds =
@@ -775,12 +818,10 @@ let odoc_artefacts sctx target =
         | Some _ as s -> s)
     in
     String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
-      Mld.create ~path ~name |> Mld.odoc_file ~doc_dir:dir |> Artifact.make ~target)
+      Artifact.create ~kind:(Artifact.Page ({ name }, pkg)) ~source:(Local_source path))
   | Lib lib ->
-    let info = Lib.Local.info lib in
-    let obj_dir = Lib_info.obj_dir info in
     let+ modules = entry_modules_by_lib sctx lib in
-    List.map modules ~f:(fun m -> Obj_dir.Module.odoc obj_dir m |> Artifact.make ~target)
+    List.map modules ~f:(module_artifact ~local_lib:lib)
 ;;
 
 let setup_lib_odocl_rules_def =
@@ -805,8 +846,7 @@ let setup_lib_odocl_rules_def =
   in
   let f (sctx, lib, requires) =
     let* odocs = odoc_artefacts sctx (Lib lib) in
-    let pkg = Lib_info.package (Lib.Local.info lib) in
-    Memo.parallel_iter odocs ~f:(fun odoc -> link_odoc_rules sctx ~pkg ~requires odoc)
+    Memo.parallel_iter odocs ~f:(fun odoc -> link_odoc_rules sctx odoc ~requires)
   in
   Memo.With_implicit_output.create
     "setup_library_odocls_rules"
@@ -852,10 +892,8 @@ let setup_pkg_odocl_rules_def =
     let* () = Memo.parallel_iter libs ~f:(setup_lib_odocl_rules sctx ~requires)
     and* _ =
       let* pkg_odocs = odoc_artefacts sctx (Pkg pkg) in
-      let pkg = Some pkg in
       let+ () =
-        Memo.parallel_iter pkg_odocs ~f:(fun odoc ->
-          link_odoc_rules sctx ~pkg ~requires odoc)
+        Memo.parallel_iter pkg_odocs ~f:(fun odoc -> link_odoc_rules sctx odoc ~requires)
       in
       pkg_odocs
     and* _ = Memo.parallel_map libs ~f:(fun lib -> odoc_artefacts sctx (Lib lib)) in
