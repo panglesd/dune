@@ -2,6 +2,18 @@ open Import
 open Odoc_target
 
 let ( ++ ) = Path.Build.relative
+
+type output_format =
+  | Html
+  | Json
+  | Markdown
+
+let extension = function
+  | Html -> ".html"
+  | Json -> ".html.json"
+  | Markdown -> ".md"
+;;
+
 let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 

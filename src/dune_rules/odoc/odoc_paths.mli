@@ -2,6 +2,14 @@ open Import
 
 (** Output paths for the odoc rules, keyed by documentation [Odoc_target.t]. *)
 
+type output_format =
+  | Html
+  | Json
+  | Markdown
+
+(** File extension produced for the given output format. *)
+val extension : output_format -> string
+
 val odoc_support_dirname : string
 val root : Context.t -> Path.Build.t
 val odocs : Context.t -> Odoc_target.t -> Path.Build.t

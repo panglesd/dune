@@ -17,19 +17,14 @@ let add_rule sctx =
 module Paths = Odoc_paths
 
 module Output_format = struct
-  type t =
+  type t = Odoc_paths.output_format =
     | Html
     | Json
     | Markdown
 
   let all = [ Html; Json; Markdown ]
   let iter ~f = Memo.parallel_iter all ~f
-
-  let extension = function
-    | Html -> ".html"
-    | Json -> ".html.json"
-    | Markdown -> ".md"
-  ;;
+  let extension = Odoc_paths.extension
 
   let args = function
     | Html -> Command.Args.empty
