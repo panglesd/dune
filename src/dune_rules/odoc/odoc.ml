@@ -818,6 +818,7 @@ let generate_source_html_artifact
 let generate_output_action
       sctx
       ~artifact
+      ?search_db
       ~sidebar_file
       ~mode
       ~output_format
@@ -841,9 +842,26 @@ let generate_output_action
       let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
       let odoc_support_path = odoc_support_path ctx ~mode ~flags ~pkg_name in
       let odoc_support_uri = odoc_support_uri ~html_root odoc_support_path in
+      (* sherlodoc.js lives in the per-package HTML dir when configured *)
+      let sherlodoc_js_dir =
+        match flags.support, pkg_name with
+        | Flags.Per_package, Some pkg -> html_root ++ pkg
+        | Flags.Root, _ | Flags.Per_package, None -> html_root
+      in
+      let search_args =
+        match search_db with
+        | Some search_db ->
+          Sherlodoc.odoc_args
+            sctx
+            ~search_db
+            ~dir_sherlodoc_dot_js:sherlodoc_js_dir
+            ~html_root
+        | None -> Command.Args.empty
+      in
       let args =
         Command.Args.S
           [ Hidden_deps (Dune_engine.Dep.Set.of_files [ Path.build odoc_support_path ])
+          ; search_args
           ; A "--support-uri"
           ; A odoc_support_uri
           ; A "--theme-uri"
@@ -869,6 +887,7 @@ let generate_output_action
 let generate_html_artifact
       sctx
       ~artifact
+      ?search_db
       ~sidebar_file
       ?(mode = Doc_mode.Local_only)
       ~output_format
@@ -892,6 +911,7 @@ let generate_html_artifact
       generate_output_action
         sctx
         ~artifact
+        ?search_db
         ~sidebar_file
         ~mode
         ~output_format
@@ -1002,9 +1022,25 @@ let setup_toplevel_index_artifact sctx ~mode =
   link_artifact sctx ~artifact
 ;;
 
+(* Generate global search database from all visible odocl files *)
+let generate_global_search_db sctx ~mode =
+  let ctx = Super_context.context sctx in
+  let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+  let include_impl =
+    match flags.source_rendering with
+    | Flags.Enabled -> true
+    | Flags.Disabled -> false
+  in
+  let* _real_pkgs, all_odocl_files =
+    Odoc_discovery.collect_all_visible_odocls sctx ~mode ~include_impl ()
+  in
+  let dir = Paths.output_root ctx mode Html in
+  Sherlodoc.search_db sctx ~dir ~external_odocls:[] all_odocl_files
+;;
+
 (* Generate the toplevel index artifact in the given format.
-   HTML has extra machinery for sidebar_file; JSON/Markdown just go through the
-   common single-artifact entry. *)
+   HTML has extra machinery for search_db + sidebar_file; JSON/Markdown just
+   go through the common single-artifact entry. *)
 let setup_toplevel_index sctx mode format =
   let ctx = Super_context.context sctx in
   let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
@@ -1026,10 +1062,29 @@ let setup_toplevel_index sctx mode format =
       | Flags.Global -> true
       | Flags.Per_package -> false
     in
+    (* Create search_db and sidebar only for global mode.
+       Skip search db entirely for Local_only to avoid expensive sherlodoc generation. *)
+    let* search_db =
+      match mode with
+      | Doc_mode.Local_only -> Memo.return None
+      | Doc_mode.Full ->
+        if use_global
+        then
+          let+ db = generate_global_search_db sctx ~mode in
+          Some db
+        else Memo.return None
+    in
     let sidebar_file =
       if use_global then Some (Paths.sidebar_file ctx mode Paths.Global) else None
     in
-    generate_html_artifact sctx ~artifact ~sidebar_file ~mode ~output_format:Html ()
+    generate_html_artifact
+      sctx
+      ~artifact
+      ?search_db
+      ~sidebar_file
+      ~mode
+      ~output_format:Html
+      ()
 ;;
 
 let setup_toplevel_index_deps sctx mode output =
@@ -1253,17 +1308,32 @@ let generate_html_for_package
     then generate_sidebar sctx ~mode ~scope ~index_file (Json output_format)
     else Memo.return ()
   in
-  (* [--sidebar] is HTML-only; for Json/Markdown it stays [None]. *)
+  (* [--sidebar]/remap/search-db are HTML-only (and the last two only in Full
+     mode); for Json/Markdown they stay [None]. *)
   let sidebar_file =
     match output_format with
     | Html -> Some (Paths.sidebar_file ctx mode scope)
     | Json | Markdown -> None
+  in
+  let* search_db =
+    match output_format, mode with
+    | Json, _ | Markdown, _ | _, Doc_mode.Local_only -> Memo.return None
+    | Html, Doc_mode.Full ->
+      (match flags.sidebar with
+       | Flags.Global ->
+         let html_root = Paths.output_root ctx mode Html in
+         Memo.return (Some (Path.Build.relative html_root "db.js"))
+       | Flags.Per_package ->
+         let odocls = List.map visible_artifacts ~f:(Artifact.odocl_file ctx) in
+         let+ db = Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls in
+         Some db)
   in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
       generate_html_artifact
         sctx
         ~artifact
+        ?search_db
         ~sidebar_file
         ~mode
         ~output_format
@@ -1839,6 +1909,30 @@ let gen_rules sctx ~dir rest =
   | [ "_sidebar_full"; pkg_or_lib_name ] ->
     handle_sidebar_artifacts sctx ~mode:Doc_mode.Full pkg_or_lib_name
   | ("_sidebar" | "_sidebar_full") :: _ :: _ :: _ -> redirect ()
+  (* Sherlodoc search DB *)
+  | [ "_sherlodoc" ] ->
+    let rules =
+      Rules.collect_unit (fun () ->
+        let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+        let include_impl =
+          match flags.source_rendering with
+          | Flags.Enabled -> true
+          | Flags.Disabled -> false
+        in
+        let* _real_pkgs, all_odocl_files =
+          Odoc_discovery.collect_all_visible_odocls
+            sctx
+            ~mode:Doc_mode.Full
+            ~include_impl
+            ()
+        in
+        let dir = Paths.sherlodoc_root ctx in
+        let+ _db =
+          Sherlodoc.search_db_marshal sctx ~dir ~external_odocls:[] all_odocl_files
+        in
+        ())
+    in
+    Memo.return (Gen_rules.make rules)
   | [ "classify"; pkg_name; lib_name ] ->
     has_rules (fun () -> handle_classify_dir sctx ~pkg_name ~lib_name)
   | _ -> empty_rules ()
