@@ -1,9 +1,9 @@
 This test checks that there is no clash when two private libraries have the same name
 
   $ dune build @doc-new
-  File "page-b.odoc":
+  File "index/local/b/page-b.odoc":
   Warning: Failed to lookup child page dummy
-  File "page-a.odoc":
+  File "index/local/a/page-a.odoc":
   Warning: Failed to lookup child page dummy
 
   $ dune trace cat \

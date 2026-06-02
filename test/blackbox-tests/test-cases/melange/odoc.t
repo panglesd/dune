@@ -23,7 +23,7 @@ Works for "universal" libraries
   {0 foo index}
   {1 Library foo}
   The entry point of this library is the module:
-  {!module-Foo}.
+  {!/foo/module-Foo}.
 
 Works for Melange-only libraries
 
@@ -35,9 +35,16 @@ Works for Melange-only libraries
   > EOF
 
   $ dune build @doc
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo.cmt
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo__.cmt
+  File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for .foo.objs/byte/foo__Bar.cmt
+  [1]
 
   $ cat _build/default/_doc/_mlds/foo/index.mld
   {0 foo index}
   {1 Library foo}
   The entry point of this library is the module:
-  {!module-Foo}.
+  {!/foo/module-Foo}.
