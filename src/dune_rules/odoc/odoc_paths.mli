@@ -42,3 +42,5 @@ val sidebar_json
   -> output_format
   -> Path.Build.t
 
+(** Path to the remap.txt file for Local_only mode URL remapping. *)
+val remap_file : Context.t -> Path.Build.t
