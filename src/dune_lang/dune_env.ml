@@ -48,6 +48,10 @@ module Odoc = struct
     | Fatal
     | Nonfatal
 
+  type sidebar =
+    | Global
+    | Per_package
+
   type support =
     | Root
     | Per_package
@@ -58,6 +62,7 @@ module Odoc = struct
 
   type t =
     { warnings : warnings option
+    ; sidebar : sidebar option
     ; support : support option
     ; source_rendering : source_rendering option
     ; flags : Ordered_set_lang.Unexpanded.t
@@ -67,6 +72,7 @@ module Odoc = struct
 
   let empty =
     { warnings = None
+    ; sidebar = None
     ; support = None
     ; source_rendering = None
     ; flags = Ordered_set_lang.Unexpanded.standard
@@ -79,6 +85,12 @@ module Odoc = struct
     match x, y with
     | Fatal, Fatal | Nonfatal, Nonfatal -> true
     | (Fatal | Nonfatal), _ -> false
+  ;;
+
+  let sidebar_equal x y =
+    match x, y with
+    | Global, Global | Per_package, Per_package -> true
+    | (Global | Per_package), _ -> false
   ;;
 
   let support_equal x y =
@@ -95,6 +107,7 @@ module Odoc = struct
 
   let equal x y =
     Option.equal warnings_equal x.warnings y.warnings
+    && Option.equal sidebar_equal x.sidebar y.sidebar
     && Option.equal support_equal x.support y.support
     && Option.equal source_rendering_equal x.source_rendering y.source_rendering
     && Ordered_set_lang.Unexpanded.equal x.flags y.flags
@@ -103,18 +116,20 @@ module Odoc = struct
   ;;
 
   let warnings_decode = enum [ "fatal", Fatal; "nonfatal", Nonfatal ]
+  let sidebar_decode = enum [ "global", Global; "per-package", Per_package ]
   let support_decode = enum [ "root", Root; "per-package", Per_package ]
   let source_rendering_decode = enum [ "enabled", Enabled; "disabled", Disabled ]
 
   let decode =
     fields
     @@ let+ warnings = field_o "warnings" warnings_decode
+       and+ sidebar = field_o "sidebar" sidebar_decode
        and+ support = field_o "support" support_decode
        and+ source_rendering = field_o "source_rendering" source_rendering_decode
        and+ flags = Ordered_set_lang.Unexpanded.field "flags"
        and+ link_flags = Ordered_set_lang.Unexpanded.field "link_flags"
        and+ html_flags = Ordered_set_lang.Unexpanded.field "html_flags" in
-       { warnings; support; source_rendering; flags; link_flags; html_flags }
+       { warnings; sidebar; support; source_rendering; flags; link_flags; html_flags }
   ;;
 end
 
