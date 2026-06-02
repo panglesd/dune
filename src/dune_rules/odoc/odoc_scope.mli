@@ -18,3 +18,7 @@ end
 (** Unique name for a library: its plain name for public libraries, the v2
     "libname@key" format for private libraries. Raises on installed libraries. *)
 val lib_unique_name : Lib.t -> string
+
+(** Directory name for a library's documentation: its package name if it has
+    one, otherwise its [lib_unique_name]. *)
+val pkg_or_lnu : Lib.t -> string

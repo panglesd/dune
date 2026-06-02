@@ -5,12 +5,6 @@ module Gen_rules = Build_config.Gen_rules
 let ( ++ ) = Path.Build.relative
 let mld_ext = Filename.Extension.of_string_exn ".mld"
 
-let pkg_or_lnu lib =
-  match Lib_info.package (Lib.info lib) with
-  | Some p -> Package.Name.to_string p
-  | None -> Odoc_scope.lib_unique_name lib
-;;
-
 type target = Odoc_target.t =
   | Lib of Lib.Local.t
   | Pkg of Package.Name.t
@@ -40,7 +34,7 @@ module Paths = struct
     ++
     match m with
     | Pkg pkg -> Package.Name.to_string pkg
-    | Lib lib -> pkg_or_lnu (Lib.Local.to_lib lib)
+    | Lib lib -> Odoc_scope.pkg_or_lnu (Lib.Local.to_lib lib)
   ;;
 
   let html ctx m = add_pkg_lnu (html_root ctx) m
@@ -409,7 +403,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~pkg ~requires =
 let setup_library_odoc_rules cctx (local_lib : Lib.Local.t) =
   (* Using the proper package name doesn't actually work since odoc assumes that
      a package contains only 1 library *)
-  let pkg_or_lnu = pkg_or_lnu (Lib.Local.to_lib local_lib) in
+  let pkg_or_lnu = Odoc_scope.pkg_or_lnu (Lib.Local.to_lib local_lib) in
   let sctx = Compilation_context.super_context cctx in
   let ctx = Super_context.context sctx in
   let info = Lib.Local.info local_lib in
