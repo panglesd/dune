@@ -11,7 +11,7 @@ let pkg_or_lnu lib =
   | None -> Odoc_scope.lib_unique_name lib
 ;;
 
-type target =
+type target = Odoc_target.t =
   | Lib of Lib.Local.t
   | Pkg of Package.Name.t
 
