@@ -147,6 +147,10 @@ module Flags = struct
     | Fatal
     | Nonfatal
 
+  type sidebar = Dune_env.Odoc.sidebar =
+    | Global
+    | Per_package
+
   type support = Dune_env.Odoc.support =
     | Root
     | Per_package
@@ -157,20 +161,24 @@ module Flags = struct
 
   type t =
     { warnings : warnings
+    ; sidebar : sidebar
     ; support : support
     ; source_rendering : source_rendering
     }
 
-  let default = { warnings = Nonfatal; support = Root; source_rendering = Enabled }
+  let default =
+    { warnings = Nonfatal; sidebar = Global; support = Root; source_rendering = Enabled }
+  ;;
 
   let get_memo ~dir =
     Env_stanza_db.value ~default ~dir ~f:(fun config ->
       let warnings = Option.value config.odoc.warnings ~default:default.warnings in
+      let sidebar = Option.value config.odoc.sidebar ~default:default.sidebar in
       let support = Option.value config.odoc.support ~default:default.support in
       let source_rendering =
         Option.value config.odoc.source_rendering ~default:default.source_rendering
       in
-      Memo.return (Some { warnings; support; source_rendering }))
+      Memo.return (Some { warnings; sidebar; support; source_rendering }))
   ;;
 
   let get ~dir = get_memo ~dir |> Action_builder.of_memo
@@ -748,6 +756,7 @@ let odoc_support_uri ~html_root support_path =
 let generate_source_html_artifact
       sctx
       ~artifact
+      ~sidebar_file
       ~mode
       ~output_format
       ?pkg_name
@@ -785,6 +794,9 @@ let generate_source_html_artifact
         ; A odoc_support_uri
         ; A "--theme-uri"
         ; A odoc_support_uri
+        ; (match sidebar_file with
+           | Some sf -> S [ A "--sidebar"; Dep (Path.build sf) ]
+           | None -> S [])
         ; Dyn (Action_builder.map cli_flags.html ~f:(fun flags -> Command.Args.As flags))
         ; A "--impl"
         ; Dep (Path.build odocl_file)
@@ -803,7 +815,15 @@ let generate_source_html_artifact
     add_rule sctx rule
 ;;
 
-let generate_output_action sctx ~artifact ~mode ~output_format ?pkg_name () =
+let generate_output_action
+      sctx
+      ~artifact
+      ~sidebar_file
+      ~mode
+      ~output_format
+      ?pkg_name
+      ()
+  =
   let ctx = Super_context.context sctx in
   let doc_root = Paths.root ctx in
   let output_root = Paths.output_root ctx mode output_format in
@@ -828,6 +848,9 @@ let generate_output_action sctx ~artifact ~mode ~output_format ?pkg_name () =
           ; A odoc_support_uri
           ; A "--theme-uri"
           ; A odoc_support_uri
+          ; (match sidebar_file with
+             | Some sf -> S [ A "--sidebar"; Dep (Path.build sf) ]
+             | None -> S [])
           ; Output_format.args output_format
           ]
       in
@@ -846,6 +869,7 @@ let generate_output_action sctx ~artifact ~mode ~output_format ?pkg_name () =
 let generate_html_artifact
       sctx
       ~artifact
+      ~sidebar_file
       ?(mode = Doc_mode.Local_only)
       ~output_format
       ?pkg_name
@@ -855,10 +879,24 @@ let generate_html_artifact
   match Artifact.get_kind artifact with
   | Asset _ -> generate_asset_artifact sctx ~artifact ~mode output_format
   | Impl _ ->
-    generate_source_html_artifact sctx ~artifact ~mode ~output_format ?pkg_name ()
+    generate_source_html_artifact
+      sctx
+      ~artifact
+      ~sidebar_file
+      ~mode
+      ~output_format
+      ?pkg_name
+      ()
   | Module _ | Page _ ->
     let* action =
-      generate_output_action sctx ~artifact ~mode ~output_format ?pkg_name ()
+      generate_output_action
+        sctx
+        ~artifact
+        ~sidebar_file
+        ~mode
+        ~output_format
+        ?pkg_name
+        ()
     in
     let rule =
       let file_target () =
@@ -970,7 +1008,28 @@ let setup_toplevel_index_artifact sctx ~mode =
 let setup_toplevel_index sctx mode format =
   let ctx = Super_context.context sctx in
   let* artifact = Odoc_discovery.toplevel_index_artifact ctx ~mode in
-  generate_html_artifact sctx ~artifact ~mode ~output_format:format ()
+  match (format : Output_format.t) with
+  | Markdown ->
+    generate_html_artifact
+      sctx
+      ~artifact
+      ~sidebar_file:None
+      ~mode
+      ~output_format:Markdown
+      ()
+  | Json ->
+    generate_html_artifact sctx ~artifact ~sidebar_file:None ~mode ~output_format:Json ()
+  | Html ->
+    let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+    let use_global =
+      match flags.sidebar with
+      | Flags.Global -> true
+      | Flags.Per_package -> false
+    in
+    let sidebar_file =
+      if use_global then Some (Paths.sidebar_file ctx mode Paths.Global) else None
+    in
+    generate_html_artifact sctx ~artifact ~sidebar_file ~mode ~output_format:Html ()
 ;;
 
 let setup_toplevel_index_deps sctx mode output =
@@ -1006,7 +1065,67 @@ let lib_dir_path ctx ~output ~scope_id ~lib_name =
     base ++ Package.Name.to_string pkg ++ Lib_name.to_string lib_name
 ;;
 
+let generate_index sctx ~mode ~scope ~packages ~odocl_files =
+  let ctx = Super_context.context sctx in
+  let index_file = Paths.index_file ctx mode scope in
+  let open Command.Args in
+  let odocl_file_args =
+    List.map odocl_files ~f:(fun odocl_file -> Dep (Path.build odocl_file))
+  in
+  let action =
+    let open Action_builder.With_targets.O in
+    Action_builder.with_no_targets
+      (Action_builder.all_unit
+         (List.map packages ~f:(fun pkg ->
+            let odocl_dir = Paths.odocl ctx (Pkg pkg) in
+            let pkg_alias = Dep.odoc_all_alias ~dir:odocl_dir in
+            Action_builder.dep (Dune_engine.Dep.alias pkg_alias))))
+    >>> run_odoc
+          sctx
+          "compile-index"
+          ~quiet:false
+          ~flags_for:None
+          ([ A "-o"; Target index_file ] @ odocl_file_args)
+  in
+  let* () = add_rule sctx action in
+  Memo.return index_file
+;;
 
+type sidebar_variant =
+  | Binary
+  | Json of Output_format.t
+
+let generate_sidebar sctx ~mode ~scope ~index_file variant =
+  let ctx = Super_context.context sctx in
+  let target, prepend_args =
+    match variant with
+    | Binary -> Paths.sidebar_file ctx mode scope, []
+    | Json output_format ->
+      Paths.sidebar_json ctx mode scope output_format, [ Command.Args.A "--json" ]
+  in
+  let sidebar_dir =
+    match mode with
+    | Doc_mode.Local_only -> "_sidebar"
+    | Doc_mode.Full -> "_sidebar_full"
+  in
+  let index_relative_path =
+    match scope with
+    | Paths.Global -> sprintf "%s/index.odoc-index" sidebar_dir
+    | Paths.Per_package pkg ->
+      sprintf "%s/%s/index.odoc-index" sidebar_dir (Package.Name.to_string pkg)
+  in
+  let action =
+    let open Action_builder.With_targets.O in
+    Action_builder.with_no_targets (Action_builder.path (Path.build index_file))
+    >>> run_odoc
+          sctx
+          "sidebar-generate"
+          ~quiet:false
+          ~flags_for:None
+          (prepend_args @ [ Command.Args.A "-o"; Target target; A index_relative_path ])
+  in
+  add_rule sctx action
+;;
 
 let filter_impl_artifacts (flags : Flags.t) artifacts =
   match flags.source_rendering with
@@ -1018,8 +1137,80 @@ let filter_impl_artifacts (flags : Flags.t) artifacts =
   | Flags.Enabled -> artifacts
 ;;
 
+let handle_sidebar_artifacts sctx ~mode pkg_or_lib_name =
+  let ctx = Super_context.context sctx in
+  let rules =
+    Rules.collect_unit (fun () ->
+      let pkg = Package.Name.of_string pkg_or_lib_name in
+      let scope = Paths.Per_package pkg in
+      let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+      let* all_artifacts, _lib_subdirs =
+        Odoc_discovery.discover_package_artifacts
+          sctx
+          ctx
+          ~pkg_or_lib_unique_name:pkg_or_lib_name
+      in
+      let all_artifacts = filter_impl_artifacts flags all_artifacts in
+      let odocl_files =
+        List.filter_map all_artifacts ~f:(fun artifact ->
+          if Artifact.hidden artifact
+          then None
+          else (
+            match Artifact.get_kind artifact with
+            | Asset _ -> None
+            | Module _ | Page _ | Impl _ -> Some (Artifact.odocl_file ctx artifact)))
+      in
+      let* index_file = generate_index sctx ~mode ~scope ~packages:[ pkg ] ~odocl_files in
+      generate_sidebar sctx ~mode ~scope ~index_file Binary)
+  in
+  Memo.return (Build_config.Gen_rules.make rules)
+;;
 
+let generate_global_sidebar sctx ~mode ~include_impl =
+  let* real_pkgs, all_odocl_files =
+    Odoc_discovery.collect_all_visible_odocls sctx ~mode ~include_impl ()
+  in
+  let* index_file =
+    generate_index
+      sctx
+      ~mode
+      ~scope:Paths.Global
+      ~packages:real_pkgs
+      ~odocl_files:all_odocl_files
+  in
+  generate_sidebar sctx ~mode ~scope:Paths.Global ~index_file Binary
+;;
 
+let handle_sidebar_root sctx ~dir ~mode =
+  let ctx = Super_context.context sctx in
+  let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
+  let* workspace_pkgs = get_workspace_packages () in
+  let pkg_subdirs = List.map workspace_pkgs ~f:Package.Name.to_string in
+  let* private_local_libs = Odoc_discovery.get_private_libraries ctx in
+  let private_lib_subdirs =
+    List.map private_local_libs ~f:(fun local_lib -> Odoc_scope.lib_unique_name local_lib)
+  in
+  let all_subdirs = pkg_subdirs @ private_lib_subdirs in
+  let all_subdirs = List.map ~f:Filename.of_string_exn all_subdirs in
+  let rules =
+    match flags.sidebar with
+    | Flags.Global ->
+      let include_impl =
+        match flags.source_rendering with
+        | Flags.Enabled -> true
+        | Flags.Disabled -> false
+      in
+      Rules.collect_unit (fun () -> generate_global_sidebar sctx ~mode ~include_impl)
+    | Flags.Per_package -> Memo.return Rules.empty
+  in
+  Memo.return
+    (Build_config.Gen_rules.make
+       ~build_dir_only_sub_dirs:
+         (Build_config.Gen_rules.Build_only_sub_dirs.singleton
+            ~dir
+            (Subdir_set.of_list all_subdirs))
+       rules)
+;;
 
 let generate_html_for_package
       sctx
@@ -1050,15 +1241,45 @@ let generate_html_for_package
       | Module _ | Page _ | Asset _ -> true)
   in
   let output_file a = Path.build (Artifact.output_file ctx mode output_format a) in
+  let scope, should_generate_sidebar_json =
+    match flags.sidebar with
+    | Flags.Global -> Paths.Global, false
+    | Flags.Per_package -> Paths.Per_package pkg, true
+  in
+  let index_file = Paths.index_file ctx mode scope in
+  (* Generate sidebar.json when sidebar is per-package. *)
+  let* () =
+    if should_generate_sidebar_json
+    then generate_sidebar sctx ~mode ~scope ~index_file (Json output_format)
+    else Memo.return ()
+  in
+  (* [--sidebar] is HTML-only; for Json/Markdown it stays [None]. *)
+  let sidebar_file =
+    match output_format with
+    | Html -> Some (Paths.sidebar_file ctx mode scope)
+    | Json | Markdown -> None
+  in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
-      generate_html_artifact sctx ~artifact ~mode ~output_format ~pkg_name ())
+      generate_html_artifact
+        sctx
+        ~artifact
+        ~sidebar_file
+        ~mode
+        ~output_format
+        ~pkg_name
+        ())
   in
-  let all_paths =
+  let artifact_paths =
     List.filter_map visible_artifacts ~f:(fun artifact ->
       match output_format, Artifact.get_kind artifact with
       | Markdown, Asset _ -> None
       | _ -> Some (output_file artifact))
+  in
+  let all_paths =
+    if should_generate_sidebar_json
+    then Path.build (Paths.sidebar_json ctx mode scope output_format) :: artifact_paths
+    else artifact_paths
   in
   let pkg_alias = Dep.format_alias output_format mode ctx (Pkg pkg) in
   let* () = Dep.add_file_deps pkg_alias all_paths in
@@ -1502,6 +1723,7 @@ let handle_output_root sctx ~mode ~output_format =
   in
   let rules =
     Rules.collect_unit (fun () ->
+      let* flags = Flags.get_memo ~dir:(Context.build_dir ctx) in
       (match output_format with
        | Output_format.Html ->
          Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.output_root ctx mode Html)
@@ -1513,6 +1735,17 @@ let handle_output_root sctx ~mode ~output_format =
       let output_file = Artifact.output_file ctx mode output_format artifact in
       let alias = Dep.format_alias output_format mode ctx (Toplevel mode) in
       Dep.add_file_deps alias [ Path.build output_file ]
+      >>>
+      (* Generate global sidebar JSON if
+         configured *)
+      (match flags.sidebar, output_format with
+        | _, Output_format.Markdown -> Memo.return ()
+        | Flags.Global, _ ->
+          let index_file = Paths.index_file ctx mode Paths.Global in
+          let sidebar_json = Paths.sidebar_json ctx mode Paths.Global output_format in
+          generate_sidebar sctx ~mode ~scope:Paths.Global ~index_file (Json output_format)
+          >>> Dep.add_file_deps alias [ Path.build sidebar_json ]
+        | Flags.Per_package, _ -> Memo.return ())
       (* Add dependencies on all child
          directories so the alias builds
          everything *)
@@ -1598,6 +1831,14 @@ let gen_rules sctx ~dir rest =
   (* Toplevel index (mld + compile + link) *)
   | [ "_index" ] -> toplevel_index_rules Doc_mode.Local_only
   | [ "_index_full" ] -> toplevel_index_rules Doc_mode.Full
+  (* Sidebars *)
+  | [ "_sidebar" ] -> handle_sidebar_root sctx ~dir ~mode:Doc_mode.Local_only
+  | [ "_sidebar"; pkg_or_lib_name ] ->
+    handle_sidebar_artifacts sctx ~mode:Doc_mode.Local_only pkg_or_lib_name
+  | [ "_sidebar_full" ] -> handle_sidebar_root sctx ~dir ~mode:Doc_mode.Full
+  | [ "_sidebar_full"; pkg_or_lib_name ] ->
+    handle_sidebar_artifacts sctx ~mode:Doc_mode.Full pkg_or_lib_name
+  | ("_sidebar" | "_sidebar_full") :: _ :: _ :: _ -> redirect ()
   | [ "classify"; pkg_name; lib_name ] ->
     has_rules (fun () -> handle_classify_dir sctx ~pkg_name ~lib_name)
   | _ -> empty_rules ()

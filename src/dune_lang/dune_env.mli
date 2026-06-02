@@ -15,6 +15,10 @@ module Odoc : sig
     | Fatal
     | Nonfatal
 
+  type sidebar =
+    | Global
+    | Per_package
+
   type support =
     | Root
     | Per_package
@@ -25,6 +29,7 @@ module Odoc : sig
 
   type t =
     { warnings : warnings option
+    ; sidebar : sidebar option
     ; support : support option
     ; source_rendering : source_rendering option
     ; flags : Ordered_set_lang.Unexpanded.t
