@@ -49,6 +49,7 @@ let odocs : type a. Context.t -> a Odoc_target.t -> Path.Build.t =
 
 let output_root ctx mode format = root ctx ++ output_subdir format mode
 let odocl_root ctx = root ctx ++ "_odocls"
+let sherlodoc_root ctx = root ctx ++ "_sherlodoc"
 
 let output
   : type a. Context.t -> Doc_mode.t -> output_format -> a Odoc_target.t -> Path.Build.t
