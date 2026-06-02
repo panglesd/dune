@@ -41,6 +41,7 @@ val discover_package_artifacts
 val collect_all_visible_odocls
   :  Super_context.t
   -> mode:Odoc_target.Doc_mode.t
+  -> include_impl:bool
   -> unit
   -> (Package.Name.t list * Path.Build.t list) Memo.t
 

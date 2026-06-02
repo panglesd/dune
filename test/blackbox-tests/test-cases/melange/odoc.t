@@ -35,6 +35,8 @@ Works for Melange-only libraries
   > EOF
 
   $ dune build @doc
+  File "_doc/_html/foo/src/foo/_unknown_", line 1, characters 0-0:
+  Error: No rule found for foo__.ml-gen
   File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:
   Error: No rule found for .foo.objs/byte/foo.cmt
   File "_doc/_odoc/foo/foo/_unknown_", line 1, characters 0-0:

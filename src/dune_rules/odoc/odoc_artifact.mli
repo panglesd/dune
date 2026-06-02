@@ -3,6 +3,7 @@ open Import
 type kind =
   | Module : Odoc_target.mod_ * Odoc_target.mod_ Odoc_target.t -> kind
   | Page : Odoc_target.page * Odoc_target.page Odoc_target.t -> kind
+  | Impl : Odoc_target.impl * Odoc_target.mod_ Odoc_target.t -> kind
 
 type source =
   | Local_source of Path.Build.t
@@ -43,6 +44,9 @@ val extra_packages : t -> Package.Name.t list Memo.t
 val hidden : t -> bool
 val parent_id : t -> string
 val should_suppress_output : t -> bool Memo.t
+val is_impl : t -> bool
+val impl_source_path : t -> Path.t option
+val impl_source_id : t -> string option
 
 val create
   :  kind:kind

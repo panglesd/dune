@@ -8,6 +8,9 @@ This test generates documentation for non-hidden modules only for a library:
   _build/default/_doc/_odoc/foo/foo/foo.odoc
   _build/default/_doc/_odoc/foo/foo/foo__.odoc
   _build/default/_doc/_odoc/foo/foo/foo__Bar.odoc
+  _build/default/_doc/_odoc/foo/foo/impl-foo.odoc
+  _build/default/_doc/_odoc/foo/foo/impl-foo__.odoc
+  _build/default/_doc/_odoc/foo/foo/impl-foo__Bar.odoc
   _build/default/_doc/_odoc/foo/foo/page-index.odoc
   _build/default/_doc/_odoc/foo/page-index.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalFormat.odoc
@@ -15,6 +18,12 @@ This test generates documentation for non-hidden modules only for a library:
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalLazy.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalMod.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/camlinternalOO.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalFormat.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalFormatBasics.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalLazy.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalMod.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-camlinternalOO.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/impl-stdlib.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Arg.odoc
   _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Array.odoc
@@ -86,6 +95,9 @@ This test generates documentation for non-hidden modules only for a library:
   $ find _build/default -name '*.odocl' | sort -n
   _build/default/_doc/_index/page-index.odocl
   _build/default/_doc/_odocls/foo/foo/foo.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo__.odocl
+  _build/default/_doc/_odocls/foo/foo/impl-foo__Bar.odocl
   _build/default/_doc/_odocls/foo/foo/page-index.odocl
   _build/default/_doc/_odocls/foo/page-index.odocl
 
@@ -94,4 +106,7 @@ This test generates documentation for non-hidden modules only for a library:
   _build/default/_doc/_html/foo/foo/Foo/index.html
   _build/default/_doc/_html/foo/foo/index.html
   _build/default/_doc/_html/foo/index.html
+  _build/default/_doc/_html/foo/src/foo/bar.ml.html
+  _build/default/_doc/_html/foo/src/foo/foo.ml.html
+  _build/default/_doc/_html/foo/src/foo/foo__.ml-gen.html
   _build/default/_doc/_html/index.html
