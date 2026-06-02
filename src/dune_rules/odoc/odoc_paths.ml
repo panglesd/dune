@@ -127,3 +127,5 @@ let sidebar_json ctx mode scope output_format =
   | Global -> root ++ "sidebar.json"
   | Per_package pkg -> root ++ Package.Name.to_string pkg ++ "sidebar.json"
 ;;
+
+let remap_file ctx = root ctx ++ "_remap" ++ "remap.txt"
