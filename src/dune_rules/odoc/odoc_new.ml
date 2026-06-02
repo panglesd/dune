@@ -4,14 +4,7 @@ module Gen_rules = Build_config.Gen_rules
 
 let ( ++ ) = Path.Build.relative
 
-module Ext_loc_map = Map.Make (Dune_package.External_location)
-
-type ext_loc_maps =
-  { findlib_paths : int Path.Map.t
-  ; loc_of_pkg : Dune_package.External_location.t Package.Name.Map.t
-  ; loc_of_lib : Dune_package.External_location.t Lib_name.Map.t
-  ; libs_of_loc : (Dune_package.Lib.t * Lib.t) Lib_name.Map.t Ext_loc_map.t
-  }
+module Ext_loc_map = Package_discovery.Ext_loc_map
 
 let stdlib_lib ctx =
   let* public_libs = Scope.DB.public_libs ctx in
@@ -127,6 +120,11 @@ module Index = struct
     List.fold_right ~f:(fun x acc -> acc ++ subdir x) ~init m
   ;;
 
+  let classify_dir ctx ~all (m : t) =
+    let init = Paths.root ctx ~all ++ "classify" in
+    List.fold_right ~f:(fun x acc -> acc ++ subdir x) ~init m
+  ;;
+
   let mld_name_ty : ty -> string = subdir
 
   let mld_name : t -> string = function
@@ -142,10 +140,10 @@ module Index = struct
       let info = Lib.Local.info lib in
       Lib_info.package info
     with
-    | None -> [ Private_lib (Odoc.lib_unique_name (lib :> Lib.t)) ]
+    | None -> [ Private_lib (Odoc_scope.lib_unique_name lib) ]
     | Some _pkg ->
       (match Lib_name.analyze (Lib.name (lib :> Lib.t)) with
-       | Private (_, _) -> [ Private_lib (Odoc.lib_unique_name (lib :> Lib.t)) ]
+       | Private (_, _) -> [ Private_lib (Odoc_scope.lib_unique_name lib) ]
        | Public (pkg, rest) ->
          List.fold_left
            ~f:(fun acc s -> Sub_dir s :: acc)
@@ -163,7 +161,7 @@ module Index = struct
       match loc with
       | Relative_to_stdlib local_path -> Some (Relative_to_stdlib, local_path)
       | Relative_to_findlib (findlib_path, local_path) ->
-        let+ n = Path.Map.find maps.findlib_paths findlib_path in
+        let+ n = Path.Map.find (Package_discovery.findlib_paths maps) findlib_path in
         Relative_to_findlib (n, findlib_path), local_path
       | Absolute _ -> None
     in
@@ -181,7 +179,7 @@ module Index = struct
     let name = Lib.name lib in
     match
       let open Option.O in
-      let* loc = Lib_name.Map.find maps.loc_of_lib name in
+      let* loc = Package_discovery.location_of_library maps name in
       of_external_loc maps loc
     with
     | Some loc -> loc
@@ -191,7 +189,7 @@ module Index = struct
   let of_pkg maps pkg =
     match
       let open Option.O in
-      let* loc = Package.Name.Map.find maps.loc_of_pkg pkg in
+      let* loc = Package_discovery.location_of_package maps pkg in
       of_external_loc maps loc
     with
     | Some loc -> loc
@@ -203,123 +201,6 @@ let add_rule sctx =
   let dir = Context.build_dir (Super_context.context sctx) in
   Super_context.add_rule sctx ~dir
 ;;
-
-(* Returns a [ext_loc_maps] value that contains all the information
-   needed to find the location of a library or package stored externally
-   to the current workspace.
-
-   Note that this list may contain entries for libraries that are also
-   in the dune workspace, if they happen to be installed elsewhere. These
-   are filtered out in the `Valid` module below, and this general function
-   should not be used.
-
-   Note: There are two reasons why we have a fallback mechanism for
-   non-dune installed packages - first that there is more than one library
-   in a particular directory, and the second is that we don't have a
-   [Modules.t] value for the library. They essentially boil down to the
-   problem that it's very hard to know which modules correspond to which
-   library given a simple include path. Introspecting the cmas isn't
-   sufficient because of the existence of cmi-only modules. A potential
-   improvement is to handle the case of only one library per directory,
-   though this is likely only of limited benefit. If we do this, we would
-   need to modify this function to work on _all_ packages in the findlib
-   directory so we can correctly identify those directories containing
-   multiple libs.
-*)
-let libs_maps_def =
-  let f (ctx, libs) =
-    let* db = Scope.DB.public_libs (Context.name ctx)
-    and* all_packages_entries =
-      let* findlib = Findlib.create (Context.name ctx) in
-      Memo.parallel_map ~f:(Findlib.find findlib) libs
-      >>| List.filter_map ~f:Result.to_option
-    in
-    let* findlib_paths =
-      let+ findlib_paths_list = Context.findlib_paths ctx in
-      List.fold_left findlib_paths_list ~init:(0, Path.Map.empty) ~f:(fun (i, acc) path ->
-        match Path.Map.add acc path i with
-        | Ok acc -> i + 1, acc
-        | Error _ ->
-          Log.warn "Error adding findlib path to map" [];
-          i + 1, acc)
-      |> snd
-    in
-    let init =
-      { findlib_paths
-      ; loc_of_pkg = Package.Name.Map.empty
-      ; loc_of_lib = Lib_name.Map.empty
-      ; libs_of_loc = Ext_loc_map.empty
-      }
-    in
-    Memo.List.fold_left all_packages_entries ~init ~f:(fun maps entry ->
-      match (entry : Dune_package.Entry.t) with
-      | Deprecated_library_name _ | Hidden_library _ -> Memo.return maps
-      | Dune_package.Entry.Library l ->
-        (match Dune_package.Lib.external_location l with
-         | None ->
-           Log.info
-             "No location for lib"
-             [ ( "lib"
-               , Dyn.string
-                   (Dune_package.Lib.info l |> Lib_info.name |> Lib_name.to_string) )
-             ];
-           Memo.return maps
-         | Some location ->
-           let info = Dune_package.Lib.info l in
-           let name = Lib_info.name info in
-           let pkg = Lib_info.package info in
-           Lib.DB.find_lib_id db (Lib_info.lib_id info)
-           >>| (function
-            | None -> maps
-            | Some lib ->
-              let loc_of_lib =
-                match Lib_name.Map.add maps.loc_of_lib name location with
-                | Ok l -> l
-                | Error _ ->
-                  (* I don't expect this should ever happen *)
-                  Log.warn
-                    "Error adding lib to loc_of_lib map"
-                    [ "lib", Dyn.string (Lib_name.to_string name) ];
-                  maps.loc_of_lib
-              in
-              let loc_of_pkg =
-                match pkg with
-                | None -> maps.loc_of_pkg
-                | Some pkg_name ->
-                  (match Package.Name.Map.add maps.loc_of_pkg pkg_name location with
-                   | Ok l -> l
-                   | Error _ ->
-                     (* There will be lots of repeated packages, no problem here *)
-                     maps.loc_of_pkg)
-              in
-              let update_fn = function
-                | None -> Some (Lib_name.Map.singleton name (l, lib))
-                | Some libs ->
-                  (match Lib_name.Map.add libs name (l, lib) with
-                   | Ok libs -> Some libs
-                   | Error _ ->
-                     Log.warn
-                       "Error adding lib to libs_of_loc map"
-                       [ "lib", Dyn.string (Lib_name.to_string name) ];
-                     Some libs)
-              in
-              let libs_of_loc =
-                Ext_loc_map.update maps.libs_of_loc location ~f:update_fn
-              in
-              { maps with loc_of_lib; loc_of_pkg; libs_of_loc })))
-  in
-  let module Input = struct
-    type t = Context.t * Lib_name.t list
-
-    let equal (c1, l1) (c2, l2) = Context.equal c1 c2 && List.equal Lib_name.equal l1 l2
-    let to_dyn = Dyn.pair Context.to_dyn (Dyn.list Lib_name.to_dyn)
-    let hash (c, l) = Poly.hash (Context.hash c, List.hash Lib_name.hash l)
-  end
-  in
-  Memo.create "odoc_lib_maps" ~input:(module Input) f
-;;
-
-let libs_maps_general ctx libs = Memo.exec libs_maps_def (ctx, libs)
 
 module Classify = struct
   (* Here we classify top-level dirs in the findlib paths. They are either
@@ -356,7 +237,7 @@ module Classify = struct
      less specific mode that simply documents the modules found within each
      dir without assigning them a library. *)
   let classify_location maps location =
-    match Ext_loc_map.find maps.libs_of_loc location with
+    match Ext_loc_map.find (Package_discovery.libs_of_location maps) location with
     | None ->
       Log.warn
         "classify_local_dir: No lib at this location"
@@ -503,15 +384,7 @@ module Valid = struct
     Lib_name.Map.filter libs ~f:(fun lib -> List.mem valid_libs lib ~equal:lib_equal)
   ;;
 
-  let libs_maps ctx ~all =
-    let* libs, _packages = get ctx ~all in
-    let libs =
-      List.filter_map
-        ~f:(fun l -> if Lib.is_local l then None else Some (Lib.name l))
-        libs
-    in
-    libs_maps_general ctx libs
-  ;;
+  let libs_maps ctx ~all:_ = Package_discovery.create ~context:ctx
 
   (* It's handy for the toplevel index generation to be able to construct
      a categorized list of all the packages, the libraries and everything
@@ -552,7 +425,7 @@ module Valid = struct
           Memo.return { cats with local }
         | None ->
           let* maps = libs_maps ctx ~all in
-          (match Lib_name.Map.find maps.loc_of_lib (Lib.name lib) with
+          (match Package_discovery.location_of_library maps (Lib.name lib) with
            | None ->
              Log.info
                "No location for lib"
@@ -604,7 +477,7 @@ module Dep : sig
   val deps
     :  Context.t
     -> all:bool
-    -> ext_loc_maps
+    -> Package_discovery.t
     -> Lib.t list
     -> Package.Name.t option
     -> Lib.t list Resolve.t
@@ -883,7 +756,7 @@ let compile_module
         in
         Odoc.run_odoc
           sctx
-          ~dir:doc_dir
+          ~dir:(Paths.root ctx ~all)
           "compile"
           ~flags_for:(Some odoc_file)
           ~quiet
@@ -947,12 +820,12 @@ let link_requires stdlib_opt libs =
 
 let compile_mld sctx a ~parent_opt ~quiet ~is_index ~children =
   assert (Artifact.artifact_ty a = Artifact.Mld);
+  let ctx = Super_context.context sctx in
   let odoc_file = Artifact.odoc_file a in
   let run_odoc =
     let quiet_arg =
       if quiet then Command.Args.A "--print-warnings=false" else Command.Args.empty
     in
-    let doc_dir = Path.Build.parent_exn (Artifact.odoc_file a) in
     let odoc_input = Artifact.source_file a in
     let parent_args =
       match parent_opt with
@@ -970,7 +843,7 @@ let compile_mld sctx a ~parent_opt ~quiet ~is_index ~children =
     in
     Odoc.run_odoc
       sctx
-      ~dir:(Path.build doc_dir)
+      ~dir:(Paths.root ctx ~all:true)
       "compile"
       ~flags_for:(Some odoc_file)
       ~quiet
@@ -1008,7 +881,7 @@ let link_odoc_rules sctx ~all (artifacts : Artifact.t list) ~quiet ~package ~lib
     let run_odoc =
       Odoc.run_odoc
         sctx
-        ~dir:(Path.parent_exn (Path.build (Artifact.odocl_file a)))
+        ~dir:(Paths.root ctx ~all:true)
         "link"
         ~quiet
         ~flags_for:(Some (Artifact.odoc_file a))
@@ -1030,27 +903,33 @@ let link_odoc_rules sctx ~all (artifacts : Artifact.t list) ~quiet ~package ~lib
 let html_generate sctx all ~search_db (a : Artifact.t) =
   let ctx = Super_context.context sctx in
   let html_output = Paths.html_root ctx ~all in
-  let support_relative =
+  let doc_root = Paths.root ctx ~all in
+  let html_output_rel = Path.reach (Path.build html_output) ~from:(Path.build doc_root) in
+  let support_uri =
     let odoc_support_path = Paths.odoc_support ctx ~all in
     Path.reach (Path.build odoc_support_path) ~from:(Path.build html_output)
   in
   let search_args =
-    Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:(Index.html_dir ctx ~all [])
+    Sherlodoc.odoc_args
+      sctx
+      ~search_db
+      ~dir_sherlodoc_dot_js:(Index.html_dir ctx ~all [])
+      ~html_root:html_output
   in
   let run_odoc =
     Odoc.run_odoc
       sctx
-      ~quiet:false
-      ~dir:(Path.build html_output)
+      ~dir:(Paths.root ctx ~all:true)
       "html-generate"
+      ~quiet:false
       ~flags_for:None
       [ Command.Args.A "-o"
-      ; Path (Path.build html_output)
+      ; A html_output_rel
       ; search_args
       ; A "--support-uri"
-      ; A support_relative
+      ; A support_uri
       ; A "--theme-uri"
-      ; A support_relative
+      ; A support_uri
       ; Dep (Path.build (Artifact.odocl_file a))
       ]
   in
@@ -1066,6 +945,38 @@ let html_generate sctx all ~search_db (a : Artifact.t) =
   in
   let+ () = add_rule sctx rule in
   result
+;;
+
+let classify_rule sctx ~all modules_dir dir =
+  let ctx = Super_context.context sctx in
+  let dir = Index.classify_dir ctx ~all dir in
+  let file = dir ++ "classify" in
+  Log.info (Printf.sprintf "Classifying %s" (Path.Build.to_string dir)) [];
+  let odoc = Odoc.odoc_program sctx (Paths.root ctx ~all) in
+  let* deps = Fs_memo.dir_contents (Path.as_outside_build_dir_exn modules_dir) in
+  let deps =
+    match deps with
+    | Ok x ->
+      Fs_memo.Dir_contents.to_list x
+      |> List.filter_map ~f:(function
+        | x, Unix.S_REG ->
+          Some
+            (Path.append_local modules_dir (Path.Local.of_string (Filename.to_string x)))
+        | _ -> None)
+    | Error _ -> []
+  in
+  let deps = Dune_engine.Dep.Set.of_files deps in
+  let+ () =
+    Super_context.add_rule
+      sctx
+      ~dir:(Paths.root ctx ~all)
+      (Command.run_dyn_prog
+         odoc
+         ~dir:(Path.parent_exn (Path.build file))
+         ~stdout_to:file
+         [ A "classify"; A (Path.to_string modules_dir); Hidden_deps deps ])
+  in
+  file
 ;;
 
 (* Intra-library module dependencies have to be found out for
@@ -1263,38 +1174,19 @@ let lib_artifacts ctx all index lib modules =
     Artifact.make_module ctx ~all index cmti_file ~visible :: acc)
 ;;
 
-let ext_package_mlds (ctx : Context.t) (pkg : Package.Name.t) =
-  let* findlib = Findlib.create (Context.name ctx) in
-  Findlib.find_root_package findlib pkg
-  >>| function
-  | Error _ -> []
-  | Ok dpkg ->
-    let installed = dpkg.files in
-    List.filter_map installed ~f:(function
-      | Dune_section.Doc, fs ->
-        let doc_path = Section.Map.find_exn dpkg.sections Doc in
-        Some
-          (List.filter_map fs ~f:(function
-             | { kind = File; dst } ->
-               let str = Install.Entry.Dst.to_string dst in
-               if String.ends_with ~suffix:".mld" str
-               then Some (Path.relative doc_path str, str)
-               else None
-             | { kind = Directory; dst = _ } -> None))
-      | _ -> None)
-    |> List.concat
-;;
-
 let pkg_mlds sctx pkg =
   let* pkgs = Dune_load.packages () in
   if Package.Name.Map.mem pkgs pkg
   then
-    let+ res, warnings = Odoc.mlds sctx pkg in
-    let () = Odoc.report_warnings warnings in
-    List.map ~f:(fun (p, name) -> Path.build p, name) res
+    let+ mlds_list = Packages.mlds sctx pkg in
+    List.map mlds_list ~f:(fun (mld : Doc_sources.mld) ->
+      let in_doc_str = Path.Local.to_string mld.in_doc in
+      let name = Stdlib.Filename.remove_extension in_doc_str in
+      Path.build mld.path, name)
   else (
     let ctx = Super_context.context sctx in
-    ext_package_mlds ctx pkg)
+    let+ pkg_discovery = Package_discovery.create ~context:ctx in
+    Package_discovery.mlds_of_package pkg_discovery pkg)
 ;;
 
 let check_mlds_no_dupes ~pkg ~mlds =
@@ -1954,9 +1846,9 @@ let setup_css_rule sctx ~all =
     let cmd =
       Odoc.run_odoc
         sctx
-        ~quiet:false
-        ~dir:(Path.build (Context.build_dir ctx))
+        ~dir:(Paths.root ctx ~all:true)
         "support-files"
+        ~quiet:false
         ~flags_for:None
         [ Command.Args.A "-o"; Path (Path.build dir) ]
     in
@@ -2044,6 +1936,34 @@ let gen_project_rules sctx project =
     ())
 ;;
 
+let setup_classify_rules sctx ~all =
+  let ctx = Super_context.context sctx in
+  Log.info "Classifying libraries" [];
+  let* libs, _ = Valid.get ctx ~all in
+  let* map = Package_discovery.create ~context:ctx in
+  let dirs =
+    List.fold_left
+      ~f:(fun map lib ->
+        let dir = Lib_info.obj_dir (Lib.info lib) |> Obj_dir.dir in
+        Path.Map.add_exn (Path.Map.remove map dir) dir lib)
+      ~init:Path.Map.empty
+      libs
+  in
+  let list = Path.Map.to_list dirs in
+  let+ _ =
+    Memo.List.filter_map
+      ~f:(fun (dir, lib) ->
+        Log.info (Printf.sprintf "Classifying dir %s" (dir |> Path.to_string)) [];
+        if Lib.is_local lib
+        then Memo.return None
+        else
+          let+ result = classify_rule sctx ~all dir (Index.of_external_lib map lib) in
+          Some result)
+      list
+  in
+  []
+;;
+
 let has_rules m =
   let* dirs, rules = Rules.collect (fun () -> m) in
   let directory_targets =
@@ -2054,6 +1974,7 @@ let has_rules m =
 
 let gen_rules sctx ~dir rest =
   let all = true in
+  Log.info (Printf.sprintf "gen_rules %s" (String.concat ~sep:" " rest)) [];
   match rest with
   | [] ->
     Memo.return
@@ -2061,6 +1982,7 @@ let gen_rules sctx ~dir rest =
          ~build_dir_only_sub_dirs:
            (Build_config.Gen_rules.Build_only_sub_dirs.singleton ~dir Subdir_set.all)
          (Memo.return Rules.empty))
+  | [ "classify" ] -> has_rules (setup_classify_rules sctx ~all)
   | [ "odoc" ] -> has_rules (setup_odoc_rules sctx ~all)
   | [ "index" ] -> has_rules (setup_all_index_rules sctx ~all)
   | [ "html"; "docs" ] -> has_rules (setup_all_html_rules sctx ~all)

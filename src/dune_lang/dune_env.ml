@@ -48,9 +48,32 @@ module Odoc = struct
     | Fatal
     | Nonfatal
 
-  type t = { warnings : warnings option }
+  type support =
+    | Root
+    | Per_package
 
-  let empty = { warnings = None }
+  type source_rendering =
+    | Enabled
+    | Disabled
+
+  type t =
+    { warnings : warnings option
+    ; support : support option
+    ; source_rendering : source_rendering option
+    ; flags : Ordered_set_lang.Unexpanded.t
+    ; link_flags : Ordered_set_lang.Unexpanded.t
+    ; html_flags : Ordered_set_lang.Unexpanded.t
+    }
+
+  let empty =
+    { warnings = None
+    ; support = None
+    ; source_rendering = None
+    ; flags = Ordered_set_lang.Unexpanded.standard
+    ; link_flags = Ordered_set_lang.Unexpanded.standard
+    ; html_flags = Ordered_set_lang.Unexpanded.standard
+    }
+  ;;
 
   let warnings_equal x y =
     match x, y with
@@ -58,13 +81,40 @@ module Odoc = struct
     | (Fatal | Nonfatal), _ -> false
   ;;
 
-  let equal x y = Option.equal warnings_equal x.warnings y.warnings
+  let support_equal x y =
+    match x, y with
+    | Root, Root | Per_package, Per_package -> true
+    | (Root | Per_package), _ -> false
+  ;;
+
+  let source_rendering_equal x y =
+    match x, y with
+    | Enabled, Enabled | Disabled, Disabled -> true
+    | (Enabled | Disabled), _ -> false
+  ;;
+
+  let equal x y =
+    Option.equal warnings_equal x.warnings y.warnings
+    && Option.equal support_equal x.support y.support
+    && Option.equal source_rendering_equal x.source_rendering y.source_rendering
+    && Ordered_set_lang.Unexpanded.equal x.flags y.flags
+    && Ordered_set_lang.Unexpanded.equal x.link_flags y.link_flags
+    && Ordered_set_lang.Unexpanded.equal x.html_flags y.html_flags
+  ;;
+
   let warnings_decode = enum [ "fatal", Fatal; "nonfatal", Nonfatal ]
+  let support_decode = enum [ "root", Root; "per-package", Per_package ]
+  let source_rendering_decode = enum [ "enabled", Enabled; "disabled", Disabled ]
 
   let decode =
     fields
-    @@ let+ warnings = field_o "warnings" warnings_decode in
-       { warnings }
+    @@ let+ warnings = field_o "warnings" warnings_decode
+       and+ support = field_o "support" support_decode
+       and+ source_rendering = field_o "source_rendering" source_rendering_decode
+       and+ flags = Ordered_set_lang.Unexpanded.field "flags"
+       and+ link_flags = Ordered_set_lang.Unexpanded.field "link_flags"
+       and+ html_flags = Ordered_set_lang.Unexpanded.field "html_flags" in
+       { warnings; support; source_rendering; flags; link_flags; html_flags }
   ;;
 end
 
