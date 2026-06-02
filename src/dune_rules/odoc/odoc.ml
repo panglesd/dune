@@ -142,6 +142,32 @@ end
 
 let get_workspace_packages = Odoc_discovery.get_workspace_packages
 
+let generate_remap_mappings_simple pkg_discovery ~packages =
+  let* packages_to_remap =
+    Memo.List.filter (Package.Name.Set.to_list packages) ~f:(fun pkg ->
+      let+ is_local = Odoc_discovery.is_local_package pkg in
+      not is_local)
+  in
+  let+ mappings =
+    Memo.List.map packages_to_remap ~f:(fun pkg_name ->
+      let+ version_opt = Package_discovery.version_of_package pkg_discovery pkg_name in
+      let version = Option.value version_opt ~default:"latest" in
+      let pkg_path = Package.Name.to_string pkg_name in
+      let pkg_url = Printf.sprintf "https://ocaml.org/p/%s/%s/doc/" pkg_path version in
+      pkg_path ^ "/", pkg_url)
+  in
+  mappings
+;;
+
+let write_remap_file sctx ~remap_file ~mappings =
+  let contents =
+    String.concat
+      ~sep:"\n"
+      (List.map mappings ~f:(fun (local, remote) -> Printf.sprintf "%s:%s" local remote))
+  in
+  add_rule sctx (Action_builder.write_file remap_file contents)
+;;
+
 module Flags = struct
   type warnings = Dune_env.Odoc.warnings =
     | Fatal
@@ -820,6 +846,7 @@ let generate_output_action
       ~artifact
       ?search_db
       ~sidebar_file
+      ?(remap_file : Path.Build.t option = None)
       ~mode
       ~output_format
       ?pkg_name
@@ -866,6 +893,9 @@ let generate_output_action
           ; A odoc_support_uri
           ; A "--theme-uri"
           ; A odoc_support_uri
+          ; (match remap_file with
+             | None -> S []
+             | Some rf -> S [ A "--remap-file"; Dep (Path.build rf) ])
           ; (match sidebar_file with
              | Some sf -> S [ A "--sidebar"; Dep (Path.build sf) ]
              | None -> S [])
@@ -889,6 +919,7 @@ let generate_html_artifact
       ~artifact
       ?search_db
       ~sidebar_file
+      ?(remap_file : Path.Build.t option)
       ?(mode = Doc_mode.Local_only)
       ~output_format
       ?pkg_name
@@ -913,6 +944,7 @@ let generate_html_artifact
         ~artifact
         ?search_db
         ~sidebar_file
+        ~remap_file
         ~mode
         ~output_format
         ?pkg_name
@@ -1267,6 +1299,23 @@ let handle_sidebar_root sctx ~dir ~mode =
        rules)
 ;;
 
+let handle_remap_artifacts sctx =
+  let ctx = Super_context.context sctx in
+  let rules =
+    Rules.collect_unit (fun () ->
+      let* pkg_discovery = Package_discovery.create ~context:ctx in
+      let installed_packages =
+        Package_discovery.all_installed_packages pkg_discovery |> Package.Name.Set.of_list
+      in
+      let* mappings =
+        generate_remap_mappings_simple pkg_discovery ~packages:installed_packages
+      in
+      let remap_file = Paths.remap_file ctx in
+      write_remap_file sctx ~remap_file ~mappings)
+  in
+  Memo.return (Build_config.Gen_rules.make rules)
+;;
+
 let generate_html_for_package
       sctx
       ~ctx
@@ -1328,6 +1377,11 @@ let generate_html_for_package
          let+ db = Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls in
          Some db)
   in
+  let remap_file =
+    match mode with
+    | Doc_mode.Local_only -> Some (Paths.remap_file ctx)
+    | Doc_mode.Full -> None
+  in
   let* () =
     Memo.parallel_iter visible_artifacts ~f:(fun artifact ->
       generate_html_artifact
@@ -1335,6 +1389,7 @@ let generate_html_for_package
         ~artifact
         ?search_db
         ~sidebar_file
+        ?remap_file
         ~mode
         ~output_format
         ~pkg_name
@@ -1658,7 +1713,16 @@ let setup_package_aliases_format
             |> List.map ~f:(fun (Target.Any t) -> Dep.format_alias output mode ctx t)
             |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f)))
     in
-    Action_builder.deps dep_set
+    let* dep_set_with_remap =
+      match mode with
+      | Doc_mode.Local_only ->
+        (* Add remap file as dependency for Local_only mode *)
+        let remap_file = Paths.remap_file ctx in
+        let+ _ = Action_builder.path (Path.build remap_file) in
+        dep_set
+      | Doc_mode.Full -> Action_builder.return dep_set
+    in
+    Action_builder.deps dep_set_with_remap
   in
   Rules.Produce.Alias.add_deps alias deps_action
 ;;
@@ -1909,7 +1973,8 @@ let gen_rules sctx ~dir rest =
   | [ "_sidebar_full"; pkg_or_lib_name ] ->
     handle_sidebar_artifacts sctx ~mode:Doc_mode.Full pkg_or_lib_name
   | ("_sidebar" | "_sidebar_full") :: _ :: _ :: _ -> redirect ()
-  (* Sherlodoc search DB *)
+  (* Remap file and sherlodoc search DB *)
+  | [ "_remap" ] -> handle_remap_artifacts sctx
   | [ "_sherlodoc" ] ->
     let rules =
       Rules.collect_unit (fun () ->
