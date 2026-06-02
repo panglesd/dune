@@ -10,6 +10,9 @@ type doc_file =
 (** Mld documentation file *)
 type mld = doc_file
 
+(** Asset file (image, video, etc.) *)
+type asset = doc_file
+
 module T = struct
   type t = doc_file
 
@@ -98,4 +101,11 @@ let build_mlds_map stanzas ~dir ~files expander =
   >>| List.map ~f:(fun (doc, all_files) ->
     let mlds = List.filter all_files ~f:(fun f -> is_mld_file f.in_doc) in
     doc, mlds)
+;;
+
+let build_assets_map stanzas ~dir ~files expander =
+  build_all_doc_files stanzas ~dir ~files expander
+  >>| List.map ~f:(fun (doc, all_files) ->
+    let assets = List.filter all_files ~f:(fun f -> not (is_mld_file f.in_doc)) in
+    doc, assets)
 ;;
