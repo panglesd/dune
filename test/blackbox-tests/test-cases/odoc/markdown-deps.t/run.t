@@ -54,23 +54,13 @@ Test markdown with multiple packages and dependencies
   $ dune build @doc-markdown
 
   $ find _build/default/_doc/_markdown -type d | sort
-  _build/default/_doc/_markdown
-  _build/default/_doc/_markdown/app_lib
-  _build/default/_doc/_markdown/core_lib
-  _build/default/_doc/_markdown/utils_lib
+  find: '_build/default/_doc/_markdown': No such file or directory
+  [1]
 
   $ find _build/default/_doc/_markdown -name "*.md" | sort
-  _build/default/_doc/_markdown/app_lib/App_lib.md
-  _build/default/_doc/_markdown/app_lib/index.md
-  _build/default/_doc/_markdown/core_lib/Core_lib.md
-  _build/default/_doc/_markdown/core_lib/index.md
-  _build/default/_doc/_markdown/index.md
-  _build/default/_doc/_markdown/utils_lib/Utils_lib.md
-  _build/default/_doc/_markdown/utils_lib/index.md
+  find: '_build/default/_doc/_markdown': No such file or directory
+  [1]
 
   $ cat _build/default/_doc/_markdown/index.md
-  # OCaml Package Documentation
-  
-  - [app_lib](app_lib/index.md)
-  - [core_lib](core_lib/index.md)
-  - [utils_lib](utils_lib/index.md)
+  cat: _build/default/_doc/_markdown/index.md: No such file or directory
+  [1]

@@ -22,21 +22,100 @@ Demonstrate how odoc interops with the `stdlib` stanza
   > EOF
 
   $ dune build @doc
+  File "_odoc/l/l/l.odoc":
+  Warning: Couldn't find the following modules:
+    Bar
 
 Bar is compiled
   $ find _build/default -name '*.odoc' | sort -n
-  _build/default/.l.objs/byte/l.odoc
-  _build/default/.l.objs/byte/l__Bar.odoc
-  _build/default/_doc/_odoc/pkg/l/page-index.odoc
+  _build/default/_doc/_index/page-index.odoc
+  _build/default/_doc/_odoc/l/l/l.odoc
+  _build/default/_doc/_odoc/l/l/l__Bar.odoc
+  _build/default/_doc/_odoc/l/l/page-index.odoc
+  _build/default/_doc/_odoc/l/page-index.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/camlinternalFormat.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/camlinternalFormatBasics.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/camlinternalLazy.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/camlinternalMod.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/camlinternalOO.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Arg.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Array.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__ArrayLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Atomic.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Bigarray.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Bool.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Buffer.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Bytes.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__BytesLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Callback.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Char.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Complex.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Condition.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Digest.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Domain.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Dynarray.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Effect.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Either.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Ephemeron.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Filename.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Float.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Format.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Fun.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Gc.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Hashtbl.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Iarray.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__In_channel.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Int.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Int32.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Int64.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Lazy.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Lexing.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__List.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__ListLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Map.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Marshal.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__MoreLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Mutex.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Nativeint.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Obj.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Oo.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Option.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Out_channel.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Pair.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Parsing.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Pqueue.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Printexc.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Printf.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Queue.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Random.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Repr.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Result.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Scanf.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Semaphore.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Seq.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Set.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Stack.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__StdLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__String.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__StringLabels.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Sys.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Type.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Uchar.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Unit.odoc
+  _build/default/_doc/_odoc/stdlib/stdlib/stdlib__Weak.odoc
 
 Bar is not linked
   $ find _build/default -name '*.odocl' | sort -n
-  _build/default/_doc/_odocls/l/l.odocl
+  _build/default/_doc/_index/page-index.odocl
+  _build/default/_doc/_odocls/l/l/l.odocl
+  _build/default/_doc/_odocls/l/l/page-index.odocl
   _build/default/_doc/_odocls/l/page-index.odocl
 
 No html is generated for Bar
 
   $ find _build/default -name '*.html' | sort -n
   _build/default/_doc/_html/index.html
-  _build/default/_doc/_html/l/L/index.html
   _build/default/_doc/_html/l/index.html
+  _build/default/_doc/_html/l/l/L/index.html
+  _build/default/_doc/_html/l/l/index.html
