@@ -15,7 +15,22 @@ module Odoc : sig
     | Fatal
     | Nonfatal
 
-  type t = { warnings : warnings option }
+  type support =
+    | Root
+    | Per_package
+
+  type source_rendering =
+    | Enabled
+    | Disabled
+
+  type t =
+    { warnings : warnings option
+    ; support : support option
+    ; source_rendering : source_rendering option
+    ; flags : Ordered_set_lang.Unexpanded.t
+    ; link_flags : Ordered_set_lang.Unexpanded.t
+    ; html_flags : Ordered_set_lang.Unexpanded.t
+    }
 
   val decode : t Decoder.t
 end
