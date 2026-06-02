@@ -1,41 +1,198 @@
 open Import
-open Odoc_target
-open Odoc_paths
 
 let ( ++ ) = Path.Build.relative
 
+type kind =
+  | Module : Odoc_target.mod_ * Odoc_target.mod_ Odoc_target.t -> kind
+  | Page : Odoc_target.page * Odoc_target.page Odoc_target.t -> kind
+
+type source =
+  | Local_source of Path.Build.t
+  | Installed_source of { src_path : Path.t }
+  | Generated of
+      { content : string
+      ; output_path : Path.Build.t
+      }
+
 type t =
-  { odoc_file : Path.Build.t
-  ; target : Odoc_target.t
+  { kind : kind
+  ; source : source
+  ; extra_libs : Lib.t list Memo.t
+  ; extra_packages : Package.Name.t list Memo.t
   }
 
-let make ~target odoc_file = { odoc_file; target }
-let odoc_file t = t.odoc_file
+let get_kind t = t.kind
+let extra_libs t = t.extra_libs
+let extra_packages t = t.extra_packages
 
-let basename t =
-  Path.Build.basename t.odoc_file |> Filename.remove_extension |> Filename.to_string
+let source_file t =
+  match t.source with
+  | Local_source path -> Path.build path
+  | Installed_source { src_path; _ } -> src_path
+  | Generated { output_path; _ } -> Path.build output_path
 ;;
 
-let odocl_file ctx t = odocl ctx t.target ++ (basename t ^ ".odocl")
+let generated_content t =
+  match t.source with
+  | Generated { content; _ } -> Some content
+  | Local_source _ | Installed_source _ -> None
+;;
 
-let output_file ctx (output : output_format) t =
-  let basename = basename t in
-  let suffix = Filename.of_string_exn (extension output) in
-  match t.target with
-  | Lib _ ->
-    (match output with
-     | Html | Json ->
-       html ctx t.target ++ Stdune.String.capitalize basename ++ "index"
-       |> Path.Build.extend_basename ~suffix
-     | Markdown ->
-       markdown ctx t.target ++ Stdune.String.capitalize basename
-       |> Path.Build.extend_basename ~suffix)
-  | Pkg _ ->
-    let base =
-      match output with
-      | Markdown -> markdown ctx t.target
-      | Html | Json -> html ctx t.target
+let pkg t =
+  match t.kind with
+  | Module (_, Lib (pkg, _)) -> Some pkg
+  | Module (_, Private_lib _) -> None
+  | Page (_, Pkg pkg) -> Some pkg
+  | Page (_, Toplevel _) -> None
+;;
+
+let lib t =
+  match t.kind with
+  | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Some lib
+  | Page _ -> None
+;;
+
+let lib_name t =
+  match t.kind with
+  | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> Lib.name lib
+  | Page (_, Pkg pkg) -> Lib_name.of_string (Package.Name.to_string pkg)
+  | Page (_, Toplevel _) -> Lib_name.of_string "index"
+;;
+
+let odoc_dir ctx t =
+  match t.kind with
+  | Module (_, target) -> Odoc_paths.odocs ctx target
+  | Page (_, target) -> Odoc_paths.odocs ctx target
+;;
+
+let split_page_name name =
+  match String.rsplit2 name ~on:'/' with
+  | Some (parent, leaf) -> Some parent, leaf
+  | None -> None, name
+;;
+
+let get_basename t =
+  match t.kind, t.source with
+  | Page (page, _), _ -> snd (split_page_name page.name)
+  | Module (_, _), Local_source src_path ->
+    Path.Build.basename src_path |> Filename.remove_extension |> Filename.to_string
+  | Module (mod_, _), (Installed_source _ | Generated _) ->
+    Module_name.to_string mod_.module_name |> String.uncapitalize_ascii
+;;
+
+let odoc_file ctx t =
+  let basename = get_basename t in
+  match t.kind with
+  | Page (page, target) ->
+    let base_dir = Odoc_paths.odocs ctx target in
+    (match fst (split_page_name page.name) with
+     | Some parent_path -> base_dir ++ parent_path ++ ("page-" ^ basename ^ ".odoc")
+     | None -> base_dir ++ ("page-" ^ basename ^ ".odoc"))
+  | Module (_, target) ->
+    let base_dir = Odoc_paths.odocs ctx target in
+    base_dir ++ (basename ^ ".odoc")
+;;
+
+let odocl_file ctx t =
+  let basename = get_basename t in
+  match t.kind with
+  | Page (page, target) ->
+    let base_dir = Odoc_paths.odocl ctx target in
+    (match fst (split_page_name page.name) with
+     | Some parent_path -> base_dir ++ parent_path ++ ("page-" ^ basename ^ ".odocl")
+     | None -> base_dir ++ ("page-" ^ basename ^ ".odocl"))
+  | Module (_, target) ->
+    let base_dir = Odoc_paths.odocl ctx target in
+    base_dir ++ (basename ^ ".odocl")
+;;
+
+let output_base ctx mode format t =
+  match t.kind with
+  | Module (_, target) -> Odoc_paths.output ctx mode format target
+  | Page (_, target) -> Odoc_paths.output ctx mode format target
+;;
+
+let output_extension : Odoc_paths.output_format -> Filename.Extension.t = function
+  | Html -> Filename.Extension.html
+  | Json -> Filename.Extension.html_json
+  | Markdown -> Filename.Extension.md
+;;
+
+let output_file ctx mode format t =
+  let base = output_base ctx mode format t in
+  let basename = get_basename t in
+  let suffix = output_extension format in
+  match t.kind, (format : Odoc_paths.output_format) with
+  | Module _, (Html | Json) ->
+    let dir = base ++ Stdune.String.capitalize basename in
+    dir ++ ("index" ^ Filename.Extension.to_string suffix)
+  | Module _, Markdown ->
+    base ++ (Stdune.String.capitalize basename ^ Filename.Extension.to_string suffix)
+  | Page (page, _), _ ->
+    let path =
+      match fst (split_page_name page.name) with
+      | Some parent_path -> base ++ parent_path ++ basename
+      | None -> base ++ basename
     in
-    base ++ (basename |> String.drop_prefix ~prefix:"page-" |> Option.value_exn)
-    |> Path.Build.extend_basename ~suffix
+    Path.Build.set_extension path ~ext:suffix
+;;
+
+let output_dir_target ctx mode format t =
+  match t.kind, (format : Odoc_paths.output_format) with
+  | Module (_, target), (Html | Json) ->
+    let basename = get_basename t in
+    let base = Odoc_paths.output ctx mode format target in
+    Some (base ++ Stdune.String.capitalize basename)
+  | Module (_, target), Markdown -> Some (Odoc_paths.output ctx mode format target)
+  | Page _, _ -> None
+;;
+
+let hidden t =
+  match t.kind with
+  | Page _ -> false
+  | Module _ ->
+    let basename = get_basename t in
+    String.contains_double_underscore basename
+;;
+
+let parent_id t =
+  let base_id =
+    match t.kind with
+    | Module (_, Lib (pkg, lib)) ->
+      sprintf "%s/%s" (Package.Name.to_string pkg) (Lib_name.to_string (Lib.name lib))
+    | Module (_, Private_lib (lib_unique_name, _)) -> lib_unique_name
+    | Page (_, Pkg pkg) -> Package.Name.to_string pkg
+    | Page (_, Toplevel _) -> ""
+  in
+  match t.kind with
+  | Module _ -> base_id
+  | Page (page, _) ->
+    (match fst (split_page_name page.name) with
+     | Some parent_path -> sprintf "%s/%s" base_id parent_path
+     | None -> base_id)
+;;
+
+let is_lib_vendored lib =
+  let lib_info = Lib.info lib in
+  match Lib_info.status lib_info with
+  | Installed_private | Installed -> Memo.return false
+  | Public _ | Private _ ->
+    let src_path = Path.drop_optional_build_context (Lib_info.src_dir lib_info) in
+    (match Path.as_in_source_tree src_path with
+     | Some src_dir -> Source_tree.is_vendored src_dir
+     | None -> Memo.return false)
+;;
+
+let should_suppress_output t =
+  match t.source with
+  | Installed_source _ -> Memo.return true
+  | Generated _ -> Memo.return true
+  | Local_source _ ->
+    (match t.kind with
+     | Module (_, (Lib (_, lib) | Private_lib (_, lib))) -> is_lib_vendored lib
+     | Page _ -> Memo.return false)
+;;
+
+let create ~kind ~source ~extra_libs ~extra_packages =
+  { kind; source; extra_libs; extra_packages }
 ;;
