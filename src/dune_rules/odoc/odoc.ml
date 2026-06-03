@@ -3,7 +3,6 @@ open Memo.O
 module Gen_rules = Build_config.Gen_rules
 
 let ( ++ ) = Path.Build.relative
-let mld_ext = Filename.Extension.of_string_exn ".mld"
 
 type target = Odoc_target.t =
   | Lib of Lib.Local.t
@@ -541,51 +540,6 @@ let setup_toplevel_index_rule sctx output =
   add_rule sctx (Action_builder.write_file path content)
 ;;
 
-let check_mlds_no_dupes ~pkg ~mlds =
-  match
-    List.rev_map mlds ~f:(fun ((_path, mld_name) as mld) -> mld_name, mld)
-    |> String.Map.of_list
-  with
-  | Ok m -> m
-  | Error (_, (p1, _name1), (p2, _name2)) ->
-    User_error.raise
-      [ Pp.textf
-          "Package %s has two mld's with the same basename %s, %s"
-          (Package.Name.to_string pkg)
-          (Path.to_string_maybe_quoted (Path.build p1))
-          (Path.to_string_maybe_quoted (Path.build p2))
-      ]
-;;
-
-let report_warnings warnings =
-  match warnings with
-  | [] -> ()
-  | _ :: _ ->
-    let l =
-      warnings
-      |> List.map ~f:(fun (mld : Doc_sources.mld) -> Path.Local.to_string mld.in_doc)
-      |> List.sort ~compare:String.compare
-      |> String.concat ~sep:", "
-    in
-    User_warning.emit
-      [ Pp.textf
-          "Dune does not yet support building documentation for assets, and mlds in a \
-           non-flat hierarchy. Ignoring %s."
-          l
-      ]
-;;
-
-let mlds sctx pkg =
-  let+ mlds = Packages.mlds sctx pkg in
-  List.partition_map mlds ~f:(fun (mld : Doc_sources.mld) ->
-    match Path.Local.explode mld.in_doc with
-    | [ name ] ->
-      let ext = Filename.extension name in
-      if Filename.Extension.Or_empty.check ext mld_ext
-      then Left (mld.path, Filename.remove_extension name |> Filename.to_string)
-      else Right mld
-    | _ -> Right mld)
-;;
 
 let odoc_artefacts sctx target =
   let ctx = Super_context.context sctx in
@@ -593,8 +547,8 @@ let odoc_artefacts sctx target =
   match target with
   | Pkg pkg ->
     let+ mlds =
-      let+ mlds, _ = mlds sctx pkg in
-      let mlds = check_mlds_no_dupes ~pkg ~mlds in
+      let+ mlds, _ = Odoc_discovery.mlds sctx pkg in
+      let mlds = Odoc_discovery.check_mlds_no_dupes ~pkg ~mlds in
       String.Map.update mlds "index" ~f:(function
         | None -> Some (Paths.gen_mld_dir ctx pkg ++ "index.mld", "index")
         | Some _ as s -> s)
@@ -917,9 +871,9 @@ let package_mlds =
       ~input:(module Super_context.As_memo_key.And_package_name)
       (fun (sctx, pkg) ->
          Rules.collect (fun () ->
-           let* mlds, warnings = mlds sctx pkg in
-           report_warnings warnings;
-           let mlds = check_mlds_no_dupes ~pkg ~mlds in
+           let* mlds, warnings = Odoc_discovery.mlds sctx pkg in
+           Odoc_discovery.report_warnings warnings;
+           let mlds = Odoc_discovery.check_mlds_no_dupes ~pkg ~mlds in
            let ctx = Super_context.context sctx in
            if String.Map.mem mlds "index"
            then Memo.return mlds

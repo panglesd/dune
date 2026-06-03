@@ -8,12 +8,7 @@ end
 
 val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_builder.t
 
-val mlds
-  :  Super_context.t
-  -> Dune_lang.Package_name.t
-  -> ((Path.Build.t * string) list * Doc_sources.mld list) Memo.t
 
-val report_warnings : Doc_sources.mld list -> unit
 
 val run_odoc
   :  Super_context.t

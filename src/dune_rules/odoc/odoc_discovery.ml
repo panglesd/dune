@@ -33,3 +33,51 @@ let entry_modules sctx ~pkg =
   in
   Lib.Local.Map.of_list_exn l
 ;;
+
+let mld_ext = Filename.Extension.of_string_exn ".mld"
+
+let check_mlds_no_dupes ~pkg ~mlds =
+  match
+    List.rev_map mlds ~f:(fun ((_path, mld_name) as mld) -> mld_name, mld)
+    |> String.Map.of_list
+  with
+  | Ok m -> m
+  | Error (_, (p1, _name1), (p2, _name2)) ->
+    User_error.raise
+      [ Pp.textf
+          "Package %s has two mld's with the same basename %s, %s"
+          (Package.Name.to_string pkg)
+          (Path.to_string_maybe_quoted (Path.build p1))
+          (Path.to_string_maybe_quoted (Path.build p2))
+      ]
+;;
+
+let report_warnings warnings =
+  match warnings with
+  | [] -> ()
+  | _ :: _ ->
+    let l =
+      warnings
+      |> List.map ~f:(fun (mld : Doc_sources.mld) -> Path.Local.to_string mld.in_doc)
+      |> List.sort ~compare:String.compare
+      |> String.concat ~sep:", "
+    in
+    User_warning.emit
+      [ Pp.textf
+          "Dune does not yet support building documentation for assets, and mlds in a \
+           non-flat hierarchy. Ignoring %s."
+          l
+      ]
+;;
+
+let mlds sctx pkg =
+  let+ mlds = Packages.mlds sctx pkg in
+  List.partition_map mlds ~f:(fun (mld : Doc_sources.mld) ->
+    match Path.Local.explode mld.in_doc with
+    | [ name ] ->
+      let ext = Filename.extension name in
+      if Filename.Extension.Or_empty.check ext mld_ext
+      then Left (mld.path, Filename.remove_extension name |> Filename.to_string)
+      else Right mld
+    | _ -> Right mld)
+;;

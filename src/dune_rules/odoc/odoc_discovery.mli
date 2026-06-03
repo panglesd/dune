@@ -15,3 +15,18 @@ val entry_modules
   :  Super_context.t
   -> pkg:Package.Name.t
   -> Module.t list Lib.Local.Map.t Memo.t
+
+(** Check there are no two mld files with the same basename in a package. *)
+val check_mlds_no_dupes
+  :  pkg:Package.Name.t
+  -> mlds:(Path.Build.t * string) list
+  -> (Path.Build.t * string) String.Map.t
+
+(** Warn about documentation inputs dune cannot yet build (assets, nested mlds). *)
+val report_warnings : Doc_sources.mld list -> unit
+
+(** The package mlds, split into flat .mld files (path, name) and the rest. *)
+val mlds
+  :  Super_context.t
+  -> Package.Name.t
+  -> ((Path.Build.t * string) list * Doc_sources.mld list) Memo.t
