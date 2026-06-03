@@ -346,9 +346,13 @@ let setup_library_odoc_rules sctx (local_lib : Lib.Local.t) =
   >>= Dep.setup_deps ctx (Lib local_lib)
 ;;
 
+(* Generate one artifact in one output format. Returns the html/json directory
+   target for module artifacts (whose output is a directory tree), and [None]
+   for mld pages and markdown (which produce single files). *)
 let setup_generate sctx ~search_db odoc_file out =
   let ctx = Super_context.context sctx in
   let odoc_support_path = Paths.odoc_support ctx in
+  let output_file = Artifact.output_file ctx out odoc_file in
   let command, output_dir, args =
     match out with
     | Output_format.Markdown ->
@@ -357,7 +361,6 @@ let setup_generate sctx ~search_db odoc_file out =
       , [ Command.Args.A "-o"
         ; Command.Args.Path (Path.build (Paths.markdown_root ctx))
         ; Command.Args.Dep (Path.build (Artifact.odocl_file ctx odoc_file))
-        ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
         ] )
     | Html | Json ->
       let output_root =
@@ -382,17 +385,34 @@ let setup_generate sctx ~search_db odoc_file out =
         ; Command.Args.Path (Path.build odoc_support_path)
         ; Command.Args.Dep (Path.build (Artifact.odocl_file ctx odoc_file))
         ; Output_format.args out
-        ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
         ] )
   in
   let run_odoc =
     run_odoc sctx ~dir:(Path.build output_dir) command ~quiet:false ~flags_for:None args
   in
-  add_rule sctx run_odoc
+  match out with
+  | (Html | Json) when Artifact.is_module odoc_file ->
+    let dir = Path.Build.parent_exn output_file in
+    let+ () =
+      add_rule
+        sctx
+        (Action_builder.With_targets.add_directories ~directory_targets:[ dir ] run_odoc)
+    in
+    Some dir
+  | Html | Json | Markdown ->
+    let+ () =
+      add_rule
+        sctx
+        (Action_builder.With_targets.add run_odoc ~file_targets:[ output_file ])
+    in
+    None
 ;;
 
 let setup_generate_markdown sctx odoc_file =
-  setup_generate sctx ~search_db:None odoc_file Markdown
+  let+ (_ : Path.Build.t option) =
+    setup_generate sctx ~search_db:None odoc_file Markdown
+  in
+  ()
 ;;
 
 let setup_support_files_rule sctx ~dir =
@@ -556,31 +576,34 @@ let setup_global_search_db sctx =
 ;;
 
 (* Generate one output format for a documentation target: run odoc for each of
-   its artifacts and register the format's alias dependencies. *)
+   its artifacts and register the format's alias dependencies. Returns the
+   per-module directory targets produced. *)
 let setup_target_format_rules sctx ~format target =
   let ctx = Super_context.context sctx in
   let search_db = Sherlodoc.search_db_path ~dir:(Paths.html_root ctx) in
   let* odocs = Odoc_discovery.odoc_artefacts sctx target in
-  let* () =
-    Memo.parallel_iter odocs ~f:(fun odoc ->
+  let* dirs =
+    Memo.parallel_map odocs ~f:(fun odoc ->
       setup_generate sctx ~search_db:(Some search_db) odoc format)
   in
-  add_format_alias_deps ctx format target odocs
+  let+ () = add_format_alias_deps ctx format target odocs in
+  List.filter_opt dirs
 ;;
 
 (* The whole tree for an output format is generated from a single node: every
-   local library's modules and every package's mld pages. *)
+   local library's modules and every package's mld pages. Returns all the
+   per-module directory targets. *)
 let setup_all_format_rules sctx ~format =
   let* libs = Odoc_discovery.all_local_libs sctx
   and* packages = Dune_load.packages () in
-  let* () =
-    Memo.parallel_iter libs ~f:(fun lib ->
+  let* lib_dirs =
+    Memo.parallel_map libs ~f:(fun lib ->
       setup_target_format_rules sctx ~format (Lib lib))
-  and* () =
+  and* pkg_dirs =
     Package.Name.Map.keys packages
-    |> Memo.parallel_iter ~f:(fun pkg -> setup_target_format_rules sctx ~format (Pkg pkg))
+    |> Memo.parallel_map ~f:(fun pkg -> setup_target_format_rules sctx ~format (Pkg pkg))
   in
-  Memo.return ()
+  Memo.return (List.concat lib_dirs @ List.concat pkg_dirs)
 ;;
 
 let setup_lib_markdown_rules sctx lib =
@@ -753,6 +776,18 @@ let has_rules ?(directory_targets = Path.Build.Map.empty) m =
   Memo.return (Gen_rules.make ~directory_targets rules)
 ;;
 
+(* Like [has_rules] but the action [m] returns the directory targets it produces
+   (e.g. per-module html dirs), which are collected and declared. [extra] are
+   additional directory targets (such as the odoc support files). *)
+let has_rules_with_dir_targets ?(extra = []) m =
+  let* dirs, rules = Rules.collect (fun () -> m) in
+  let directory_targets =
+    List.rev_append extra dirs
+    |> Path.Build.Map.of_list_map_exn ~f:(fun dir -> dir, Loc.none)
+  in
+  Memo.return (Gen_rules.make ~directory_targets (Memo.return rules))
+;;
+
 let with_package pkg ~f =
   let pkg = Package.Name.of_string pkg in
   let* packages = Dune_load.packages () in
@@ -771,17 +806,19 @@ let gen_rules sctx ~dir rest =
          (Memo.return Rules.empty))
   | [ "_html" ] ->
     let ctx = Super_context.context sctx in
-    let directory_targets = Path.Build.Map.singleton (Paths.odoc_support ctx) Loc.none in
-    has_rules
-      ~directory_targets
-      (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
-       >>> setup_css_rule sctx
-       >>> setup_global_search_db sctx
-       >>> setup_all_format_rules sctx ~format:Html
-       >>> setup_toplevel_index_rule sctx Html)
+    has_rules_with_dir_targets
+      ~extra:[ Paths.odoc_support ctx ]
+      (let* () = Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
+       and* () = setup_css_rule sctx
+       and* () = setup_global_search_db sctx
+       and* () = setup_toplevel_index_rule sctx Html
+       and* dirs = setup_all_format_rules sctx ~format:Html in
+       Memo.return dirs)
   | [ "_json" ] ->
-    has_rules
-      (setup_all_format_rules sctx ~format:Json >>> setup_toplevel_index_rule sctx Json)
+    has_rules_with_dir_targets
+      (let* () = setup_toplevel_index_rule sctx Json
+       and* dirs = setup_all_format_rules sctx ~format:Json in
+       Memo.return dirs)
   | [ "_markdown" ] ->
     let* packages = Dune_load.packages () in
     let ctx = Super_context.context sctx in

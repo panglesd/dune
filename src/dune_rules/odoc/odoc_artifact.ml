@@ -12,6 +12,14 @@ type t =
 let make ~target odoc_file = { odoc_file; target }
 let odoc_file t = t.odoc_file
 
+(* Library artifacts are modules (their html is a directory tree); package
+   artifacts are mld pages (a single html file). *)
+let is_module t =
+  match t.target with
+  | Lib _ -> true
+  | Pkg _ -> false
+;;
+
 let basename t =
   Path.Build.basename t.odoc_file |> Filename.remove_extension |> Filename.to_string
 ;;
