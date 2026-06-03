@@ -541,17 +541,6 @@ let setup_toplevel_index_rule sctx output =
   add_rule sctx (Action_builder.write_file path content)
 ;;
 
-let libs_of_pkg ctx ~pkg =
-  let+ { Scope.DB.Lib_entry.Set.libraries; _ } =
-    Scope.DB.lib_entries_of_package ctx pkg
-  in
-  (* Filter out all implementations of virtual libraries *)
-  List.filter_map libraries ~f:(fun lib ->
-    match Lib.Local.to_lib lib |> Lib.info |> Lib_info.implements with
-    | None -> Some lib
-    | Some _ -> None)
-;;
-
 let entry_modules_by_lib sctx lib =
   let info = Lib.Local.info lib in
   let { Compilation_mode.for_merlin; _ } =
@@ -564,7 +553,7 @@ let entry_modules sctx ~pkg =
   let* l =
     Super_context.context sctx
     |> Context.name
-    |> libs_of_pkg ~pkg
+    |> Odoc_discovery.libs_of_pkg ~pkg
     >>| List.filter ~f:(fun lib ->
       Lib.Local.info lib |> Lib_info.status |> Lib_info.Status.is_private |> not)
   in
@@ -704,7 +693,7 @@ let setup_pkg_rules_def memo_name f =
 
 let setup_pkg_odocl_rules_def =
   let f (sctx, pkg, for_) =
-    let* libs = Super_context.context sctx |> Context.name |> libs_of_pkg ~pkg in
+    let* libs = Super_context.context sctx |> Context.name |> Odoc_discovery.libs_of_pkg ~pkg in
     let* requires =
       let libs = (libs :> Lib.t list) in
       Lib.closure libs ~linking:false ~for_
@@ -802,7 +791,7 @@ let setup_lib_html_rules sctx ~search_db lib =
 let setup_pkg_html_rules_def =
   let f (sctx, pkg, _for_) =
     let ctx = Super_context.context sctx in
-    let* libs = Context.name ctx |> libs_of_pkg ~pkg in
+    let* libs = Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg in
     let dir = Paths.html ctx (Pkg pkg) in
     let* pkg_odocs = odoc_artefacts sctx (Pkg pkg) in
     let* lib_odocs =
@@ -842,7 +831,7 @@ let setup_lib_markdown_rules sctx lib =
 
 let setup_pkg_markdown_rules sctx ~pkg =
   let ctx = Super_context.context sctx in
-  let* libs = Context.name ctx |> libs_of_pkg ~pkg in
+  let* libs = Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg in
   let* all_odocs =
     let* pkg_odocs = odoc_artefacts sctx (Pkg pkg) in
     let+ lib_odocs =
@@ -901,7 +890,7 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
     Rules.Produce.Alias.add_deps alias deps
   | Html | Json ->
     let* libs =
-      Context.name ctx |> libs_of_pkg ~pkg:name >>| List.map ~f:(fun lib -> Lib lib)
+      Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg:name >>| List.map ~f:(fun lib -> Lib lib)
     in
     let deps =
       Pkg name :: libs
