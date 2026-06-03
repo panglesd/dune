@@ -398,7 +398,7 @@ let external_module_deps sctx ~ctx ~lib ~odoc_of_module (m : Odoc_discovery.ext_
 
 let compile_external_module sctx ~lib ~odoc_of_module (m : Odoc_discovery.ext_module) =
   let ctx = Super_context.context sctx in
-  let parent_id = Lib_name.to_string (Lib.name lib) in
+  let parent_id = Paths.ext_lib_parent_id lib in
   let doc_dir = Path.build (Paths.odocs ctx (Ext_lib lib)) in
   let* module_deps = external_module_deps sctx ~ctx ~lib ~odoc_of_module m in
   let run_odoc =

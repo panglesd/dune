@@ -18,9 +18,18 @@ let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 let odoc_root ctx = root ctx ++ "_odoc"
 
-(* External (installed) libraries are not part of any scope, so their odoc
-   tree is keyed by their plain library name. *)
+(* External (installed) libraries are not part of any scope. Like local
+   libraries they nest under their package as [<pkg>/<lib>] when the package is
+   known (it usually is, via findlib), falling back to the plain library name. *)
 let ext_lib_name lib = Lib_name.to_string (Lib.name lib)
+
+let ext_lib_segments lib =
+  match Lib_info.package (Lib.info lib) with
+  | Some pkg -> [ Package.Name.to_string pkg; ext_lib_name lib ]
+  | None -> [ ext_lib_name lib ]
+;;
+
+let ext_lib_parent_id lib = String.concat ~sep:"/" (ext_lib_segments lib)
 
 (* Path segments of a local library's odoc tree, relative to a format root. A
    library in a package nests under [<pkg>/<lib>] (so its modules become child
@@ -40,7 +49,7 @@ let lib_parent_id lib = String.concat ~sep:"/" (lib_segments lib)
 
 let odocs ctx = function
   | Lib lib -> under (odoc_root ctx) (lib_segments lib)
-  | Ext_lib lib -> odoc_root ctx ++ ext_lib_name lib
+  | Ext_lib lib -> under (odoc_root ctx) (ext_lib_segments lib)
   | Pkg pkg -> odoc_root ctx ++ Package.Name.to_string pkg
 ;;
 
@@ -82,13 +91,13 @@ let add_pkg_lnu base m =
 let json ctx ~mode = function
   | Pkg pkg -> json_root ctx ~mode ++ Package.Name.to_string pkg
   | Lib lib -> under (json_root ctx ~mode) (lib_segments lib)
-  | Ext_lib lib -> json_root ctx ~mode ++ ext_lib_name lib
+  | Ext_lib lib -> under (json_root ctx ~mode) (ext_lib_segments lib)
 ;;
 
 let html ctx ~mode = function
   | Pkg pkg -> html_root ctx ~mode ++ Package.Name.to_string pkg
   | Lib lib -> under (html_root ctx ~mode) (lib_segments lib)
-  | Ext_lib lib -> html_root ctx ~mode ++ ext_lib_name lib
+  | Ext_lib lib -> under (html_root ctx ~mode) (ext_lib_segments lib)
 ;;
 
 let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
@@ -96,7 +105,7 @@ let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
 let odocl ctx = function
   | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
   | Lib lib -> under (odocl_root ctx) (lib_segments lib)
-  | Ext_lib lib -> odocl_root ctx ++ ext_lib_name lib
+  | Ext_lib lib -> under (odocl_root ctx) (ext_lib_segments lib)
 ;;
 
 let classify_root ctx = root ctx ++ "_classify"

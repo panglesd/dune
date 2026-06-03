@@ -22,6 +22,10 @@ val odocs : Context.t -> Odoc_target.t -> Path.Build.t
     library, or its scope-unique name for a private one. *)
 val lib_parent_id : Lib.Local.t -> string
 
+(** The odoc [--parent-id] of an external library: [<pkg>/<lib>] when its
+    package is known, or its plain library name otherwise. *)
+val ext_lib_parent_id : Lib.t -> string
+
 (** Path of the [.odoc] file for module [m] of local library [lib], inside the
     library's odoc directory. *)
 val lib_module_odoc : Context.t -> Lib.Local.t -> Module.t -> Path.Build.t

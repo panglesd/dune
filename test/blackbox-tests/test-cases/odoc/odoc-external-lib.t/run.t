@@ -19,22 +19,22 @@ There is no documentation for external libraries in the local-only tree:
 dependency closure, into the `_html_full` tree. odoc emits version-specific
 warnings about `unix.mli`, so we discard stderr.
 
-Local libraries nest under their package (`<pkg>/<lib>`); the external `unix`
-library, which has no local package, uses its own top-level directory.
+Both local and external libraries nest under their package (`<pkg>/<lib>`); the
+external `unix` library's findlib package is also called `unix`.
 
   $ dune build @doc-full 2>/dev/null
   $ test -f _build/default/_doc/_html_full/mylib/mylib/Mylib/index.html && echo ok
   ok
-  $ test -f _build/default/_doc/_html_full/unix/Unix/index.html && echo ok
+  $ test -f _build/default/_doc/_html_full/unix/unix/Unix/index.html && echo ok
   ok
-  $ test -f _build/default/_doc/_html_full/unix/UnixLabels/index.html && echo ok
+  $ test -f _build/default/_doc/_html_full/unix/unix/UnixLabels/index.html && echo ok
   ok
 
-The external library's `.odoc`/`.odocl` are produced under its own name:
+The external library's `.odoc`/`.odocl` are produced under `<pkg>/<lib>`:
 
   $ find _build/default/_doc/_odoc/unix _build/default/_doc/_odocls/unix \
   >   \( -name '*.odoc' -o -name '*.odocl' \) | sort
-  _build/default/_doc/_odoc/unix/unix.odoc
-  _build/default/_doc/_odoc/unix/unixLabels.odoc
-  _build/default/_doc/_odocls/unix/unix.odocl
-  _build/default/_doc/_odocls/unix/unixLabels.odocl
+  _build/default/_doc/_odoc/unix/unix/unix.odoc
+  _build/default/_doc/_odoc/unix/unix/unixLabels.odoc
+  _build/default/_doc/_odocls/unix/unix/unix.odocl
+  _build/default/_doc/_odocls/unix/unix/unixLabels.odocl
