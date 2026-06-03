@@ -1,6 +1,8 @@
 open Import
 open Memo.O
 
+let ( ++ ) = Path.Build.relative
+
 let libs_of_pkg ctx ~pkg =
   let+ { Scope.DB.Lib_entry.Set.libraries; _ } = Scope.DB.lib_entries_of_package ctx pkg in
   (* Filter out all implementations of virtual libraries *)
@@ -80,4 +82,52 @@ let mlds sctx pkg =
       then Left (mld.path, Filename.remove_extension name |> Filename.to_string)
       else Right mld
     | _ -> Right mld)
+;;
+
+let odoc_ext = ".odoc"
+
+module Mld : sig
+  type t
+
+  val create : path:Path.Build.t -> name:string -> t
+  val odoc_file : doc_dir:Path.Build.t -> t -> Path.Build.t
+  val odoc_input : t -> Path.Build.t
+end = struct
+  (** The [(documentation (files ...))] stanza allows with the [as] keyword to
+      distinguish the input file and the path in the documentation. Here we do
+      not support layered hierarchy, but we do support changing the name (hence
+      the two fields) *)
+  type t =
+    { path : Path.Build.t
+    ; name : string (** The name of the mld compilation unit (without extension) *)
+    }
+
+  let create ~path ~name = { path; name }
+
+  let odoc_file ~doc_dir { name; _ } =
+    Path.Build.relative doc_dir (sprintf "page-%s%s" name odoc_ext)
+  ;;
+
+  let odoc_input { path; _ } = path
+end
+
+let odoc_artefacts sctx target =
+  let ctx = Super_context.context sctx in
+  let dir = Odoc_paths.odocs ctx target in
+  match target with
+  | Odoc_target.Pkg pkg ->
+    let+ mlds =
+      let+ mlds, _ = mlds sctx pkg in
+      let mlds = check_mlds_no_dupes ~pkg ~mlds in
+      String.Map.update mlds "index" ~f:(function
+        | None -> Some (Odoc_paths.gen_mld_dir ctx pkg ++ "index.mld", "index")
+        | Some _ as s -> s)
+    in
+    String.Map.to_list_map mlds ~f:(fun _ (path, name) ->
+      Mld.create ~path ~name |> Mld.odoc_file ~doc_dir:dir |> Odoc_artifact.make ~target)
+  | Odoc_target.Lib lib ->
+    let info = Lib.Local.info lib in
+    let obj_dir = Lib_info.obj_dir info in
+    let+ modules = entry_modules_by_lib sctx lib in
+    List.map modules ~f:(fun m -> Obj_dir.Module.odoc obj_dir m |> Odoc_artifact.make ~target)
 ;;

@@ -30,3 +30,15 @@ val mlds
   :  Super_context.t
   -> Package.Name.t
   -> ((Path.Build.t * string) list * Doc_sources.mld list) Memo.t
+
+(** A documentation .mld page (its source and its name in the doc hierarchy). *)
+module Mld : sig
+  type t
+
+  val create : path:Path.Build.t -> name:string -> t
+  val odoc_file : doc_dir:Path.Build.t -> t -> Path.Build.t
+  val odoc_input : t -> Path.Build.t
+end
+
+(** The odoc artifacts (modules or mld pages) of a documentation target. *)
+val odoc_artefacts : Super_context.t -> Odoc_target.t -> Odoc_artifact.t list Memo.t
