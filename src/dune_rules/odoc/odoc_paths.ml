@@ -31,6 +31,7 @@ let lib_module_odoc ctx lib m =
 ;;
 
 let html_root ctx = root ctx ++ "_html"
+let json_root ctx = root ctx ++ "_json"
 let markdown_root ctx = root ctx ++ "_markdown"
 let odocl_root ctx = root ctx ++ "_odocls"
 
@@ -40,6 +41,11 @@ let add_pkg_lnu base m =
   match m with
   | Pkg pkg -> Package.Name.to_string pkg
   | Lib lib -> Odoc_scope.pkg_or_lnu (Lib.Local.to_lib lib)
+;;
+
+let json ctx = function
+  | Pkg pkg -> json_root ctx ++ Package.Name.to_string pkg
+  | Lib lib -> json_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
 ;;
 
 let html ctx = function
@@ -57,4 +63,5 @@ let odocl ctx = function
 let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
 let odoc_support ctx = html_root ctx ++ odoc_support_dirname
 let toplevel_index ctx = html_root ctx ++ "index.html"
+let json_index ctx = json_root ctx ++ "index.html.json"
 let markdown_index ctx = markdown_root ctx ++ "index.md"

@@ -25,7 +25,12 @@ let output_file ctx (output : output_format) t =
   | Lib _ ->
     (match output with
      | Html | Json ->
-       html ctx t.target ++ Stdune.String.capitalize basename ++ "index"
+       let dir =
+         match output with
+         | Json -> json ctx t.target
+         | _ -> html ctx t.target
+       in
+       dir ++ Stdune.String.capitalize basename ++ "index"
        |> Path.Build.extend_basename ~suffix
      | Markdown ->
        markdown ctx t.target ++ Stdune.String.capitalize basename
@@ -34,7 +39,8 @@ let output_file ctx (output : output_format) t =
     let base =
       match output with
       | Markdown -> markdown ctx t.target
-      | Html | Json -> html ctx t.target
+      | Json -> json ctx t.target
+      | Html -> html ctx t.target
     in
     base ++ (basename |> String.drop_prefix ~prefix:"page-" |> Option.value_exn)
     |> Path.Build.extend_basename ~suffix

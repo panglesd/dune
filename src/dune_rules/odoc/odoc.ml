@@ -38,17 +38,17 @@ module Output_format = struct
   ;;
 
   let toplevel_index_path format ctx =
-    let base = Paths.toplevel_index ctx in
     match format with
-    | Html -> base
-    | Json -> Path.Build.extend_basename base ~suffix:Filename.json
+    | Html -> Paths.toplevel_index ctx
+    | Json -> Paths.json_index ctx
     | Markdown -> Paths.markdown_index ctx
   ;;
 end
 
 let output_dir_for_format ctx format target =
   match (format : Output_format.t) with
-  | Html | Json -> Paths.html ctx target
+  | Html -> Paths.html ctx target
+  | Json -> Paths.json ctx target
   | Markdown -> Paths.markdown ctx target
 ;;
 
@@ -360,6 +360,11 @@ let setup_generate sctx ~search_db odoc_file out =
         ; Command.Args.Hidden_targets [ Artifact.output_file ctx out odoc_file ]
         ] )
     | Html | Json ->
+      let output_root =
+        match out with
+        | Json -> Paths.json_root ctx
+        | Html | Markdown -> Paths.html_root ctx
+      in
       let search_args =
         match search_db with
         | None -> Command.Args.empty
@@ -367,10 +372,10 @@ let setup_generate sctx ~search_db odoc_file out =
           Sherlodoc.odoc_args sctx ~search_db ~dir_sherlodoc_dot_js:(Paths.html_root ctx)
       in
       ( "html-generate"
-      , Paths.html_root ctx
+      , output_root
       , [ search_args
         ; Command.Args.A "-o"
-        ; Command.Args.Path (Path.build (Paths.html_root ctx))
+        ; Command.Args.Path (Path.build output_root)
         ; Command.Args.A "--support-uri"
         ; Command.Args.Path (Path.build odoc_support_path)
         ; Command.Args.A "--theme-uri"
@@ -384,11 +389,6 @@ let setup_generate sctx ~search_db odoc_file out =
     run_odoc sctx ~dir:(Path.build output_dir) command ~quiet:false ~flags_for:None args
   in
   add_rule sctx run_odoc
-;;
-
-let setup_generate_html_and_json sctx ~search_db odoc_file =
-  let* () = setup_generate sctx ~search_db:(Some search_db) odoc_file Html in
-  setup_generate sctx ~search_db:(Some search_db) odoc_file Json
 ;;
 
 let setup_generate_markdown sctx odoc_file =
@@ -533,31 +533,6 @@ let add_format_alias_deps ctx format target odocs =
       (Action_builder.paths paths)
 ;;
 
-let setup_lib_html_rules_def =
-  let module Input = struct
-    module Super_context = Super_context.As_memo_key
-
-    type t = Super_context.t * Lib.Local.t
-
-    let equal (sc1, l1) (sc2, l2) = Super_context.equal sc1 sc2 && Lib.Local.equal l1 l2
-    let hash = Tuple.T2.hash Super_context.hash Lib.Local.hash
-    let to_dyn _ = Dyn.Opaque
-  end
-  in
-  let f (sctx, lib) =
-    let ctx = Super_context.context sctx in
-    let target = Lib lib in
-    let* odocs = Odoc_discovery.odoc_artefacts sctx target in
-    let* () = add_format_alias_deps ctx Html target odocs in
-    add_format_alias_deps ctx Json target odocs
-  in
-  Memo.With_implicit_output.create
-    "setup-library-html-rules"
-    ~implicit_output:Rules.implicit_output
-    ~input:(module Input)
-    f
-;;
-
 (* A single search database, at the html root, indexing every documented
    artifact in the workspace. Its rule is added under the [_html] node; other
    nodes reference its path via [Sherlodoc.search_db_path]. *)
@@ -580,49 +555,30 @@ let setup_global_search_db sctx =
   ()
 ;;
 
-let setup_lib_html_rules sctx lib =
+(* Generate one output format for a documentation target: run odoc for each of
+   its artifacts and register the format's alias dependencies. *)
+let setup_target_format_rules sctx ~format target =
   let ctx = Super_context.context sctx in
-  let target = Lib lib in
   let search_db = Sherlodoc.search_db_path ~dir:(Paths.html_root ctx) in
   let* odocs = Odoc_discovery.odoc_artefacts sctx target in
   let* () =
     Memo.parallel_iter odocs ~f:(fun odoc ->
-      setup_generate_html_and_json sctx ~search_db odoc)
+      setup_generate sctx ~search_db:(Some search_db) odoc format)
   in
-  Memo.With_implicit_output.exec setup_lib_html_rules_def (sctx, lib)
+  add_format_alias_deps ctx format target odocs
 ;;
 
-let setup_pkg_html_rules_def =
-  (* Only the package's own mld pages are generated in [_html/<pkg>]; each
-     library's module html lives in its own [_html/<lib-unique-name>] directory
-     and is set up via the per-library dispatcher case. *)
-  let f (sctx, pkg, _for_) =
-    let ctx = Super_context.context sctx in
-    let search_db = Sherlodoc.search_db_path ~dir:(Paths.html_root ctx) in
-    let* pkg_odocs = Odoc_discovery.odoc_artefacts sctx (Pkg pkg) in
-    let* () =
-      Memo.parallel_iter pkg_odocs ~f:(setup_generate_html_and_json ~search_db sctx)
-    in
-    let* () = add_format_alias_deps ctx Html (Pkg pkg) pkg_odocs in
-    add_format_alias_deps ctx Json (Pkg pkg) pkg_odocs
-  in
-  setup_pkg_rules_def "setup-package-html-rules" f
-;;
-
-let setup_pkg_html_rules sctx ~pkg ~for_ : unit Memo.t =
-  Memo.With_implicit_output.exec setup_pkg_html_rules_def (sctx, pkg, for_)
-;;
-
-(* The whole html tree is generated from the single [_html] node: every local
-   library's modules and every package's mld pages. *)
-let setup_all_html_rules sctx =
+(* The whole tree for an output format is generated from a single node: every
+   local library's modules and every package's mld pages. *)
+let setup_all_format_rules sctx ~format =
   let* libs = Odoc_discovery.all_local_libs sctx
   and* packages = Dune_load.packages () in
-  let* () = Memo.parallel_iter libs ~f:(setup_lib_html_rules sctx)
+  let* () =
+    Memo.parallel_iter libs ~f:(fun lib ->
+      setup_target_format_rules sctx ~format (Lib lib))
   and* () =
     Package.Name.Map.keys packages
-    |> Memo.parallel_iter ~f:(fun pkg ->
-      setup_pkg_html_rules sctx ~pkg ~for_:Compilation_mode.Ocaml)
+    |> Memo.parallel_iter ~f:(fun pkg -> setup_target_format_rules sctx ~format (Pkg pkg))
   in
   Memo.return ()
 ;;
@@ -821,9 +777,11 @@ let gen_rules sctx ~dir rest =
       (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
        >>> setup_css_rule sctx
        >>> setup_global_search_db sctx
-       >>> setup_all_html_rules sctx
-       >>> setup_toplevel_index_rule sctx Html
-       >>> setup_toplevel_index_rule sctx Json)
+       >>> setup_all_format_rules sctx ~format:Html
+       >>> setup_toplevel_index_rule sctx Html)
+  | [ "_json" ] ->
+    has_rules
+      (setup_all_format_rules sctx ~format:Json >>> setup_toplevel_index_rule sctx Json)
   | [ "_markdown" ] ->
     let* packages = Dune_load.packages () in
     let ctx = Super_context.context sctx in
