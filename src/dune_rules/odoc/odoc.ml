@@ -613,6 +613,20 @@ let setup_pkg_html_rules sctx ~pkg ~for_ : unit Memo.t =
   Memo.With_implicit_output.exec setup_pkg_html_rules_def (sctx, pkg, for_)
 ;;
 
+(* The whole html tree is generated from the single [_html] node: every local
+   library's modules and every package's mld pages. *)
+let setup_all_html_rules sctx =
+  let* libs = Odoc_discovery.all_local_libs sctx
+  and* packages = Dune_load.packages () in
+  let* () = Memo.parallel_iter libs ~f:(setup_lib_html_rules sctx)
+  and* () =
+    Package.Name.Map.keys packages
+    |> Memo.parallel_iter ~f:(fun pkg ->
+      setup_pkg_html_rules sctx ~pkg ~for_:Compilation_mode.Ocaml)
+  in
+  Memo.return ()
+;;
+
 let setup_lib_markdown_rules sctx lib =
   let target = Lib lib in
   let* () =
@@ -807,6 +821,7 @@ let gen_rules sctx ~dir rest =
       (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
        >>> setup_css_rule sctx
        >>> setup_global_search_db sctx
+       >>> setup_all_html_rules sctx
        >>> setup_toplevel_index_rule sctx Html
        >>> setup_toplevel_index_rule sctx Json)
   | [ "_markdown" ] ->
@@ -898,46 +913,6 @@ let gen_rules sctx ~dir rest =
          | Some pkg ->
            let name = Package.name pkg in
            setup_pkg_odocl_rules sctx ~pkg:name ~for_
-       in
-       ())
-  | [ "_html"; lib_unique_name_or_pkg ] ->
-    has_rules
-      ((* Each library's module html lives in its own [_html/<lib-unique-name>]
-          directory; a package's own mld pages live in [_html/<pkg>]. The
-          directory name can be both (when a library's unique name equals its
-          package name), so we set up each independently.
-          TODO improve error handling when the name is neither a pkg nor a lnu *)
-       let ctx = Super_context.context sctx in
-       let* lib, lib_db =
-         Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
-       in
-       (* jeremiedimino: why isn't [None] some kind of error here? *)
-       let* lib =
-         let+ lib = Lib.DB.find lib_db lib in
-         Option.bind ~f:Lib.Local.of_lib lib
-       in
-       let for_ =
-         match lib with
-         | Some lib ->
-           let modes =
-             Lib_info.modes (Lib.Local.info lib) |> Compilation_mode.of_mode_set
-           in
-           modes.for_merlin
-         | None -> Ocaml
-       in
-       let+ () =
-         match lib with
-         | None -> Memo.return ()
-         | Some lib -> setup_lib_html_rules sctx lib
-       and+ () =
-         let* packages = Dune_load.packages () in
-         match
-           Package.Name.Map.find packages (Package.Name.of_string lib_unique_name_or_pkg)
-         with
-         | None -> Memo.return ()
-         | Some pkg ->
-           let name = Package.name pkg in
-           setup_pkg_html_rules sctx ~pkg:name ~for_
        in
        ())
   | _ -> Memo.return (Gen_rules.redirect_to_parent Gen_rules.Rules.empty)
