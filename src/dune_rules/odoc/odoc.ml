@@ -249,6 +249,7 @@ let compile_module
 ;;
 
 let compile_mld sctx (m : Odoc_discovery.Mld.t) ~includes ~doc_dir ~pkg =
+  let ctx = Super_context.context sctx in
   let odoc_file = Odoc_discovery.Mld.odoc_file m ~doc_dir in
   let odoc_input = Odoc_discovery.Mld.odoc_input m in
   let run_odoc =
@@ -259,9 +260,10 @@ let compile_mld sctx (m : Odoc_discovery.Mld.t) ~includes ~doc_dir ~pkg =
       ~quiet:false
       ~flags_for:(Some odoc_input)
       [ Command.Args.dyn includes
-      ; As [ "--pkg"; Package.Name.to_string pkg ]
-      ; A "-o"
-      ; Target odoc_file
+      ; A "--output-dir"
+      ; Path (Path.build (Paths.odoc_root ctx))
+      ; As [ "--parent-id"; Package.Name.to_string pkg ]
+      ; Hidden_targets [ odoc_file ]
       ; Dep (Path.build odoc_input)
       ]
   in
@@ -321,11 +323,13 @@ let setup_library_odoc_rules sctx (local_lib : Lib.Local.t) =
   let* modules = Dir_contents.modules_of_local_lib sctx local_lib ~for_ in
   let* includes =
     let+ requires = Lib.requires (Lib.Local.to_lib local_lib) ~for_ in
-    let package = Lib_info.package info in
-    let odoc_include_flags =
-      Command.Args.memo (odoc_include_flags ctx package requires)
-    in
-    Dep.deps ctx package requires, odoc_include_flags
+    let odoc_include_flags = Command.Args.memo (odoc_include_flags ctx None requires) in
+    (* Compiling a module does not involve the package itself: its mld pages
+       reference modules (not the other way around), and the main library shares
+       its [_odoc/<pkg>] directory with the package's [.odoc-all] alias, so
+       depending on it would create a cycle. Inter-library dependencies are
+       carried by [requires]. *)
+    Dep.deps ctx None requires, odoc_include_flags
   in
   let with_vlib_modules = Modules.With_vlib.modules modules in
   modules
@@ -847,27 +851,33 @@ let gen_rules sctx ~dir rest =
       let pkg = Package.name pkg in
       let* _mlds, rules = package_mlds sctx ~pkg in
       Rules.produce rules)
-  | [ "_odoc"; "pkg"; pkg ] ->
-    with_package pkg ~f:(fun pkg ->
-      let pkg = Package.name pkg in
-      setup_package_odoc_rules sctx ~pkg)
-  | [ "_odoc"; "pkg" ] -> Memo.return (Gen_rules.redirect_to_parent Gen_rules.Rules.empty)
-  | [ "_odoc"; lib_unique_name ] ->
+  | [ "_odoc"; lib_unique_name_or_pkg ] ->
     has_rules
-      ((* Each library's modules are compiled into its own
-          [_doc/_odoc/<lib-unique-name>] directory, so the directory name
-          resolves to a single library. *)
+      ((* A library's modules are compiled into [_doc/_odoc/<lib-unique-name>];
+          a package's mld pages into [_doc/_odoc/<pkg>]. The directory name can
+          be both (when a library's unique name equals its package name), so we
+          set up each independently. *)
        let ctx = Super_context.context sctx in
-       let* lib, lib_db =
-         Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name
+       let* () =
+         let* lib, lib_db =
+           Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
+         in
+         let* lib =
+           let+ lib = Lib.DB.find lib_db lib in
+           Option.bind ~f:Lib.Local.of_lib lib
+         in
+         match lib with
+         | None -> Memo.return ()
+         | Some lib -> setup_library_odoc_rules sctx lib
+       and* () =
+         let* packages = Dune_load.packages () in
+         match
+           Package.Name.Map.find packages (Package.Name.of_string lib_unique_name_or_pkg)
+         with
+         | None -> Memo.return ()
+         | Some pkg -> setup_package_odoc_rules sctx ~pkg:(Package.name pkg)
        in
-       let* lib =
-         let+ lib = Lib.DB.find lib_db lib in
-         Option.bind ~f:Lib.Local.of_lib lib
-       in
-       match lib with
-       | None -> Memo.return ()
-       | Some lib -> setup_library_odoc_rules sctx lib)
+       Memo.return ())
   | [ "_odocls"; lib_unique_name_or_pkg ] ->
     has_rules
       ((* Each library's module [.odocl] files live in its own

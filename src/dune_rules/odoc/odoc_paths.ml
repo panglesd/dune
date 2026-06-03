@@ -20,7 +20,7 @@ let odoc_root ctx = root ctx ++ "_odoc"
 
 let odocs ctx = function
   | Lib lib -> odoc_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
-  | Pkg pkg -> odoc_root ctx ++ sprintf "pkg/%s" (Package.Name.to_string pkg)
+  | Pkg pkg -> odoc_root ctx ++ Package.Name.to_string pkg
 ;;
 
 let lib_module_odoc ctx lib m =
