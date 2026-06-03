@@ -73,3 +73,7 @@ end
 
 (** Auto-generated mld content for a package's default index page. *)
 val default_index : pkg:Package.Name.t -> Module.t list Lib.Local.Map.t -> string
+
+(** Auto-generated mld content for an external package's index page, listing its
+    documented modules. *)
+val external_default_index : pkg:Package.Name.t -> modules:Module_name.t list -> string

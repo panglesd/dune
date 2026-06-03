@@ -218,6 +218,15 @@ let odoc_artefacts sctx target =
   | Odoc_target.Ext_lib lib ->
     let+ modules = external_lib_modules sctx lib in
     List.map modules ~f:(fun m -> Odoc_artifact.make ~target m.odoc_file)
+  | Odoc_target.Ext_pkg pkg ->
+    (* External packages get a single generated [index] page listing their
+       documented libraries. *)
+    let path = Odoc_paths.gen_mld_dir ctx pkg ++ "index.mld" in
+    Mld.create ~path ~name:"index"
+    |> Mld.odoc_file ~doc_dir:dir
+    |> Odoc_artifact.make ~target
+    |> List.singleton
+    |> Memo.return
 ;;
 
 let sp = Printf.sprintf
@@ -323,6 +332,21 @@ module Toplevel_index = struct
     | Odoc_paths.Markdown -> markdown t
   ;;
 end
+
+let external_default_index ~pkg ~modules =
+  let b = Buffer.create 256 in
+  Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
+  (match modules with
+   | [] -> ()
+   | _ :: _ ->
+     Printf.bprintf
+       b
+       "{!modules:%s}\n"
+       (List.sort modules ~compare:Module_name.compare
+        |> List.map ~f:Module_name.to_string
+        |> String.concat ~sep:" "));
+  Buffer.contents b
+;;
 
 let default_index ~pkg entry_modules =
   let b = Buffer.create 512 in

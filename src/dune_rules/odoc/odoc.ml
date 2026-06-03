@@ -8,6 +8,7 @@ type target = Odoc_target.t =
   | Lib of Lib.Local.t
   | Ext_lib of Lib.t
   | Pkg of Package.Name.t
+  | Ext_pkg of Package.Name.t
 
 let add_rule sctx =
   let dir = Super_context.context sctx |> Context.build_dir in
@@ -442,6 +443,40 @@ let setup_external_lib_odoc_rules sctx (lib : Lib.t) =
   >>= Dep.setup_deps ctx (Ext_lib lib)
 ;;
 
+(* The installed libraries of an external package (excluding vlib impls). *)
+let external_package_libs sctx pkg =
+  let+ pkg_discovery = Package_discovery.create ~context:(Super_context.context sctx) in
+  Package_discovery.libraries_of_package pkg_discovery pkg
+;;
+
+(* Compile the generated [index] page of an external package, listing the
+   documented modules of its libraries. *)
+let setup_ext_pkg_odoc_rules sctx ~pkg ~libs =
+  let ctx = Super_context.context sctx in
+  let* modules =
+    Memo.List.concat_map libs ~f:(fun lib ->
+      Odoc_discovery.external_lib_modules sctx lib
+      >>| List.map ~f:(fun (m : Odoc_discovery.ext_module) -> m.name))
+  in
+  let gen_mld = Paths.odocs ctx (Ext_pkg pkg) ++ "index.mld" in
+  let* () =
+    add_rule
+      sctx
+      (Action_builder.write_file
+         gen_mld
+         (Odoc_discovery.external_default_index ~pkg ~modules))
+  in
+  let* odoc =
+    compile_mld
+      sctx
+      (Odoc_discovery.Mld.create ~path:gen_mld ~name:"index")
+      ~pkg
+      ~doc_dir:(Paths.odocs ctx (Ext_pkg pkg))
+      ~includes:(Action_builder.return [])
+  in
+  Path.Set.singleton (Path.build odoc) |> Dep.setup_deps ctx (Ext_pkg pkg)
+;;
+
 (* Ask odoc to classify the install directory of an external library into
    ["<archive> <Mod> ..."] lines; the result drives external module discovery. *)
 let setup_classify_rule sctx (lib : Lib.t) =
@@ -556,11 +591,11 @@ let stdlib_lib_name = Lib_name.of_string "stdlib"
 
 (* External (installed) libraries documented in [Full] mode: the non-stdlib
    external members of every local package's dependency closure, grouped by
-   their package (one representative library kept per package). *)
+   their package. *)
 let documented_external_pkgs sctx =
   let ctx = Super_context.context sctx in
   let* packages = Dune_load.packages () in
-  let* libs =
+  let+ libs =
     Package.Name.Map.keys packages
     |> Memo.List.concat_map ~f:(fun pkg ->
       let* local = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg in
@@ -573,26 +608,9 @@ let documented_external_pkgs sctx =
         Option.is_none (Lib.Local.of_lib lib)
         && not (Lib_name.equal (Lib.name lib) stdlib_lib_name)))
   in
-  List.fold_left libs ~init:Package.Name.Map.empty ~f:(fun acc lib ->
-    match Lib_info.package (Lib.info lib) with
-    | None -> acc
-    | Some pkg ->
-      if Package.Name.Map.mem acc pkg then acc else Package.Name.Map.set acc pkg lib)
-  |> Package.Name.Map.to_list
-  |> Memo.return
-;;
-
-(* Index link to a representative documented page of an external library: its
-   first module's html page, e.g. [unix/unix/Unix/index.html]. *)
-let external_pkg_link sctx lib =
-  let+ artifacts = Odoc_discovery.odoc_artefacts sctx (Ext_lib lib) in
-  match artifacts with
-  | [] -> None
-  | artifact :: _ ->
-    let segments =
-      Paths.ext_lib_parent_id lib :: [ Artifact.module_dir_name artifact; "index.html" ]
-    in
-    Some (String.concat ~sep:"/" segments)
+  List.filter_map libs ~f:(fun lib -> Lib_info.package (Lib.info lib))
+  |> Package.Name.Set.of_list
+  |> Package.Name.Set.to_list
 ;;
 
 let setup_toplevel_index_rule sctx ~mode output =
@@ -604,17 +622,13 @@ let setup_toplevel_index_rule sctx ~mode output =
     | Full, (Html | Json) ->
       let* pkg_discovery = Package_discovery.create ~context:ctx in
       let* ext_pkgs = documented_external_pkgs sctx in
-      Memo.List.filter_map ext_pkgs ~f:(fun (pkg, lib) ->
-        let* link = external_pkg_link sctx lib in
-        match link with
-        | None -> Memo.return None
-        | Some link ->
-          let+ version = Package_discovery.version_of_package pkg_discovery pkg in
-          Some
-            (Odoc_discovery.Toplevel_index.external_item
-               ~name:(Package.Name.to_string pkg)
-               ~version
-               ~link))
+      Memo.List.map ext_pkgs ~f:(fun pkg ->
+        let+ version = Package_discovery.version_of_package pkg_discovery pkg in
+        let name = Package.Name.to_string pkg in
+        Odoc_discovery.Toplevel_index.external_item
+          ~name
+          ~version
+          ~link:(sprintf "%s/index.html" name))
     | (Full | Local_only), _ -> Memo.return []
   in
   let content =
@@ -720,6 +734,14 @@ let setup_ext_lib_odocl_rules sctx (lib : Lib.t) =
   let for_ = (Compilation_mode.of_mode_set (Lib_info.modes (Lib.info lib))).for_merlin in
   let* requires = Lib.closure [ lib ] ~linking:false ~for_ in
   let* odocs = Odoc_discovery.odoc_artefacts sctx (Ext_lib lib) in
+  Memo.parallel_iter odocs ~f:(fun odoc -> link_ext_odoc_rules sctx ~requires odoc)
+;;
+
+(* Link the external package's [index] page, resolving its module references
+   against the package's libraries. *)
+let setup_ext_pkg_odocl_rules sctx ~pkg ~libs =
+  let* requires = Lib.closure libs ~linking:false ~for_:Compilation_mode.Ocaml in
+  let* odocs = Odoc_discovery.odoc_artefacts sctx (Ext_pkg pkg) in
   Memo.parallel_iter odocs ~f:(fun odoc -> link_ext_odoc_rules sctx ~requires odoc)
 ;;
 
@@ -854,6 +876,27 @@ let setup_target_format_rules sctx ~mode ~format target =
   List.filter_opt dirs
 ;;
 
+(* An external package's [_doc/_<tree>/<pkg>] directory holds its generated
+   index page and, in [<lib>] subdirectories, every library of the package. *)
+let setup_ext_pkg_compile sctx ~pkg ~libs =
+  let* () = Memo.parallel_iter libs ~f:(setup_external_lib_odoc_rules sctx) in
+  setup_ext_pkg_odoc_rules sctx ~pkg ~libs
+;;
+
+let setup_ext_pkg_link sctx ~pkg ~libs =
+  let* () = Memo.parallel_iter libs ~f:(setup_ext_lib_odocl_rules sctx) in
+  setup_ext_pkg_odocl_rules sctx ~pkg ~libs
+;;
+
+let setup_ext_pkg_format_rules sctx ~mode ~format ~pkg ~libs =
+  let* lib_dirs =
+    Memo.parallel_map libs ~f:(fun lib ->
+      setup_target_format_rules sctx ~mode ~format (Ext_lib lib))
+  in
+  let+ pkg_dirs = setup_target_format_rules sctx ~mode ~format (Ext_pkg pkg) in
+  List.concat (pkg_dirs :: lib_dirs)
+;;
+
 let setup_lib_markdown_rules sctx lib =
   let target = Lib lib in
   let* () =
@@ -931,7 +974,8 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
       let* local_libs = Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg:name in
       let local_targets = List.map local_libs ~f:(fun lib -> Lib lib) in
       (* In [Full] mode, also document the external (installed) libraries in the
-         package's dependency closure, excluding [stdlib]. *)
+         package's dependency closure (excluding [stdlib]) and the index pages of
+         the packages they belong to. *)
       let+ external_targets =
         match mode with
         | Doc_mode.Local_only -> Memo.return []
@@ -943,13 +987,18 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
               ~for_:Compilation_mode.Ocaml
             >>= Resolve.read_memo
           in
-          List.filter_map closure ~f:(fun lib ->
-            if Lib_name.equal (Lib.name lib) stdlib_lib_name
-            then None
-            else (
-              match Lib.Local.of_lib lib with
-              | Some _ -> None
-              | None -> Some (Ext_lib lib)))
+          let ext_libs =
+            List.filter closure ~f:(fun lib ->
+              Option.is_none (Lib.Local.of_lib lib)
+              && not (Lib_name.equal (Lib.name lib) stdlib_lib_name))
+          in
+          let ext_pkgs =
+            List.filter_map ext_libs ~f:(fun lib -> Lib_info.package (Lib.info lib))
+            |> Package.Name.Set.of_list
+            |> Package.Name.Set.to_list
+          in
+          List.map ext_libs ~f:(fun lib -> Ext_lib lib)
+          @ List.map ext_pkgs ~f:(fun pkg -> Ext_pkg pkg)
       in
       (Pkg name :: local_targets) @ external_targets
       |> List.map ~f:(Dep.format_alias ~mode output ctx)
@@ -1080,20 +1129,29 @@ let output_artifacts sctx ~mode ~format pkg_or_lib_name =
        let+ pkg_dirs = setup_target_format_rules sctx ~mode ~format (Pkg pkg_name) in
        List.concat (pkg_dirs :: lib_dirs)
      | None ->
-       (* A private library (no package) or, in [Full] mode, an external one. *)
-       let* name, lib_db =
-         Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_name
+       (* An external package (documented only in [Full]) or a private library. *)
+       let pkg = Package.Name.of_string pkg_or_lib_name in
+       let* ext_libs =
+         match (mode : Doc_mode.t) with
+         | Local_only -> Memo.return []
+         | Full -> external_package_libs sctx pkg
        in
-       let* lib = Lib.DB.find lib_db name in
-       (match lib with
-        | None -> Memo.return []
-        | Some lib ->
-          (match Lib.Local.of_lib lib with
-           | Some local -> setup_target_format_rules sctx ~mode ~format (Lib local)
-           | None ->
-             (match (mode : Doc_mode.t) with
-              | Local_only -> Memo.return []
-              | Full -> setup_target_format_rules sctx ~mode ~format (Ext_lib lib)))))
+       (match ext_libs with
+        | _ :: _ -> setup_ext_pkg_format_rules sctx ~mode ~format ~pkg ~libs:ext_libs
+        | [] ->
+          let* name, lib_db =
+            Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_name
+          in
+          let* lib = Lib.DB.find lib_db name in
+          (match lib with
+           | None -> Memo.return []
+           | Some lib ->
+             (match Lib.Local.of_lib lib with
+              | Some local -> setup_target_format_rules sctx ~mode ~format (Lib local)
+              | None ->
+                (match (mode : Doc_mode.t) with
+                 | Local_only -> Memo.return []
+                 | Full -> setup_target_format_rules sctx ~mode ~format (Ext_lib lib))))))
 ;;
 
 let with_package pkg ~f =
@@ -1187,14 +1245,21 @@ let gen_rules sctx ~dir rest =
          let* () = Memo.parallel_iter libs ~f:(setup_library_odoc_rules sctx) in
          setup_package_odoc_rules sctx ~pkg:pkg_name
        | None ->
-         let* lib_name, lib_db = Odoc_scope.Scope_key.of_string (Context.name ctx) name in
-         let* lib = Lib.DB.find lib_db lib_name in
-         (match lib with
-          | None -> Memo.return ()
-          | Some lib ->
-            (match Lib.Local.of_lib lib with
-             | Some local -> setup_library_odoc_rules sctx local
-             | None -> setup_external_lib_odoc_rules sctx lib)))
+         let pkg = Package.Name.of_string name in
+         let* ext_libs = external_package_libs sctx pkg in
+         (match ext_libs with
+          | _ :: _ -> setup_ext_pkg_compile sctx ~pkg ~libs:ext_libs
+          | [] ->
+            let* lib_name, lib_db =
+              Odoc_scope.Scope_key.of_string (Context.name ctx) name
+            in
+            let* lib = Lib.DB.find lib_db lib_name in
+            (match lib with
+             | None -> Memo.return ()
+             | Some lib ->
+               (match Lib.Local.of_lib lib with
+                | Some local -> setup_library_odoc_rules sctx local
+                | None -> setup_external_lib_odoc_rules sctx lib))))
   | [ "_odocls"; name ] ->
     has_rules
       ((* A package's mld [.odocl] live in [_odocls/<pkg>] and each library's
@@ -1209,13 +1274,20 @@ let gen_rules sctx ~dir rest =
          let* () = Memo.parallel_iter libs ~f:(setup_local_lib_odocl_rules sctx) in
          setup_pkg_odocl_rules sctx ~pkg:pkg_name ~for_:Compilation_mode.Ocaml
        | None ->
-         let* lib_name, lib_db = Odoc_scope.Scope_key.of_string (Context.name ctx) name in
-         let* lib = Lib.DB.find lib_db lib_name in
-         (match lib with
-          | None -> Memo.return ()
-          | Some lib ->
-            (match Lib.Local.of_lib lib with
-             | Some local -> setup_local_lib_odocl_rules sctx local
-             | None -> setup_ext_lib_odocl_rules sctx lib)))
+         let pkg = Package.Name.of_string name in
+         let* ext_libs = external_package_libs sctx pkg in
+         (match ext_libs with
+          | _ :: _ -> setup_ext_pkg_link sctx ~pkg ~libs:ext_libs
+          | [] ->
+            let* lib_name, lib_db =
+              Odoc_scope.Scope_key.of_string (Context.name ctx) name
+            in
+            let* lib = Lib.DB.find lib_db lib_name in
+            (match lib with
+             | None -> Memo.return ()
+             | Some lib ->
+               (match Lib.Local.of_lib lib with
+                | Some local -> setup_local_lib_odocl_rules sctx local
+                | None -> setup_ext_lib_odocl_rules sctx lib))))
   | _ -> Memo.return (Gen_rules.redirect_to_parent Gen_rules.Rules.empty)
 ;;

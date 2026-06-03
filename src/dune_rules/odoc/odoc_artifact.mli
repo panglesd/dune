@@ -11,9 +11,6 @@ val odoc_file : t -> Path.Build.t
     output is a directory tree; an mld's is a single file. *)
 val is_module : t -> bool
 
-(** The capitalized directory name odoc uses for this module's html output. *)
-val module_dir_name : t -> string
-
 val odocl_file : Context.t -> t -> Path.Build.t
 
 val output_file

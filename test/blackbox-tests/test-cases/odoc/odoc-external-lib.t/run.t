@@ -36,7 +36,12 @@ it is specific to the installed OCaml):
 
   $ grep -o '<a href="unix/[^"]*">unix</a>' \
   >   _build/default/_doc/_html_full/index.html
-  <a href="unix/unix/Unix/index.html">unix</a>
+  <a href="unix/index.html">unix</a>
+
+That link resolves to the external package's generated index page:
+
+  $ test -f _build/default/_doc/_html_full/unix/index.html && echo ok
+  ok
 
 The local-only index does not mention external packages:
 
@@ -48,7 +53,9 @@ The external library's `.odoc`/`.odocl` are produced under `<pkg>/<lib>`:
 
   $ find _build/default/_doc/_odoc/unix _build/default/_doc/_odocls/unix \
   >   \( -name '*.odoc' -o -name '*.odocl' \) | sort
+  _build/default/_doc/_odoc/unix/page-index.odoc
   _build/default/_doc/_odoc/unix/unix/unix.odoc
   _build/default/_doc/_odoc/unix/unix/unixLabels.odoc
+  _build/default/_doc/_odocls/unix/page-index.odocl
   _build/default/_doc/_odocls/unix/unix/unix.odocl
   _build/default/_doc/_odocls/unix/unix/unixLabels.odocl

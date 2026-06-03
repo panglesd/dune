@@ -17,15 +17,13 @@ let odoc_file t = t.odoc_file
 let is_module t =
   match t.target with
   | Lib _ | Ext_lib _ -> true
-  | Pkg _ -> false
+  | Pkg _ | Ext_pkg _ -> false
 ;;
 
 let basename t =
   Path.Build.basename t.odoc_file |> Filename.remove_extension |> Filename.to_string
 ;;
 
-(* The capitalized directory name odoc uses for this module's html output. *)
-let module_dir_name t = Stdune.String.capitalize (basename t)
 let odocl_file ctx t = odocl ctx t.target ++ (basename t ^ ".odocl")
 
 let output_file ctx ~mode (output : output_format) t =
@@ -45,7 +43,7 @@ let output_file ctx ~mode (output : output_format) t =
      | Markdown ->
        markdown ctx t.target ++ Stdune.String.capitalize basename
        |> Path.Build.extend_basename ~suffix)
-  | Pkg _ ->
+  | Pkg _ | Ext_pkg _ ->
     let base =
       match output with
       | Markdown -> markdown ctx t.target

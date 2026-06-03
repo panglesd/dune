@@ -50,7 +50,7 @@ let lib_parent_id lib = String.concat ~sep:"/" (lib_segments lib)
 let odocs ctx = function
   | Lib lib -> under (odoc_root ctx) (lib_segments lib)
   | Ext_lib lib -> under (odoc_root ctx) (ext_lib_segments lib)
-  | Pkg pkg -> odoc_root ctx ++ Package.Name.to_string pkg
+  | Pkg pkg | Ext_pkg pkg -> odoc_root ctx ++ Package.Name.to_string pkg
 ;;
 
 let lib_module_odoc ctx lib m =
@@ -83,19 +83,19 @@ let add_pkg_lnu base m =
   base
   ++
   match m with
-  | Pkg pkg -> Package.Name.to_string pkg
+  | Pkg pkg | Ext_pkg pkg -> Package.Name.to_string pkg
   | Lib lib -> Odoc_scope.pkg_or_lnu (Lib.Local.to_lib lib)
   | Ext_lib lib -> ext_lib_name lib
 ;;
 
 let json ctx ~mode = function
-  | Pkg pkg -> json_root ctx ~mode ++ Package.Name.to_string pkg
+  | Pkg pkg | Ext_pkg pkg -> json_root ctx ~mode ++ Package.Name.to_string pkg
   | Lib lib -> under (json_root ctx ~mode) (lib_segments lib)
   | Ext_lib lib -> under (json_root ctx ~mode) (ext_lib_segments lib)
 ;;
 
 let html ctx ~mode = function
-  | Pkg pkg -> html_root ctx ~mode ++ Package.Name.to_string pkg
+  | Pkg pkg | Ext_pkg pkg -> html_root ctx ~mode ++ Package.Name.to_string pkg
   | Lib lib -> under (html_root ctx ~mode) (lib_segments lib)
   | Ext_lib lib -> under (html_root ctx ~mode) (ext_lib_segments lib)
 ;;
@@ -103,7 +103,7 @@ let html ctx ~mode = function
 let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
 
 let odocl ctx = function
-  | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
+  | Pkg pkg | Ext_pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
   | Lib lib -> under (odocl_root ctx) (lib_segments lib)
   | Ext_lib lib -> under (odocl_root ctx) (ext_lib_segments lib)
 ;;

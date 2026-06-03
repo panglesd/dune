@@ -6,3 +6,4 @@ type t =
   | Lib of Lib.Local.t
   | Ext_lib of Lib.t
   | Pkg of Package.Name.t
+  | Ext_pkg of Package.Name.t
