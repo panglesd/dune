@@ -290,6 +290,7 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~pkg ~requires =
       ~quiet:false
       ~flags_for:(Some (Artifact.odoc_file odoc_file))
       [ odoc_include_flags ctx pkg requires
+      ; A "--enable-missing-root-warning"
       ; A "-o"
       ; Target (Artifact.odocl_file ctx odoc_file)
       ; Dep (Path.build (Artifact.odoc_file odoc_file))
