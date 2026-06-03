@@ -387,9 +387,8 @@ let setup_generate_markdown sctx odoc_file =
   setup_generate sctx ~search_db:None odoc_file Markdown
 ;;
 
-let setup_css_rule sctx =
+let setup_support_files_rule sctx ~dir =
   let ctx = Super_context.context sctx in
-  let dir = Paths.odoc_support ctx in
   let run_odoc =
     let cmd =
       run_odoc
@@ -403,6 +402,10 @@ let setup_css_rule sctx =
     Action_builder.With_targets.add_directories ~directory_targets:[ dir ] cmd
   in
   add_rule sctx run_odoc
+;;
+
+let setup_css_rule sctx =
+  setup_support_files_rule sctx ~dir:(Paths.odoc_support (Super_context.context sctx))
 ;;
 
 
