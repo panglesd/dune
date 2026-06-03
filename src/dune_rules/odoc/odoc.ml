@@ -200,10 +200,10 @@ let compile_module
       ~for_
       (m : Module.t)
       ~includes:(file_deps, iflags)
-      ~pkg_or_lnu
   =
   let ctx = Super_context.context sctx in
   let odoc_file = Paths.lib_module_odoc ctx lib m in
+  let parent_id = Odoc_scope.lib_unique_name (Lib.Local.to_lib lib) in
   let cmti_file =
     Obj_dir.Module.cmti_file
       ~cm_kind:
@@ -229,10 +229,11 @@ let compile_module
           [ A "-I"
           ; Path doc_dir
           ; iflags
-          ; As [ "--pkg"; pkg_or_lnu ]
           ; A "--enable-missing-root-warning"
-          ; A "-o"
-          ; Target odoc_file
+          ; A "--output-dir"
+          ; Path (Path.build (Paths.odoc_root ctx))
+          ; As [ "--parent-id"; parent_id ]
+          ; Hidden_targets [ odoc_file ]
           ; Dep (Path.build cmti_file)
           ]
       in
@@ -313,9 +314,6 @@ let link_odoc_rules sctx (odoc_file : Artifact.t) ~pkg ~requires =
 ;;
 
 let setup_library_odoc_rules sctx (local_lib : Lib.Local.t) =
-  (* Using the proper package name doesn't actually work since odoc assumes that
-     a package contains only 1 library *)
-  let pkg_or_lnu = Odoc_scope.pkg_or_lnu (Lib.Local.to_lib local_lib) in
   let ctx = Super_context.context sctx in
   let info = Lib.Local.info local_lib in
   let obj_dir = Lib_info.obj_dir info in
@@ -340,7 +338,6 @@ let setup_library_odoc_rules sctx (local_lib : Lib.Local.t) =
         ~modules:with_vlib_modules
         ~for_
         ~includes
-        ~pkg_or_lnu
         m
     in
     compiled :: acc)
@@ -570,8 +567,9 @@ let search_db_for_lib sctx lib =
   Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls
 ;;
 
-let setup_lib_html_rules sctx ~search_db lib =
+let setup_lib_html_rules sctx lib =
   let target = Lib lib in
+  let* search_db = search_db_for_lib sctx lib in
   let* odocs = Odoc_discovery.odoc_artefacts sctx target in
   let* () =
     Memo.parallel_iter odocs ~f:(fun odoc ->
@@ -581,26 +579,22 @@ let setup_lib_html_rules sctx ~search_db lib =
 ;;
 
 let setup_pkg_html_rules_def =
+  (* Only the package's own mld pages are generated in [_html/<pkg>]; each
+     library's module html lives in its own [_html/<lib-unique-name>] directory
+     and is set up via the per-library dispatcher case. *)
   let f (sctx, pkg, _for_) =
     let ctx = Super_context.context sctx in
-    let* libs = Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg in
-    let dir = Paths.html ctx (Pkg pkg) in
     let* pkg_odocs = Odoc_discovery.odoc_artefacts sctx (Pkg pkg) in
-    let* lib_odocs =
-      Memo.List.concat_map libs ~f:(fun lib ->
-        Odoc_discovery.odoc_artefacts sctx (Lib lib))
-    in
-    let all_odocs = pkg_odocs @ lib_odocs in
-    let* search_db =
-      let odocls = List.map all_odocs ~f:(Artifact.odocl_file ctx) in
-      Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls
-    in
-    let* () = Memo.parallel_iter libs ~f:(setup_lib_html_rules sctx ~search_db) in
+    (* The package's mld pages share [_html/<pkg>] with its main library (whose
+       unique name equals the package name), which already provides the search
+       database there, so the index pages don't build their own. *)
     let* () =
-      Memo.parallel_iter pkg_odocs ~f:(setup_generate_html_and_json ~search_db sctx)
+      Memo.parallel_iter pkg_odocs ~f:(fun odoc ->
+        let* () = setup_generate sctx ~search_db:None odoc Html in
+        setup_generate sctx ~search_db:None odoc Json)
     in
-    let* () = add_format_alias_deps ctx Html (Pkg pkg) all_odocs in
-    add_format_alias_deps ctx Json (Pkg pkg) all_odocs
+    let* () = add_format_alias_deps ctx Html (Pkg pkg) pkg_odocs in
+    add_format_alias_deps ctx Json (Pkg pkg) pkg_odocs
   in
   setup_pkg_rules_def "setup-package-html-rules" f
 ;;
@@ -897,8 +891,11 @@ let gen_rules sctx ~dir rest =
        ())
   | [ "_html"; lib_unique_name_or_pkg ] ->
     has_rules
-      ((* TODO we can be a better with the error handling in the case where
-          lib_unique_name_or_pkg is neither a valid pkg or lnu *)
+      ((* Each library's module html lives in its own [_html/<lib-unique-name>]
+          directory; a package's own mld pages live in [_html/<pkg>]. The
+          directory name can be both (when a library's unique name equals its
+          package name), so we set up each independently.
+          TODO improve error handling when the name is neither a pkg nor a lnu *)
        let ctx = Super_context.context sctx in
        let* lib, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
@@ -920,13 +917,7 @@ let gen_rules sctx ~dir rest =
        let+ () =
          match lib with
          | None -> Memo.return ()
-         | Some lib ->
-           (match Lib_info.package (Lib.Local.info lib) with
-            | None ->
-              (* lib with no package above it *)
-              let* search_db = search_db_for_lib sctx lib in
-              setup_lib_html_rules sctx ~search_db lib
-            | Some pkg -> setup_pkg_html_rules sctx ~pkg ~for_)
+         | Some lib -> setup_lib_html_rules sctx lib
        and+ () =
          let* packages = Dune_load.packages () in
          match

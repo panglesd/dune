@@ -33,10 +33,3 @@ built. See #1645.
   File "Module":
   Ambiguous lookup. Possible files: Module
   Module
-  Error: Multiple rules generated for
-  _build/default/_doc/_html/l/Module/index.html:
-  - <internal location>
-  - <internal location>
-  -> required by alias _doc/_html/l/doc
-  -> required by alias doc
-  [1]

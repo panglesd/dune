@@ -16,10 +16,11 @@ let extension = function
 
 let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
+let odoc_root ctx = root ctx ++ "_odoc"
 
 let odocs ctx = function
-  | Lib lib -> root ctx ++ "_odoc" ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
-  | Pkg pkg -> root ctx ++ sprintf "_odoc/pkg/%s" (Package.Name.to_string pkg)
+  | Lib lib -> odoc_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+  | Pkg pkg -> odoc_root ctx ++ sprintf "pkg/%s" (Package.Name.to_string pkg)
 ;;
 
 let lib_module_odoc ctx lib m =
@@ -41,7 +42,11 @@ let add_pkg_lnu base m =
   | Lib lib -> Odoc_scope.pkg_or_lnu (Lib.Local.to_lib lib)
 ;;
 
-let html ctx m = add_pkg_lnu (html_root ctx) m
+let html ctx = function
+  | Pkg pkg -> html_root ctx ++ Package.Name.to_string pkg
+  | Lib lib -> html_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+;;
+
 let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
 
 let odocl ctx = function

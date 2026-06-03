@@ -12,6 +12,10 @@ val extension : output_format -> string
 
 val odoc_support_dirname : string
 val root : Context.t -> Path.Build.t
+
+(** Root directory for compiled [.odoc] files, used as odoc's [--output-dir]. *)
+val odoc_root : Context.t -> Path.Build.t
+
 val odocs : Context.t -> Odoc_target.t -> Path.Build.t
 
 (** Path of the [.odoc] file for module [m] of local library [lib], inside the
