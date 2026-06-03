@@ -214,6 +214,7 @@ let compile_module
           ; Path doc_dir
           ; iflags
           ; As [ "--pkg"; pkg_or_lnu ]
+          ; A "--enable-missing-root-warning"
           ; A "-o"
           ; Target odoc_file
           ; Dep
