@@ -22,8 +22,24 @@ let odoc_root ctx = root ctx ++ "_odoc"
    tree is keyed by their plain library name. *)
 let ext_lib_name lib = Lib_name.to_string (Lib.name lib)
 
+(* Path segments of a local library's odoc tree, relative to a format root. A
+   library in a package nests under [<pkg>/<lib>] (so its modules become child
+   pages of the package); a private library (no package) uses its scope-unique
+   name. *)
+let lib_segments lib =
+  match Lib_info.package (Lib.Local.info lib) with
+  | Some pkg ->
+    [ Package.Name.to_string pkg; Lib_name.to_string (Lib.name (Lib.Local.to_lib lib)) ]
+  | None -> [ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib) ]
+;;
+
+let under base segments = List.fold_left segments ~init:base ~f:( ++ )
+
+(* The odoc [--parent-id] of a local library, i.e. its [lib_segments] joined. *)
+let lib_parent_id lib = String.concat ~sep:"/" (lib_segments lib)
+
 let odocs ctx = function
-  | Lib lib -> odoc_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+  | Lib lib -> under (odoc_root ctx) (lib_segments lib)
   | Ext_lib lib -> odoc_root ctx ++ ext_lib_name lib
   | Pkg pkg -> odoc_root ctx ++ Package.Name.to_string pkg
 ;;
@@ -65,13 +81,13 @@ let add_pkg_lnu base m =
 
 let json ctx ~mode = function
   | Pkg pkg -> json_root ctx ~mode ++ Package.Name.to_string pkg
-  | Lib lib -> json_root ctx ~mode ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+  | Lib lib -> under (json_root ctx ~mode) (lib_segments lib)
   | Ext_lib lib -> json_root ctx ~mode ++ ext_lib_name lib
 ;;
 
 let html ctx ~mode = function
   | Pkg pkg -> html_root ctx ~mode ++ Package.Name.to_string pkg
-  | Lib lib -> html_root ctx ~mode ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+  | Lib lib -> under (html_root ctx ~mode) (lib_segments lib)
   | Ext_lib lib -> html_root ctx ~mode ++ ext_lib_name lib
 ;;
 
@@ -79,7 +95,7 @@ let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
 
 let odocl ctx = function
   | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
-  | Lib lib -> odocl_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+  | Lib lib -> under (odocl_root ctx) (lib_segments lib)
   | Ext_lib lib -> odocl_root ctx ++ ext_lib_name lib
 ;;
 

@@ -5,8 +5,10 @@ In the default (local-only) `@doc`, only the local library is documented:
 
   $ dune build @doc 2>/dev/null
   $ ls _build/default/_doc/_html/mylib
-  Mylib
   index.html
+  mylib
+  $ test -f _build/default/_doc/_html/mylib/mylib/Mylib/index.html && echo ok
+  ok
 
 There is no documentation for external libraries in the local-only tree:
 
@@ -17,8 +19,11 @@ There is no documentation for external libraries in the local-only tree:
 dependency closure, into the `_html_full` tree. odoc emits version-specific
 warnings about `unix.mli`, so we discard stderr.
 
+Local libraries nest under their package (`<pkg>/<lib>`); the external `unix`
+library, which has no local package, uses its own top-level directory.
+
   $ dune build @doc-all 2>/dev/null
-  $ test -f _build/default/_doc/_html_full/mylib/Mylib/index.html && echo ok
+  $ test -f _build/default/_doc/_html_full/mylib/mylib/Mylib/index.html && echo ok
   ok
   $ test -f _build/default/_doc/_html_full/unix/Unix/index.html && echo ok
   ok

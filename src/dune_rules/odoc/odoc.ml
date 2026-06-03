@@ -220,7 +220,7 @@ let compile_module
   =
   let ctx = Super_context.context sctx in
   let odoc_file = Paths.lib_module_odoc ctx lib m in
-  let parent_id = Odoc_scope.lib_unique_name (Lib.Local.to_lib lib) in
+  let parent_id = Paths.lib_parent_id lib in
   let cmti_file =
     Obj_dir.Module.cmti_file
       ~cm_kind:
@@ -662,6 +662,16 @@ let setup_ext_lib_odocl_rules sctx (lib : Lib.t) =
   Memo.parallel_iter odocs ~f:(fun odoc -> link_ext_odoc_rules sctx ~requires odoc)
 ;;
 
+(* Link the module [.odocl] of one local library, using its own transitive
+   closure as the link dependencies. *)
+let setup_local_lib_odocl_rules sctx (local : Lib.Local.t) =
+  let for_ =
+    (Compilation_mode.of_mode_set (Lib_info.modes (Lib.Local.info local))).for_merlin
+  in
+  let* requires = Lib.closure [ Lib.Local.to_lib local ] ~linking:false ~for_ in
+  setup_lib_odocl_rules sctx local ~requires
+;;
+
 let setup_pkg_rules_def memo_name f =
   let module Input = struct
     module Super_context = Super_context.As_memo_key
@@ -985,28 +995,34 @@ let has_rules_with_dir_targets ?(extra = []) m =
 let output_artifacts sctx ~mode ~format pkg_or_lib_name =
   has_rules_with_dir_targets
     (let ctx = Super_context.context sctx in
-     let* lib_dirs =
+     let* packages = Dune_load.packages () in
+     match Package.Name.Map.find packages (Package.Name.of_string pkg_or_lib_name) with
+     | Some pkg ->
+       (* The package directory [_<fmt>/<pkg>] holds the package's mld pages and,
+          in subdirectories [<lib>], every library of the package. *)
+       let pkg_name = Package.name pkg in
+       let* libs = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg:pkg_name in
+       let* lib_dirs =
+         Memo.parallel_map libs ~f:(fun lib ->
+           setup_target_format_rules sctx ~mode ~format (Lib lib))
+       in
+       let+ pkg_dirs = setup_target_format_rules sctx ~mode ~format (Pkg pkg_name) in
+       List.concat (pkg_dirs :: lib_dirs)
+     | None ->
+       (* A private library (no package) or, in [Full] mode, an external one. *)
        let* name, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_name
        in
        let* lib = Lib.DB.find lib_db name in
-       match lib with
-       | None -> Memo.return []
-       | Some lib ->
-         (match Lib.Local.of_lib lib with
-          | Some local -> setup_target_format_rules sctx ~mode ~format (Lib local)
-          | None ->
-            (* External libraries are documented only in [Full] mode. *)
-            (match (mode : Doc_mode.t) with
-             | Local_only -> Memo.return []
-             | Full -> setup_target_format_rules sctx ~mode ~format (Ext_lib lib)))
-     and* pkg_dirs =
-       let* packages = Dune_load.packages () in
-       match Package.Name.Map.find packages (Package.Name.of_string pkg_or_lib_name) with
-       | None -> Memo.return []
-       | Some pkg -> setup_target_format_rules sctx ~mode ~format (Pkg (Package.name pkg))
-     in
-     Memo.return (lib_dirs @ pkg_dirs))
+       (match lib with
+        | None -> Memo.return []
+        | Some lib ->
+          (match Lib.Local.of_lib lib with
+           | Some local -> setup_target_format_rules sctx ~mode ~format (Lib local)
+           | None ->
+             (match (mode : Doc_mode.t) with
+              | Local_only -> Memo.return []
+              | Full -> setup_target_format_rules sctx ~mode ~format (Ext_lib lib)))))
 ;;
 
 let with_package pkg ~f =
@@ -1086,77 +1102,49 @@ let gen_rules sctx ~dir rest =
       let pkg = Package.name pkg in
       let* _mlds, rules = package_mlds sctx ~pkg in
       Rules.produce rules)
-  | [ "_odoc"; lib_unique_name_or_pkg ] ->
+  | [ "_odoc"; name ] ->
     has_rules
-      ((* A library's modules are compiled into [_doc/_odoc/<lib-unique-name>];
-          a package's mld pages into [_doc/_odoc/<pkg>]. The directory name can
-          be both (when a library's unique name equals its package name), so we
-          set up each independently. *)
+      ((* A package's mld pages are compiled into [_doc/_odoc/<pkg>] and each of
+          its libraries' modules into the subdirectory [_doc/_odoc/<pkg>/<lib>].
+          A private library uses its own [_doc/_odoc/<lib-unique-name>]. *)
        let ctx = Super_context.context sctx in
-       let* () =
-         let* lib_name, lib_db =
-           Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
-         in
+       let* packages = Dune_load.packages () in
+       match Package.Name.Map.find packages (Package.Name.of_string name) with
+       | Some pkg ->
+         let pkg_name = Package.name pkg in
+         let* libs = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg:pkg_name in
+         let* () = Memo.parallel_iter libs ~f:(setup_library_odoc_rules sctx) in
+         setup_package_odoc_rules sctx ~pkg:pkg_name
+       | None ->
+         let* lib_name, lib_db = Odoc_scope.Scope_key.of_string (Context.name ctx) name in
          let* lib = Lib.DB.find lib_db lib_name in
-         match lib with
-         | None -> Memo.return ()
-         | Some lib ->
-           (match Lib.Local.of_lib lib with
-            | Some local -> setup_library_odoc_rules sctx local
-            | None -> setup_external_lib_odoc_rules sctx lib)
-       and* () =
-         let* packages = Dune_load.packages () in
-         match
-           Package.Name.Map.find packages (Package.Name.of_string lib_unique_name_or_pkg)
-         with
-         | None -> Memo.return ()
-         | Some pkg -> setup_package_odoc_rules sctx ~pkg:(Package.name pkg)
-       in
-       Memo.return ())
-  | [ "_odocls"; lib_unique_name_or_pkg ] ->
+         (match lib with
+          | None -> Memo.return ()
+          | Some lib ->
+            (match Lib.Local.of_lib lib with
+             | Some local -> setup_library_odoc_rules sctx local
+             | None -> setup_external_lib_odoc_rules sctx lib)))
+  | [ "_odocls"; name ] ->
     has_rules
-      ((* Each library's module [.odocl] files live in its own
-          [_odocls/<lib-unique-name>] directory; a package's own mld pages live
-          in [_odocls/<pkg>]. The directory name can be both (when a library's
-          unique name equals its package name), so we set up each independently.
-          TODO improve error handling when the name is neither a pkg nor a lnu *)
+      ((* A package's mld [.odocl] live in [_odocls/<pkg>] and each library's
+          module [.odocl] in the subdirectory [_odocls/<pkg>/<lib>]. A private
+          library uses its own [_odocls/<lib-unique-name>]. *)
        let ctx = Super_context.context sctx in
-       let* name, lib_db =
-         Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
-       in
-       (* jeremiedimino: why isn't [None] some kind of error here? *)
-       let* lib = Lib.DB.find lib_db name in
-       let local_lib = Option.bind lib ~f:Lib.Local.of_lib in
-       let for_ =
-         match local_lib with
-         | Some lib ->
-           let modes =
-             Lib_info.modes (Lib.Local.info lib) |> Compilation_mode.of_mode_set
-           in
-           modes.for_merlin
-         | None -> Ocaml
-       in
-       let+ () =
-         match lib with
-         | None -> Memo.return ()
-         | Some lib ->
-           (match Lib.Local.of_lib lib with
-            | Some local ->
-              let* requires =
-                Lib.closure [ Lib.Local.to_lib local ] ~linking:false ~for_
-              in
-              setup_lib_odocl_rules sctx local ~requires
-            | None -> setup_ext_lib_odocl_rules sctx lib)
-       and+ () =
-         let* packages = Dune_load.packages () in
-         match
-           Package.Name.Map.find packages (Package.Name.of_string lib_unique_name_or_pkg)
-         with
-         | None -> Memo.return ()
-         | Some pkg ->
-           let name = Package.name pkg in
-           setup_pkg_odocl_rules sctx ~pkg:name ~for_
-       in
-       ())
+       let* packages = Dune_load.packages () in
+       match Package.Name.Map.find packages (Package.Name.of_string name) with
+       | Some pkg ->
+         let pkg_name = Package.name pkg in
+         let* libs = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg:pkg_name in
+         let* () = Memo.parallel_iter libs ~f:(setup_local_lib_odocl_rules sctx) in
+         setup_pkg_odocl_rules sctx ~pkg:pkg_name ~for_:Compilation_mode.Ocaml
+       | None ->
+         let* lib_name, lib_db = Odoc_scope.Scope_key.of_string (Context.name ctx) name in
+         let* lib = Lib.DB.find lib_db lib_name in
+         (match lib with
+          | None -> Memo.return ()
+          | Some lib ->
+            (match Lib.Local.of_lib lib with
+             | Some local -> setup_local_lib_odocl_rules sctx local
+             | None -> setup_ext_lib_odocl_rules sctx lib)))
   | _ -> Memo.return (Gen_rules.redirect_to_parent Gen_rules.Rules.empty)
 ;;

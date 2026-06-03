@@ -30,6 +30,6 @@ In release mode, no error:
   (cd _build/default/_doc/_odoc/foo_doc && odoc compile --output-dir .. --parent-id foo_doc ../../../foo_doc/foo.mld)
   File "../../../foo_doc/foo.mld", line 4, characters 0-0:
   Warning: End of text is not allowed in '[...]' (code).
-  (cd _build/default/_doc/_odoc/foo_lib && odoc compile -I . --enable-missing-root-warning --output-dir .. --parent-id foo_lib ../../../foo_lib/.foo.objs/byte/foo.cmti)
+  (cd _build/default/_doc/_odoc/foo_lib/foo_lib && odoc compile -I . --enable-missing-root-warning --output-dir ../.. --parent-id foo_lib/foo_lib ../../../../foo_lib/.foo.objs/byte/foo.cmti)
   File "foo_lib/foo.mli", line 1, characters 7-7:
   Warning: End of text is not allowed in '[...]' (code).
