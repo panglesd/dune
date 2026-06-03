@@ -42,6 +42,70 @@ let entry_modules_by_lib sctx lib =
   Dir_contents.modules_of_local_lib sctx lib ~for_:for_merlin >>| Modules.entry_modules
 ;;
 
+(* Archive basenames of a library, used to filter [odoc classify] output.
+   Installed libraries built by the compiler (e.g. [stdlib]) record no archive,
+   so [stdlib] is special-cased. *)
+let get_archive_names lib_name archives =
+  match Mode.Dict.get archives Mode.Byte with
+  | [] ->
+    if Lib_name.equal lib_name (Lib_name.of_string "stdlib") then [ "stdlib" ] else []
+  | archives ->
+    List.map archives ~f:(fun p ->
+      Path.basename p |> Filename.remove_extension |> Filename.to_string)
+;;
+
+(* Module names belonging to [archive_names] in [odoc classify] output (one
+   ["<archive> <Mod> <Mod> ..."] line per archive). *)
+let parse_classify_output ~archive_names content =
+  String.split_lines content
+  |> List.concat_map ~f:(fun line ->
+    match
+      String.split line ~on:' ' |> List.filter ~f:(fun s -> not (String.is_empty s))
+    with
+    | [] -> []
+    | archive :: mods ->
+      if List.mem archive_names archive ~equal:String.equal then mods else [])
+;;
+
+(* A module of an external library, as discovered by [odoc classify]. *)
+type ext_module =
+  { name : Module_name.t
+  ; cmti : Path.t (** Source [.cmti]/[.cmi] in the install directory. *)
+  ; odoc_file : Path.Build.t
+  }
+
+(* Modules of an external (installed) library, discovered from the [odoc
+   classify] output. Reading the classify file builds it on demand. *)
+let external_lib_modules sctx lib =
+  let ctx = Super_context.context sctx in
+  let info = Lib.info lib in
+  let archive_names = get_archive_names (Lib.name lib) (Lib_info.archives info) in
+  if List.is_empty archive_names
+  then Memo.return []
+  else
+    let* content =
+      Build_system.read_file (Path.build (Odoc_paths.classify_file ctx lib))
+    in
+    let src_dir = Lib_info.src_dir info in
+    let doc_dir = Odoc_paths.odocs ctx (Odoc_target.Ext_lib lib) in
+    parse_classify_output ~archive_names content
+    |> List.map ~f:(fun name ->
+      let module_name = Module_name.of_checked_string name in
+      let base = Module_name.uncapitalize module_name in
+      let cmti = Path.relative src_dir (base ^ ".cmti") in
+      let odoc_file = Path.Build.relative doc_dir (base ^ ".odoc") in
+      { name = module_name; cmti; odoc_file })
+    |> Memo.List.filter_map ~f:(fun m ->
+      let+ cmti_exists = Fs_memo.file_exists (Path.as_outside_build_dir_exn m.cmti) in
+      if cmti_exists
+      then Some m
+      else (
+        let cmi =
+          Path.set_extension m.cmti ~ext:(Filename.Extension.of_string_exn ".cmi")
+        in
+        Some { m with cmti = cmi }))
+;;
+
 let entry_modules sctx ~pkg =
   let* l =
     Super_context.context sctx
@@ -151,6 +215,9 @@ let odoc_artefacts sctx target =
     let+ modules = entry_modules_by_lib sctx lib in
     List.map modules ~f:(fun m ->
       Odoc_paths.lib_module_odoc ctx lib m |> Odoc_artifact.make ~target)
+  | Odoc_target.Ext_lib lib ->
+    let+ modules = external_lib_modules sctx lib in
+    List.map modules ~f:(fun m -> Odoc_artifact.make ~target m.odoc_file)
 ;;
 
 let sp = Printf.sprintf

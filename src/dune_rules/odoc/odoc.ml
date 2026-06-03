@@ -6,6 +6,7 @@ let ( ++ ) = Path.Build.relative
 
 type target = Odoc_target.t =
   | Lib of Lib.Local.t
+  | Ext_lib of Lib.t
   | Pkg of Package.Name.t
 
 let add_rule sctx =
@@ -360,6 +361,96 @@ let setup_library_odoc_rules sctx (local_lib : Lib.Local.t) =
   |> Memo.all_concurrently
   >>| Path.Set.of_list_map ~f:(fun (_, p) -> Path.build p)
   >>= Dep.setup_deps ctx (Lib local_lib)
+;;
+
+(* Intra-library module dependencies of an external module. External libraries
+   have no [.d] files, so we ask odoc directly via [compile-deps] and keep only
+   the dependencies that are themselves modules of [lib]. *)
+let external_module_deps sctx ~ctx ~lib ~odoc_of_module (m : Odoc_discovery.ext_module) =
+  let doc_dir = Paths.odocs ctx (Ext_lib lib) in
+  let deps_file = doc_dir ++ (Module_name.to_string m.name ^ ".deps") in
+  let program = odoc_program sctx (Context.build_dir ctx) in
+  let+ () =
+    add_rule
+      sctx
+      (Command.run_dyn_prog
+         program
+         ~dir:(Path.build (Context.build_dir ctx))
+         ~stdout_to:deps_file
+         [ A "compile-deps"; Dep m.cmti ])
+  in
+  Action_builder.dyn_paths_unit
+    (let open Action_builder.O in
+     let+ lines = Action_builder.lines_of (Path.build deps_file) in
+     List.filter_map lines ~f:(fun line ->
+       match String.split ~on:' ' line with
+       | [ name; _hash ] ->
+         let dep = Module_name.of_checked_string name in
+         if Module_name.equal dep m.name
+         then None
+         else Module_name.Map.find odoc_of_module dep |> Option.map ~f:Path.build
+       | _ -> None))
+;;
+
+let compile_external_module sctx ~lib ~odoc_of_module (m : Odoc_discovery.ext_module) =
+  let ctx = Super_context.context sctx in
+  let parent_id = Lib_name.to_string (Lib.name lib) in
+  let doc_dir = Path.build (Paths.odocs ctx (Ext_lib lib)) in
+  let* module_deps = external_module_deps sctx ~ctx ~lib ~odoc_of_module m in
+  let run_odoc =
+    run_odoc
+      sctx
+      ~dir:doc_dir
+      "compile"
+      ~quiet:true
+      ~flags_for:None
+      [ A "-I"
+      ; Path doc_dir
+      ; A "--enable-missing-root-warning"
+      ; A "--output-dir"
+      ; Path (Path.build (Paths.odoc_root ctx))
+      ; As [ "--parent-id"; parent_id ]
+      ; Hidden_targets [ m.odoc_file ]
+      ; Dep m.cmti
+      ]
+  in
+  let+ () =
+    add_rule
+      sctx
+      (let open Action_builder.With_targets.O in
+       Action_builder.with_no_targets module_deps >>> run_odoc)
+  in
+  m.odoc_file
+;;
+
+(* Compile the [.odoc] files of an external (installed) library. Compilation is
+   quiet (no warn-error on artifacts we do not own). *)
+let setup_external_lib_odoc_rules sctx (lib : Lib.t) =
+  let ctx = Super_context.context sctx in
+  let* modules = Odoc_discovery.external_lib_modules sctx lib in
+  let odoc_of_module =
+    Module_name.Map.of_list_map_exn modules ~f:(fun m ->
+      m.Odoc_discovery.name, m.odoc_file)
+  in
+  Memo.parallel_map modules ~f:(fun m ->
+    compile_external_module sctx ~lib ~odoc_of_module m)
+  >>| Path.Set.of_list_map ~f:Path.build
+  >>= Dep.setup_deps ctx (Ext_lib lib)
+;;
+
+(* Ask odoc to classify the install directory of an external library into
+   ["<archive> <Mod> ..."] lines; the result drives external module discovery. *)
+let setup_classify_rule sctx (lib : Lib.t) =
+  let ctx = Super_context.context sctx in
+  let src_dir = Lib_info.src_dir (Lib.info lib) in
+  let program = odoc_program sctx (Context.build_dir ctx) in
+  add_rule
+    sctx
+    (Command.run_dyn_prog
+       program
+       ~dir:(Path.build (Context.build_dir ctx))
+       ~stdout_to:(Paths.classify_file ctx lib)
+       [ A "classify"; A (Path.to_string src_dir) ])
 ;;
 
 (* Generate one artifact in one output format. Returns the html/json directory
@@ -888,6 +979,17 @@ let gen_rules sctx ~dir rest =
   | [ "_markdown"; _lib_unique_name_or_pkg ] ->
     (* package directories are directory targets *)
     Memo.return Gen_rules.no_rules
+  | [ "_classify"; lib_name ] ->
+    has_rules
+      (let ctx = Super_context.context sctx in
+       let* name, lib_db = Odoc_scope.Scope_key.of_string (Context.name ctx) lib_name in
+       let* lib = Lib.DB.find lib_db name in
+       match lib with
+       | None -> Memo.return ()
+       | Some lib ->
+         (match Lib.Local.of_lib lib with
+          | Some _ -> Memo.return ()
+          | None -> setup_classify_rule sctx lib))
   | [ "_mlds"; pkg ] ->
     with_package pkg ~f:(fun pkg ->
       let pkg = Package.name pkg in
@@ -901,16 +1003,16 @@ let gen_rules sctx ~dir rest =
           set up each independently. *)
        let ctx = Super_context.context sctx in
        let* () =
-         let* lib, lib_db =
+         let* lib_name, lib_db =
            Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
          in
-         let* lib =
-           let+ lib = Lib.DB.find lib_db lib in
-           Option.bind ~f:Lib.Local.of_lib lib
-         in
+         let* lib = Lib.DB.find lib_db lib_name in
          match lib with
          | None -> Memo.return ()
-         | Some lib -> setup_library_odoc_rules sctx lib
+         | Some lib ->
+           (match Lib.Local.of_lib lib with
+            | Some local -> setup_library_odoc_rules sctx local
+            | None -> setup_external_lib_odoc_rules sctx lib)
        and* () =
          let* packages = Dune_load.packages () in
          match

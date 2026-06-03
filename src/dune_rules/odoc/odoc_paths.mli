@@ -30,6 +30,11 @@ val html : Context.t -> mode:Odoc_mode.t -> Odoc_target.t -> Path.Build.t
 val json : Context.t -> mode:Odoc_mode.t -> Odoc_target.t -> Path.Build.t
 val markdown : Context.t -> Odoc_target.t -> Path.Build.t
 val odocl : Context.t -> Odoc_target.t -> Path.Build.t
+val classify_root : Context.t -> Path.Build.t
+
+(** Path of the [odoc classify] output for an external library [lib]. *)
+val classify_file : Context.t -> Lib.t -> Path.Build.t
+
 val gen_mld_dir : Context.t -> Package.Name.t -> Path.Build.t
 val odoc_support : Context.t -> mode:Odoc_mode.t -> Path.Build.t
 val toplevel_index : Context.t -> mode:Odoc_mode.t -> Path.Build.t

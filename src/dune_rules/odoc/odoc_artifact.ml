@@ -16,7 +16,7 @@ let odoc_file t = t.odoc_file
    artifacts are mld pages (a single html file). *)
 let is_module t =
   match t.target with
-  | Lib _ -> true
+  | Lib _ | Ext_lib _ -> true
   | Pkg _ -> false
 ;;
 
@@ -30,7 +30,7 @@ let output_file ctx ~mode (output : output_format) t =
   let basename = basename t in
   let suffix = Filename.of_string_exn (extension output) in
   match t.target with
-  | Lib _ ->
+  | Lib _ | Ext_lib _ ->
     (match output with
      | Html | Json ->
        let dir =

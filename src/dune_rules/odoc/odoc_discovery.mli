@@ -44,6 +44,17 @@ module Mld : sig
   val odoc_input : t -> Path.Build.t
 end
 
+(** A module of an external (installed) library, discovered via [odoc classify]. *)
+type ext_module =
+  { name : Module_name.t
+  ; cmti : Path.t (** Source [.cmti]/[.cmi] in the install directory. *)
+  ; odoc_file : Path.Build.t
+  }
+
+(** Modules of an external (installed) library, discovered from its [odoc
+    classify] output (which is built on demand by reading it). *)
+val external_lib_modules : Super_context.t -> Lib.t -> ext_module list Memo.t
+
 (** The odoc artifacts (modules or mld pages) of a documentation target. *)
 val odoc_artefacts : Super_context.t -> Odoc_target.t -> Odoc_artifact.t list Memo.t
 
