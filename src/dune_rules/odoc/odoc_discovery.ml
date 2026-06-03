@@ -14,6 +14,26 @@ let libs_of_pkg ctx ~pkg =
     | Some _ -> None)
 ;;
 
+(* All local libraries in the workspace (across all projects), excluding
+   implementations of virtual libraries. Used to build the single global search
+   database that indexes every documented artifact. *)
+let all_local_libs sctx =
+  let ctx = Super_context.context sctx in
+  let* projects = Dune_load.projects () in
+  let* lib_sets =
+    Scope.DB.with_all ctx ~f:(fun find ->
+      Memo.List.map projects ~f:(fun proj -> Lib.DB.all (Scope.libs (find proj))))
+  in
+  let+ lib_sets = lib_sets in
+  List.fold_left lib_sets ~init:Lib.Set.empty ~f:Lib.Set.union
+  |> Lib.Set.to_list
+  |> List.filter_map ~f:(fun lib ->
+    match Lib.Local.of_lib lib with
+    | None -> None
+    | Some l ->
+      if Option.is_some (Lib_info.implements (Lib.info lib)) then None else Some l)
+;;
+
 let entry_modules_by_lib sctx lib =
   let info = Lib.Local.info lib in
   let { Compilation_mode.for_merlin; _ } =

@@ -67,3 +67,5 @@ let search_db sctx ~dir ~external_odocls odocls =
   let+ () = add_index_db_rule sctx ~dir ~external_odocls odocls in
   Paths.db_dot_js ~dir
 ;;
+
+let search_db_path ~dir = Paths.db_dot_js ~dir

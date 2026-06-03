@@ -12,20 +12,20 @@ This test if `.odocl` files are generated
   _build/default/_doc/_odocls/foo/page-index.odocl
 
   $ find . -name '*.js' | sort -n
-  ./_build/default/_doc/_html/bar/db.js
-  ./_build/default/_doc/_html/foo.byte/db.js
-  ./_build/default/_doc/_html/foo/db.js
+  ./_build/default/_doc/_html/db.js
   ./_build/default/_doc/_html/odoc.support/highlight.pack.js
   ./_build/default/_doc/_html/odoc.support/katex.min.js
   ./_build/default/_doc/_html/odoc.support/odoc_search.js
   ./_build/default/_doc/_html/sherlodoc.js
-  $ cat ./_build/default/_doc/_html/bar/db.js
+A single search database at the html root indexes every library:
+  $ cat ./_build/default/_doc/_html/db.js
   /* Sherlodoc DB for: */
-  /*   - ../../_odocls/bar/bar.odocl */
-  $ cat ./_build/default/_doc/_html/foo/db.js
-  /* Sherlodoc DB for: */
-  /*   - ../../_odocls/foo/foo.odocl */
-  /*   - --favored ../../_odocls/foo/foo2.odocl */
+  /*   - ../_odocls/bar/page-index.odocl */
+  /*   - --favored ../_odocls/foo.byte/foo_byte.odocl */
+  /*   - --favored ../_odocls/foo/foo2.odocl */
+  /*   - --favored ../_odocls/foo/foo.odocl */
+  /*   - --favored ../_odocls/bar/bar.odocl */
+  /*   - --favored ../_odocls/foo/page-index.odocl */
 
 
 

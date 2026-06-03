@@ -7,6 +7,10 @@ open Import
     libraries. *)
 val libs_of_pkg : Context_name.t -> pkg:Package.Name.t -> Lib.Local.t list Memo.t
 
+(** All local libraries in the workspace (across all projects), excluding
+    implementations of virtual libraries. *)
+val all_local_libs : Super_context.t -> Lib.Local.t list Memo.t
+
 (** Entry modules of a local library. *)
 val entry_modules_by_lib : Super_context.t -> Lib.Local.t -> Module.t list Memo.t
 

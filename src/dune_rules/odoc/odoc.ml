@@ -558,18 +558,32 @@ let setup_lib_html_rules_def =
     f
 ;;
 
-let search_db_for_lib sctx lib =
-  let target = Lib lib in
+(* A single search database, at the html root, indexing every documented
+   artifact in the workspace. Its rule is added under the [_html] node; other
+   nodes reference its path via [Sherlodoc.search_db_path]. *)
+let setup_global_search_db sctx =
   let ctx = Super_context.context sctx in
-  let dir = Paths.html ctx target in
-  let* odocs = Odoc_discovery.odoc_artefacts sctx target in
-  let odocls = List.map odocs ~f:(Artifact.odocl_file ctx) in
-  Sherlodoc.search_db sctx ~dir ~external_odocls:[] odocls
+  let* libs = Odoc_discovery.all_local_libs sctx in
+  let* packages = Dune_load.packages () in
+  let targets =
+    List.map (Package.Name.Map.keys packages) ~f:(fun p -> Pkg p)
+    @ List.map libs ~f:(fun l -> Lib l)
+  in
+  let* odocls =
+    Memo.List.concat_map targets ~f:(fun target ->
+      let+ odocs = Odoc_discovery.odoc_artefacts sctx target in
+      List.map odocs ~f:(Artifact.odocl_file ctx))
+  in
+  let+ (_ : Path.Build.t) =
+    Sherlodoc.search_db sctx ~dir:(Paths.html_root ctx) ~external_odocls:[] odocls
+  in
+  ()
 ;;
 
 let setup_lib_html_rules sctx lib =
+  let ctx = Super_context.context sctx in
   let target = Lib lib in
-  let* search_db = search_db_for_lib sctx lib in
+  let search_db = Sherlodoc.search_db_path ~dir:(Paths.html_root ctx) in
   let* odocs = Odoc_discovery.odoc_artefacts sctx target in
   let* () =
     Memo.parallel_iter odocs ~f:(fun odoc ->
@@ -584,14 +598,10 @@ let setup_pkg_html_rules_def =
      and is set up via the per-library dispatcher case. *)
   let f (sctx, pkg, _for_) =
     let ctx = Super_context.context sctx in
+    let search_db = Sherlodoc.search_db_path ~dir:(Paths.html_root ctx) in
     let* pkg_odocs = Odoc_discovery.odoc_artefacts sctx (Pkg pkg) in
-    (* The package's mld pages share [_html/<pkg>] with its main library (whose
-       unique name equals the package name), which already provides the search
-       database there, so the index pages don't build their own. *)
     let* () =
-      Memo.parallel_iter pkg_odocs ~f:(fun odoc ->
-        let* () = setup_generate sctx ~search_db:None odoc Html in
-        setup_generate sctx ~search_db:None odoc Json)
+      Memo.parallel_iter pkg_odocs ~f:(setup_generate_html_and_json ~search_db sctx)
     in
     let* () = add_format_alias_deps ctx Html (Pkg pkg) pkg_odocs in
     add_format_alias_deps ctx Json (Pkg pkg) pkg_odocs
@@ -796,6 +806,7 @@ let gen_rules sctx ~dir rest =
       ~directory_targets
       (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
        >>> setup_css_rule sctx
+       >>> setup_global_search_db sctx
        >>> setup_toplevel_index_rule sctx Html
        >>> setup_toplevel_index_rule sctx Json)
   | [ "_markdown" ] ->
