@@ -15,6 +15,16 @@ let add_rule sctx =
 
 module Paths = Odoc_paths
 
+(* Local_only documents the workspace's own libraries (the [@doc] aliases); Full
+   additionally documents their external/installed/stdlib dependencies (the
+   [@doc-all] aliases). Full currently mirrors Local_only; the external set is
+   added in a follow-up. *)
+module Doc_mode = struct
+  type t =
+    | Local_only
+    | Full
+end
+
 module Output_format = struct
   type t = Odoc_paths.output_format =
     | Html
@@ -30,12 +40,17 @@ module Output_format = struct
     | Markdown -> Command.Args.empty
   ;;
 
-  let alias t ~dir =
-    match t with
-    | Html -> Alias.make Alias0.doc ~dir
-    | Json -> Alias.make Alias0.doc_json ~dir
-    | Markdown -> Alias.make Alias0.doc_markdown ~dir
+  let alias_name t (mode : Doc_mode.t) =
+    match t, mode with
+    | Html, Local_only -> Alias0.doc
+    | Html, Full -> Alias0.doc_full
+    | Json, Local_only -> Alias0.doc_json
+    | Json, Full -> Alias0.doc_json_full
+    | Markdown, Local_only -> Alias0.doc_markdown
+    | Markdown, Full -> Alias0.doc_markdown_full
   ;;
+
+  let alias t ~mode ~dir = Alias.make (alias_name t mode) ~dir
 
   let toplevel_index_path format ctx =
     match format with
@@ -72,7 +87,10 @@ module Dep : sig
     These dependencies may be used using the [deps] function *)
   val setup_deps : Context.t -> target -> Path.Set.t -> unit Memo.t
 end = struct
-  let format_alias f ctx m = Output_format.alias f ~dir:(output_dir_for_format ctx f m)
+  let format_alias f ctx m =
+    Output_format.alias f ~mode:Local_only ~dir:(output_dir_for_format ctx f m)
+  ;;
+
   let alias = Alias.make (Alias.Name.of_string ".odoc-all")
 
   let deps ctx pkg requires =
@@ -652,35 +670,39 @@ let setup_pkg_markdown_rules sctx ~pkg =
 let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.t) =
   let ctx = Super_context.context sctx in
   let name = Package.name pkg in
-  let alias =
+  let alias_dir =
     let pkg_dir = Package.dir pkg in
-    let dir = Path.Build.append_source (Context.build_dir ctx) pkg_dir in
-    Output_format.alias output ~dir
+    Path.Build.append_source (Context.build_dir ctx) pkg_dir
   in
-  match (output : Output_format.t) with
-  | Markdown ->
-    let directory_target = Paths.markdown ctx (Pkg name) in
-    let toplevel_index = Paths.markdown_index ctx in
-    let deps =
-      let open Action_builder.O in
-      let+ () = Action_builder.path (Path.build directory_target)
-      and+ () = Action_builder.path (Path.build toplevel_index) in
-      ()
-    in
-    Rules.Produce.Alias.add_deps alias deps
-  | Html | Json ->
-    let* libs =
-      Context.name ctx
-      |> Odoc_discovery.libs_of_pkg ~pkg:name
-      >>| List.map ~f:(fun lib -> Lib lib)
-    in
-    let deps =
+  let* deps =
+    match (output : Output_format.t) with
+    | Markdown ->
+      let directory_target = Paths.markdown ctx (Pkg name) in
+      let toplevel_index = Paths.markdown_index ctx in
+      Memo.return
+        (let open Action_builder.O in
+         let+ () = Action_builder.path (Path.build directory_target)
+         and+ () = Action_builder.path (Path.build toplevel_index) in
+         ())
+    | Html | Json ->
+      let+ libs =
+        Context.name ctx
+        |> Odoc_discovery.libs_of_pkg ~pkg:name
+        >>| List.map ~f:(fun lib -> Lib lib)
+      in
       Pkg name :: libs
       |> List.map ~f:(Dep.format_alias output ctx)
       |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f)
       |> Action_builder.deps
-    in
-    Rules.Produce.Alias.add_deps alias deps
+  in
+  (* Full documentation currently mirrors the local set, so both the [@doc] and
+     [@doc-all] aliases depend on the same outputs. *)
+  let* () =
+    Rules.Produce.Alias.add_deps
+      (Output_format.alias output ~mode:Local_only ~dir:alias_dir)
+      deps
+  in
+  Rules.Produce.Alias.add_deps (Output_format.alias output ~mode:Full ~dir:alias_dir) deps
 ;;
 
 let setup_package_aliases sctx (pkg : Package.t) =
