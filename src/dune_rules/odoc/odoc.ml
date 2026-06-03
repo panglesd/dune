@@ -662,13 +662,23 @@ let setup_ext_lib_odocl_rules sctx (lib : Lib.t) =
   Memo.parallel_iter odocs ~f:(fun odoc -> link_ext_odoc_rules sctx ~requires odoc)
 ;;
 
-(* Link the module [.odocl] of one local library, using its own transitive
-   closure as the link dependencies. *)
+(* Link the module [.odocl] of one local library. The link dependencies are the
+   library's transitive closure plus, for a packaged library, its sibling
+   libraries in the same package: this lets documentation cross-reference
+   sibling modules even without a compile-time dependency. *)
 let setup_local_lib_odocl_rules sctx (local : Lib.Local.t) =
+  let ctx = Super_context.context sctx in
   let for_ =
     (Compilation_mode.of_mode_set (Lib_info.modes (Lib.Local.info local))).for_merlin
   in
-  let* requires = Lib.closure [ Lib.Local.to_lib local ] ~linking:false ~for_ in
+  let* closure = Lib.closure [ Lib.Local.to_lib local ] ~linking:false ~for_ in
+  let* requires =
+    match Lib_info.package (Lib.Local.info local) with
+    | None -> Memo.return closure
+    | Some pkg ->
+      let+ siblings = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg in
+      Resolve.map closure ~f:(fun libs -> libs @ List.map siblings ~f:Lib.Local.to_lib)
+  in
   setup_lib_odocl_rules sctx local ~requires
 ;;
 
