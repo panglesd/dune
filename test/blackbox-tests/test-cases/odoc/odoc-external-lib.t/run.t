@@ -43,6 +43,14 @@ That link resolves to the external package's generated index page:
   $ test -f _build/default/_doc/_html_full/unix/index.html && echo ok
   ok
 
+A package that ships [.mld] documentation pages (here `dune-build-info`) is
+documented from its installed pages rather than a generated index, so its index
+page contains the package's own prose:
+
+  $ grep -o "access information generated at build time" \
+  >   _build/default/_doc/_html_full/dune-build-info/index.html
+  access information generated at build time
+
 The local-only index does not mention external packages:
 
   $ grep -c unix _build/default/_doc/_html/index.html

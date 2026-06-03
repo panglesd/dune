@@ -219,14 +219,18 @@ let odoc_artefacts sctx target =
     let+ modules = external_lib_modules sctx lib in
     List.map modules ~f:(fun m -> Odoc_artifact.make ~target m.odoc_file)
   | Odoc_target.Ext_pkg pkg ->
-    (* External packages get a single generated [index] page listing their
-       documented libraries. *)
-    let path = Odoc_paths.gen_mld_dir ctx pkg ++ "index.mld" in
-    Mld.create ~path ~name:"index"
-    |> Mld.odoc_file ~doc_dir:dir
-    |> Odoc_artifact.make ~target
-    |> List.singleton
-    |> Memo.return
+    (* External packages are documented through their installed [.mld] pages,
+       plus a generated [index] page if they ship none. *)
+    let* pkg_discovery = Package_discovery.create ~context:ctx in
+    let+ mlds = Package_discovery.mlds_of_package pkg_discovery pkg in
+    let names = List.map mlds ~f:snd in
+    let names =
+      if List.mem names "index" ~equal:String.equal then names else "index" :: names
+    in
+    List.map names ~f:(fun name ->
+      Mld.create ~path:(Odoc_paths.gen_mld_dir ctx pkg ++ (name ^ ".mld")) ~name
+      |> Mld.odoc_file ~doc_dir:dir
+      |> Odoc_artifact.make ~target)
 ;;
 
 let sp = Printf.sprintf

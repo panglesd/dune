@@ -32,6 +32,37 @@ let libraries_of_package t pkg =
   Package.Name.Map.find t.libs_of_pkg pkg |> Option.value ~default:[]
 ;;
 
+(* The installed [.mld] documentation pages of a package, as
+   [(source_path, page_name)] pairs, read from its dune-package's Doc section. *)
+let mlds_of_dune_package (dpkg : Dune_package.t) =
+  match Section.Map.find dpkg.sections Section.Doc with
+  | None -> []
+  | Some doc_path ->
+    List.concat_map dpkg.files ~f:(fun (section, files) ->
+      match (section : Section.t) with
+      | Doc ->
+        List.filter_map files ~f:(fun (entry : Dune_package.path) ->
+          match entry.kind with
+          | Install.Entry.Expanded.File ->
+            let dst = Install.Entry.Dst.to_string entry.dst in
+            if String.ends_with dst ~suffix:".mld"
+            then (
+              let name =
+                Stdlib.Filename.basename dst |> Stdlib.Filename.remove_extension
+              in
+              Some (Path.relative doc_path dst, name))
+            else None
+          | Directory -> None)
+      | _ -> [])
+;;
+
+let mlds_of_package t pkg =
+  Findlib.find_root_package t.findlib pkg
+  >>| function
+  | Error _ -> []
+  | Ok dpkg -> mlds_of_dune_package dpkg
+;;
+
 let version_of_package t pkg =
   Findlib.find_root_package t.findlib pkg
   >>| function

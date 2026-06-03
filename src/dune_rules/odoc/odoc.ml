@@ -449,32 +449,70 @@ let external_package_libs sctx pkg =
   Package_discovery.libraries_of_package pkg_discovery pkg
 ;;
 
-(* Compile the generated [index] page of an external package, listing the
-   documented modules of its libraries. *)
+(* Compile an installed [.mld] page (its source lives in the install
+   directory). Quiet, like external module compilation. *)
+let compile_external_mld sctx ~pkg ~doc_dir ~src ~name =
+  let ctx = Super_context.context sctx in
+  let odoc_file = doc_dir ++ Printf.sprintf "page-%s.odoc" name in
+  let run_odoc =
+    run_odoc
+      sctx
+      ~dir:(Path.build doc_dir)
+      "compile"
+      ~quiet:true
+      ~flags_for:None
+      [ A "--output-dir"
+      ; Path (Path.build (Paths.odoc_root ctx))
+      ; As [ "--parent-id"; Package.Name.to_string pkg ]
+      ; Hidden_targets [ odoc_file ]
+      ; Dep src
+      ]
+  in
+  let+ () = add_rule sctx run_odoc in
+  odoc_file
+;;
+
+(* Compile an external package's documentation pages: its installed [.mld]
+   pages, plus a generated [index] (listing the package's documented modules)
+   if it ships none. *)
 let setup_ext_pkg_odoc_rules sctx ~pkg ~libs =
   let ctx = Super_context.context sctx in
-  let* modules =
-    Memo.List.concat_map libs ~f:(fun lib ->
-      Odoc_discovery.external_lib_modules sctx lib
-      >>| List.map ~f:(fun (m : Odoc_discovery.ext_module) -> m.name))
+  let doc_dir = Paths.odocs ctx (Ext_pkg pkg) in
+  let* pkg_discovery = Package_discovery.create ~context:ctx in
+  let* mlds = Package_discovery.mlds_of_package pkg_discovery pkg in
+  let* installed_odocs =
+    Memo.parallel_map mlds ~f:(fun (src, name) ->
+      compile_external_mld sctx ~pkg ~doc_dir ~src ~name)
   in
-  let gen_mld = Paths.odocs ctx (Ext_pkg pkg) ++ "index.mld" in
-  let* () =
-    add_rule
-      sctx
-      (Action_builder.write_file
-         gen_mld
-         (Odoc_discovery.external_default_index ~pkg ~modules))
+  let* index_odoc =
+    if List.exists mlds ~f:(fun (_, name) -> String.equal name "index")
+    then Memo.return []
+    else
+      let* modules =
+        Memo.List.concat_map libs ~f:(fun lib ->
+          Odoc_discovery.external_lib_modules sctx lib
+          >>| List.map ~f:(fun (m : Odoc_discovery.ext_module) -> m.name))
+      in
+      let gen_mld = doc_dir ++ "index.mld" in
+      let* () =
+        add_rule
+          sctx
+          (Action_builder.write_file
+             gen_mld
+             (Odoc_discovery.external_default_index ~pkg ~modules))
+      in
+      let+ odoc =
+        compile_mld
+          sctx
+          (Odoc_discovery.Mld.create ~path:gen_mld ~name:"index")
+          ~pkg
+          ~doc_dir
+          ~includes:(Action_builder.return [])
+      in
+      [ odoc ]
   in
-  let* odoc =
-    compile_mld
-      sctx
-      (Odoc_discovery.Mld.create ~path:gen_mld ~name:"index")
-      ~pkg
-      ~doc_dir:(Paths.odocs ctx (Ext_pkg pkg))
-      ~includes:(Action_builder.return [])
-  in
-  Path.Set.singleton (Path.build odoc) |> Dep.setup_deps ctx (Ext_pkg pkg)
+  Path.Set.of_list_map (installed_odocs @ index_odoc) ~f:Path.build
+  |> Dep.setup_deps ctx (Ext_pkg pkg)
 ;;
 
 (* Ask odoc to classify the install directory of an external library into
