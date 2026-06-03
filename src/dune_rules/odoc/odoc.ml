@@ -161,9 +161,11 @@ let odoc_program sctx dir =
       ~hint:"opam install odoc"
 ;;
 
-let run_odoc sctx ~dir command ~quiet ~flags_for args =
-  let build_dir = Super_context.context sctx |> Context.build_dir in
+let run_odoc sctx ?dir command ~quiet ~flags_for args =
+  let ctx = Super_context.context sctx in
+  let build_dir = Context.build_dir ctx in
   let program = odoc_program sctx build_dir in
+  let dir = Option.value dir ~default:(Path.build (Paths.root ctx)) in
   let base_flags =
     let open Action_builder.O in
     let* () = Action_builder.return () in

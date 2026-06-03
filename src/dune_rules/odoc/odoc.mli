@@ -12,7 +12,7 @@ val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_build
 
 val run_odoc
   :  Super_context.t
-  -> dir:Path.t
+  -> ?dir:Path.t
   -> string
   -> quiet:bool
   -> flags_for:Path.Build.t option
