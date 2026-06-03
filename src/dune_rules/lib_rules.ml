@@ -544,13 +544,11 @@ let cctx
 
 let library_rules
       (lib : Library.t)
-      ~local_lib
       ~cctx
       ~source_modules
       ~dir_contents
       ~compile_info
       ~ctx_dir
-      ~for_merlin
   =
   let modules = Compilation_context.modules cctx in
   let obj_dir = Compilation_context.obj_dir cctx in
@@ -609,7 +607,6 @@ let library_rules
            ~dir_contents
            ~vlib_stubs_o_files)
   and+ () = Odoc.setup_private_library_doc_alias sctx ~scope ~dir:ctx_dir lib
-  and+ () = Memo.when_ for_merlin (fun () -> Odoc.setup_library_odoc_rules cctx local_lib)
   and+ () =
     let source_modules =
       Modules.fold_user_written source_modules ~init:[] ~f:(fun m acc -> m :: acc)
@@ -701,7 +698,7 @@ let compile_context (lib : Library.t) ~sctx ~dir_contents ~expander ~scope ~for_
 let rules (lib : Library.t) ~sctx ~dir_contents ~expander ~scope =
   let dir = Dir_contents.dir dir_contents in
   let buildable = lib.buildable in
-  let f ~for_ ~for_merlin =
+  let f ~for_ =
     let* local_lib, compile_info, source_modules, parameters =
       compile_context_data lib ~dir_contents ~scope ~for_
     in
@@ -726,15 +723,7 @@ let rules (lib : Library.t) ~sctx ~dir_contents ~expander ~scope =
         Ctypes_rules.gen_rules ~loc:(fst lib.name) ~cctx ~buildable ~sctx ~scope ~dir
     in
     let+ merlin =
-      library_rules
-        lib
-        ~local_lib:(Lib.Local.of_lib_exn local_lib)
-        ~cctx
-        ~source_modules
-        ~dir_contents
-        ~compile_info
-        ~ctx_dir:dir
-        ~for_merlin
+      library_rules lib ~cctx ~source_modules ~dir_contents ~compile_info ~ctx_dir:dir
     in
     cctx, merlin
   in
@@ -752,7 +741,7 @@ let rules (lib : Library.t) ~sctx ~dir_contents ~expander ~scope =
         ~lib_config
     in
     let merlin_ident = Merlin_ident.for_lib (Library.best_name lib) in
-    let { Compilation_mode.for_merlin; modes } =
+    let { Compilation_mode.modes; _ } =
       Compilation_mode.of_mode_set (Lib_info.modes lib_info)
     in
     Memo.parallel_map modes ~f:(fun for_ ->
@@ -774,9 +763,7 @@ let rules (lib : Library.t) ~sctx ~dir_contents ~expander ~scope =
           (Super_context.context sctx)
           merlin_ident
           ~dir
-          ~f:(fun () ->
-            let for_merlin = Compilation_mode.equal for_ for_merlin in
-            f ~for_ ~for_merlin)
+          ~f:(fun () -> f ~for_)
       in
       for_, Some r)
   in

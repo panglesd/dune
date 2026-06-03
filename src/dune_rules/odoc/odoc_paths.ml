@@ -18,10 +18,15 @@ let odoc_support_dirname = "odoc.support"
 let root (context : Context.t) = Path.Build.relative (Context.build_dir context) "_doc"
 
 let odocs ctx = function
-  | Lib lib ->
-    let obj_dir = Lib.Local.obj_dir lib in
-    Obj_dir.odoc_dir obj_dir
+  | Lib lib -> root ctx ++ "_odoc" ++ Odoc_scope.pkg_or_lnu (Lib.Local.to_lib lib)
   | Pkg pkg -> root ctx ++ sprintf "_odoc/pkg/%s" (Package.Name.to_string pkg)
+;;
+
+let lib_module_odoc ctx lib m =
+  let basename =
+    Module_name.Unique.artifact_filename (Module.obj_name m) ~ext:Filename.Extension.odoc
+  in
+  odocs ctx (Lib lib) ++ basename
 ;;
 
 let html_root ctx = root ctx ++ "_html"

@@ -47,16 +47,9 @@ val odoc_artefacts : Super_context.t -> Odoc_target.t -> Odoc_artifact.t list Me
 module Toplevel_index : sig
   type item
 
-  val of_packages
-    :  Package.t Package.Name.Map.t
-    -> Odoc_paths.output_format
-    -> item list
-
+  val of_packages : Package.t Package.Name.Map.t -> Odoc_paths.output_format -> item list
   val content : Odoc_paths.output_format -> item list -> string
 end
 
 (** Auto-generated mld content for a package's default index page. *)
-val default_index
-  :  pkg:Package.Name.t
-  -> Module.t list Lib.Local.Map.t
-  -> string
+val default_index : pkg:Package.Name.t -> Module.t list Lib.Local.Map.t -> string
