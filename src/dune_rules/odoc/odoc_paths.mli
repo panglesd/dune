@@ -22,16 +22,16 @@ val odocs : Context.t -> Odoc_target.t -> Path.Build.t
     library's odoc directory. *)
 val lib_module_odoc : Context.t -> Lib.Local.t -> Module.t -> Path.Build.t
 
-val html_root : Context.t -> Path.Build.t
-val json_root : Context.t -> Path.Build.t
+val html_root : Context.t -> mode:Odoc_mode.t -> Path.Build.t
+val json_root : Context.t -> mode:Odoc_mode.t -> Path.Build.t
 val markdown_root : Context.t -> Path.Build.t
 val odocl_root : Context.t -> Path.Build.t
-val html : Context.t -> Odoc_target.t -> Path.Build.t
-val json : Context.t -> Odoc_target.t -> Path.Build.t
+val html : Context.t -> mode:Odoc_mode.t -> Odoc_target.t -> Path.Build.t
+val json : Context.t -> mode:Odoc_mode.t -> Odoc_target.t -> Path.Build.t
 val markdown : Context.t -> Odoc_target.t -> Path.Build.t
 val odocl : Context.t -> Odoc_target.t -> Path.Build.t
 val gen_mld_dir : Context.t -> Package.Name.t -> Path.Build.t
-val odoc_support : Context.t -> Path.Build.t
-val toplevel_index : Context.t -> Path.Build.t
-val json_index : Context.t -> Path.Build.t
+val odoc_support : Context.t -> mode:Odoc_mode.t -> Path.Build.t
+val toplevel_index : Context.t -> mode:Odoc_mode.t -> Path.Build.t
+val json_index : Context.t -> mode:Odoc_mode.t -> Path.Build.t
 val markdown_index : Context.t -> Path.Build.t

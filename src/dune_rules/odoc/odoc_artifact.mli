@@ -12,4 +12,10 @@ val odoc_file : t -> Path.Build.t
 val is_module : t -> bool
 
 val odocl_file : Context.t -> t -> Path.Build.t
-val output_file : Context.t -> Odoc_paths.output_format -> t -> Path.Build.t
+
+val output_file
+  :  Context.t
+  -> mode:Odoc_mode.t
+  -> Odoc_paths.output_format
+  -> t
+  -> Path.Build.t

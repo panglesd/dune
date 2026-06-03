@@ -26,7 +26,7 @@ let basename t =
 
 let odocl_file ctx t = odocl ctx t.target ++ (basename t ^ ".odocl")
 
-let output_file ctx (output : output_format) t =
+let output_file ctx ~mode (output : output_format) t =
   let basename = basename t in
   let suffix = Filename.of_string_exn (extension output) in
   match t.target with
@@ -35,8 +35,8 @@ let output_file ctx (output : output_format) t =
      | Html | Json ->
        let dir =
          match output with
-         | Json -> json ctx t.target
-         | _ -> html ctx t.target
+         | Json -> json ctx ~mode t.target
+         | _ -> html ctx ~mode t.target
        in
        dir ++ Stdune.String.capitalize basename ++ "index"
        |> Path.Build.extend_basename ~suffix
@@ -47,8 +47,8 @@ let output_file ctx (output : output_format) t =
     let base =
       match output with
       | Markdown -> markdown ctx t.target
-      | Json -> json ctx t.target
-      | Html -> html ctx t.target
+      | Json -> json ctx ~mode t.target
+      | Html -> html ctx ~mode t.target
     in
     base ++ (basename |> String.drop_prefix ~prefix:"page-" |> Option.value_exn)
     |> Path.Build.extend_basename ~suffix

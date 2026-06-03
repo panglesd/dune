@@ -2,9 +2,8 @@
 
 open Import
 
-module Paths : sig
-  val toplevel_index : Context.t -> Path.Build.t
-end
+(** Path of the [@doc] (local-only) toplevel package-listing index. *)
+val toplevel_index : Context.t -> Path.Build.t
 
 val odoc_program : Super_context.t -> Path.Build.t -> Action.Prog.t Action_builder.t
 
