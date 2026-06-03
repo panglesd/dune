@@ -1,18 +1,35 @@
-External (installed) libraries can have their `.odoc` files compiled, into
-`_doc/_odoc/<lib-name>`. Here we compile the documentation of the `unix`
-library that `mylib` depends on.
+`mylib` is a local package whose library depends on the external `unix`
+library.
 
-odoc emits version-specific warnings about `unix.mli`'s documentation comments,
-so we discard stderr and just check that the `.odoc` files are produced.
+In the default (local-only) `@doc`, only the local library is documented:
 
-  $ dune build _doc/_odoc/unix/unix.odoc _doc/_odoc/unix/unixLabels.odoc 2>/dev/null
+  $ dune build @doc 2>/dev/null
+  $ ls _build/default/_doc/_html/mylib
+  Mylib
+  index.html
 
-  $ find _build/default/_doc/_odoc/unix -name '*.odoc' | sort
+There is no documentation for external libraries in the local-only tree:
+
+  $ test -d _build/default/_doc/_html/unix && echo "present" || echo "absent"
+  absent
+
+`@doc-all` (Doc_mode.Full) additionally documents the external libraries in the
+dependency closure, into the `_html_full` tree. odoc emits version-specific
+warnings about `unix.mli`, so we discard stderr.
+
+  $ dune build @doc-all 2>/dev/null
+  $ test -f _build/default/_doc/_html_full/mylib/Mylib/index.html && echo ok
+  ok
+  $ test -f _build/default/_doc/_html_full/unix/Unix/index.html && echo ok
+  ok
+  $ test -f _build/default/_doc/_html_full/unix/UnixLabels/index.html && echo ok
+  ok
+
+The external library's `.odoc`/`.odocl` are produced under its own name:
+
+  $ find _build/default/_doc/_odoc/unix _build/default/_doc/_odocls/unix \
+  >   \( -name '*.odoc' -o -name '*.odocl' \) | sort
   _build/default/_doc/_odoc/unix/unix.odoc
   _build/default/_doc/_odoc/unix/unixLabels.odoc
-
-The classify output that drives external module discovery lists the library's
-archive and its modules:
-
-  $ cat _build/default/_doc/_classify/unix/odoc.classify
-  unix Unix UnixLabels
+  _build/default/_doc/_odocls/unix/unix.odocl
+  _build/default/_doc/_odocls/unix/unixLabels.odocl

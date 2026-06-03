@@ -81,6 +81,9 @@ module Dep : sig
   (*** [setup_deps ctx target odocs] Adds [odocs] as dependencies for [target].
     These dependencies may be used using the [deps] function *)
   val setup_deps : Context.t -> target -> Path.Set.t -> unit Memo.t
+
+  (** The [.odoc-all] alias gathering every [.odoc] of [target]. *)
+  val all_alias : Context.t -> target -> Alias.t
 end = struct
   let format_alias ~mode f ctx m =
     Output_format.alias f ~mode ~dir:(output_dir_for_format ctx ~mode f m)
@@ -107,6 +110,7 @@ end = struct
   ;;
 
   let alias ctx m = alias ~dir:(Paths.odocs ctx m)
+  let all_alias = alias
 
   let setup_deps ctx m files =
     Rules.Produce.Alias.add_deps (alias ctx m) (Action_builder.path_set files)
@@ -593,6 +597,71 @@ let setup_lib_odocl_rules sctx lib ~requires =
   Memo.With_implicit_output.exec setup_lib_odocl_rules_def (sctx, lib, requires)
 ;;
 
+let stdlib_lib_name = Lib_name.of_string "stdlib"
+
+(* The documentation targets of the libraries [requires] links against. Unlike
+   the local-only flags used for local libraries, external dependencies are
+   kept (as [Ext_lib]); [stdlib] is dropped since dune does not document it. *)
+let link_requires_targets requires =
+  let open Resolve.O in
+  let+ libs = requires in
+  List.filter_map libs ~f:(fun lib ->
+    if Lib_name.equal (Lib.name lib) stdlib_lib_name
+    then None
+    else (
+      match Lib.Local.of_lib lib with
+      | Some l -> Some (Lib l)
+      | None -> Some (Ext_lib lib)))
+;;
+
+(* Link an external library's [.odoc] into [.odocl], resolving cross-references
+   against the odoc directories of its (local and external) dependencies. *)
+let link_ext_odoc_rules sctx (odoc_file : Artifact.t) ~requires =
+  let ctx = Super_context.context sctx in
+  let targets = link_requires_targets requires in
+  let include_flags =
+    Resolve.args
+      (let open Resolve.O in
+       let+ targets = targets in
+       Command.Args.S
+         (List.concat_map targets ~f:(fun t ->
+            [ Command.Args.A "-I"; Path (Path.build (Paths.odocs ctx t)) ])))
+  in
+  let deps =
+    let open Action_builder.O in
+    let* targets = Resolve.read targets in
+    Action_builder.deps
+      (Dune_engine.Dep.Set.of_list_map targets ~f:(fun t ->
+         Dune_engine.Dep.alias (Dep.all_alias ctx t)))
+  in
+  let dir = Path.build (Path.Build.parent_exn (Artifact.odocl_file ctx odoc_file)) in
+  let run_odoc =
+    run_odoc
+      sctx
+      ~dir
+      "link"
+      ~quiet:true
+      ~flags_for:None
+      [ include_flags
+      ; A "--enable-missing-root-warning"
+      ; A "-o"
+      ; Target (Artifact.odocl_file ctx odoc_file)
+      ; Dep (Path.build (Artifact.odoc_file odoc_file))
+      ]
+  in
+  add_rule
+    sctx
+    (let open Action_builder.With_targets.O in
+     Action_builder.with_no_targets deps >>> run_odoc)
+;;
+
+let setup_ext_lib_odocl_rules sctx (lib : Lib.t) =
+  let for_ = (Compilation_mode.of_mode_set (Lib_info.modes (Lib.info lib))).for_merlin in
+  let* requires = Lib.closure [ lib ] ~linking:false ~for_ in
+  let* odocs = Odoc_discovery.odoc_artefacts sctx (Ext_lib lib) in
+  Memo.parallel_iter odocs ~f:(fun odoc -> link_ext_odoc_rules sctx ~requires odoc)
+;;
+
 let setup_pkg_rules_def memo_name f =
   let module Input = struct
     module Super_context = Super_context.As_memo_key
@@ -778,12 +847,30 @@ let setup_package_aliases_format sctx (pkg : Package.t) (output : Output_format.
          and+ () = Action_builder.path (Path.build toplevel_index) in
          ())
     | Html | Json ->
-      let+ libs =
-        Context.name ctx
-        |> Odoc_discovery.libs_of_pkg ~pkg:name
-        >>| List.map ~f:(fun lib -> Lib lib)
+      let* local_libs = Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg:name in
+      let local_targets = List.map local_libs ~f:(fun lib -> Lib lib) in
+      (* In [Full] mode, also document the external (installed) libraries in the
+         package's dependency closure, excluding [stdlib]. *)
+      let+ external_targets =
+        match mode with
+        | Doc_mode.Local_only -> Memo.return []
+        | Doc_mode.Full ->
+          let+ closure =
+            Lib.closure
+              (List.map local_libs ~f:Lib.Local.to_lib)
+              ~linking:false
+              ~for_:Compilation_mode.Ocaml
+            >>= Resolve.read_memo
+          in
+          List.filter_map closure ~f:(fun lib ->
+            if Lib_name.equal (Lib.name lib) stdlib_lib_name
+            then None
+            else (
+              match Lib.Local.of_lib lib with
+              | Some _ -> None
+              | None -> Some (Ext_lib lib)))
       in
-      Pkg name :: libs
+      (Pkg name :: local_targets) @ external_targets
       |> List.map ~f:(Dep.format_alias ~mode output ctx)
       |> Dune_engine.Dep.Set.of_list_map ~f:(fun f -> Dune_engine.Dep.alias f)
       |> Action_builder.deps
@@ -899,16 +986,20 @@ let output_artifacts sctx ~mode ~format pkg_or_lib_name =
   has_rules_with_dir_targets
     (let ctx = Super_context.context sctx in
      let* lib_dirs =
-       let* lib, lib_db =
+       let* name, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_name
        in
-       let* lib =
-         let+ lib = Lib.DB.find lib_db lib in
-         Option.bind ~f:Lib.Local.of_lib lib
-       in
+       let* lib = Lib.DB.find lib_db name in
        match lib with
        | None -> Memo.return []
-       | Some lib -> setup_target_format_rules sctx ~mode ~format (Lib lib)
+       | Some lib ->
+         (match Lib.Local.of_lib lib with
+          | Some local -> setup_target_format_rules sctx ~mode ~format (Lib local)
+          | None ->
+            (* External libraries are documented only in [Full] mode. *)
+            (match (mode : Doc_mode.t) with
+             | Local_only -> Memo.return []
+             | Full -> setup_target_format_rules sctx ~mode ~format (Ext_lib lib)))
      and* pkg_dirs =
        let* packages = Dune_load.packages () in
        match Package.Name.Map.find packages (Package.Name.of_string pkg_or_lib_name) with
@@ -1030,16 +1121,14 @@ let gen_rules sctx ~dir rest =
           unique name equals its package name), so we set up each independently.
           TODO improve error handling when the name is neither a pkg nor a lnu *)
        let ctx = Super_context.context sctx in
-       let* lib, lib_db =
+       let* name, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
        in
        (* jeremiedimino: why isn't [None] some kind of error here? *)
-       let* lib =
-         let+ lib = Lib.DB.find lib_db lib in
-         Option.bind ~f:Lib.Local.of_lib lib
-       in
+       let* lib = Lib.DB.find lib_db name in
+       let local_lib = Option.bind lib ~f:Lib.Local.of_lib in
        let for_ =
-         match lib with
+         match local_lib with
          | Some lib ->
            let modes =
              Lib_info.modes (Lib.Local.info lib) |> Compilation_mode.of_mode_set
@@ -1051,8 +1140,13 @@ let gen_rules sctx ~dir rest =
          match lib with
          | None -> Memo.return ()
          | Some lib ->
-           let* requires = Lib.closure [ Lib.Local.to_lib lib ] ~linking:false ~for_ in
-           setup_lib_odocl_rules sctx lib ~requires
+           (match Lib.Local.of_lib lib with
+            | Some local ->
+              let* requires =
+                Lib.closure [ Lib.Local.to_lib local ] ~linking:false ~for_
+              in
+              setup_lib_odocl_rules sctx local ~requires
+            | None -> setup_ext_lib_odocl_rules sctx lib)
        and+ () =
          let* packages = Dune_load.packages () in
          match
