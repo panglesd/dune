@@ -43,7 +43,12 @@ let add_pkg_lnu base m =
 
 let html ctx m = add_pkg_lnu (html_root ctx) m
 let markdown ctx m = add_pkg_lnu (markdown_root ctx) m
-let odocl ctx m = add_pkg_lnu (odocl_root ctx) m
+
+let odocl ctx = function
+  | Pkg pkg -> odocl_root ctx ++ Package.Name.to_string pkg
+  | Lib lib -> odocl_root ctx ++ Odoc_scope.lib_unique_name (Lib.Local.to_lib lib)
+;;
+
 let gen_mld_dir ctx pkg = root ctx ++ "_mlds" ++ Package.Name.to_string pkg
 let odoc_support ctx = html_root ctx ++ odoc_support_dirname
 let toplevel_index ctx = html_root ctx ++ "index.html"

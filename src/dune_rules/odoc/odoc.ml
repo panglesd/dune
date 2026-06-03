@@ -488,27 +488,19 @@ let setup_pkg_rules_def memo_name f =
 ;;
 
 let setup_pkg_odocl_rules_def =
+  (* Only the package's own mld pages live in [_odocls/<pkg>]; each library's
+     module [.odocl] files live in its own [_odocls/<lib-unique-name>] directory
+     and are set up via the per-library dispatcher case. *)
   let f (sctx, pkg, for_) =
-    let* libs =
-      Super_context.context sctx |> Context.name |> Odoc_discovery.libs_of_pkg ~pkg
-    in
     let* requires =
-      let libs = (libs :> Lib.t list) in
-      Lib.closure libs ~linking:false ~for_
-    in
-    let* () = Memo.parallel_iter libs ~f:(setup_lib_odocl_rules sctx ~requires)
-    and* _ =
-      let* pkg_odocs = Odoc_discovery.odoc_artefacts sctx (Pkg pkg) in
-      let pkg = Some pkg in
-      let+ () =
-        Memo.parallel_iter pkg_odocs ~f:(fun odoc ->
-          link_odoc_rules sctx ~pkg ~requires odoc)
+      let* libs =
+        Super_context.context sctx |> Context.name |> Odoc_discovery.libs_of_pkg ~pkg
       in
-      pkg_odocs
-    and* _ =
-      Memo.parallel_map libs ~f:(fun lib -> Odoc_discovery.odoc_artefacts sctx (Lib lib))
+      Lib.closure (libs :> Lib.t list) ~linking:false ~for_
     in
-    Memo.return ()
+    let* pkg_odocs = Odoc_discovery.odoc_artefacts sctx (Pkg pkg) in
+    Memo.parallel_iter pkg_odocs ~f:(fun odoc ->
+      link_odoc_rules sctx ~pkg:(Some pkg) ~requires odoc)
   in
   setup_pkg_rules_def "setup-package-odocls-rules" f
 ;;
@@ -863,8 +855,11 @@ let gen_rules sctx ~dir rest =
        | Some lib -> setup_library_odoc_rules sctx lib)
   | [ "_odocls"; lib_unique_name_or_pkg ] ->
     has_rules
-      ((* TODO we can be a better with the error handling in the case where
-          lib_unique_name_or_pkg is neither a valid pkg or lnu *)
+      ((* Each library's module [.odocl] files live in its own
+          [_odocls/<lib-unique-name>] directory; a package's own mld pages live
+          in [_odocls/<pkg>]. The directory name can be both (when a library's
+          unique name equals its package name), so we set up each independently.
+          TODO improve error handling when the name is neither a pkg nor a lnu *)
        let ctx = Super_context.context sctx in
        let* lib, lib_db =
          Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
@@ -887,11 +882,8 @@ let gen_rules sctx ~dir rest =
          match lib with
          | None -> Memo.return ()
          | Some lib ->
-           (match Lib_info.package (Lib.Local.info lib) with
-            | None ->
-              let* requires = Lib.closure [ Lib.Local.to_lib lib ] ~linking:false ~for_ in
-              setup_lib_odocl_rules sctx lib ~requires
-            | Some pkg -> setup_pkg_odocl_rules sctx ~pkg ~for_)
+           let* requires = Lib.closure [ Lib.Local.to_lib lib ] ~linking:false ~for_ in
+           setup_lib_odocl_rules sctx lib ~requires
        and+ () =
          let* packages = Dune_load.packages () in
          match
