@@ -541,30 +541,6 @@ let setup_toplevel_index_rule sctx output =
   add_rule sctx (Action_builder.write_file path content)
 ;;
 
-let entry_modules_by_lib sctx lib =
-  let info = Lib.Local.info lib in
-  let { Compilation_mode.for_merlin; _ } =
-    Compilation_mode.of_mode_set (Lib_info.modes info)
-  in
-  Dir_contents.modules_of_local_lib sctx lib ~for_:for_merlin >>| Modules.entry_modules
-;;
-
-let entry_modules sctx ~pkg =
-  let* l =
-    Super_context.context sctx
-    |> Context.name
-    |> Odoc_discovery.libs_of_pkg ~pkg
-    >>| List.filter ~f:(fun lib ->
-      Lib.Local.info lib |> Lib_info.status |> Lib_info.Status.is_private |> not)
-  in
-  let+ l =
-    Memo.parallel_map l ~f:(fun l ->
-      let+ m = entry_modules_by_lib sctx l in
-      l, m)
-  in
-  Lib.Local.Map.of_list_exn l
-;;
-
 let check_mlds_no_dupes ~pkg ~mlds =
   match
     List.rev_map mlds ~f:(fun ((_path, mld_name) as mld) -> mld_name, mld)
@@ -628,7 +604,7 @@ let odoc_artefacts sctx target =
   | Lib lib ->
     let info = Lib.Local.info lib in
     let obj_dir = Lib_info.obj_dir info in
-    let+ modules = entry_modules_by_lib sctx lib in
+    let+ modules = Odoc_discovery.entry_modules_by_lib sctx lib in
     List.map modules ~f:(fun m -> Obj_dir.Module.odoc obj_dir m |> Artifact.make ~target)
 ;;
 
@@ -949,7 +925,7 @@ let package_mlds =
            then Memo.return mlds
            else (
              let gen_mld = Paths.gen_mld_dir ctx pkg ++ "index.mld" in
-             let* entry_modules = entry_modules sctx ~pkg in
+             let* entry_modules = Odoc_discovery.entry_modules sctx ~pkg in
              let+ () =
                add_rule
                  sctx
