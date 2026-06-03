@@ -42,3 +42,15 @@ end
 
 (** The odoc artifacts (modules or mld pages) of a documentation target. *)
 val odoc_artefacts : Super_context.t -> Odoc_target.t -> Odoc_artifact.t list Memo.t
+
+(** The toplevel package-listing index page. *)
+module Toplevel_index : sig
+  type item
+
+  val of_packages
+    :  Package.t Package.Name.Map.t
+    -> Odoc_paths.output_format
+    -> item list
+
+  val content : Odoc_paths.output_format -> item list -> string
+end
