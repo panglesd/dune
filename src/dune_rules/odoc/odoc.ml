@@ -594,22 +594,6 @@ let setup_target_format_rules sctx ~format target =
   List.filter_opt dirs
 ;;
 
-(* The whole tree for an output format is generated from a single node: every
-   local library's modules and every package's mld pages. Returns all the
-   per-module directory targets. *)
-let setup_all_format_rules sctx ~format =
-  let* libs = Odoc_discovery.all_local_libs sctx
-  and* packages = Dune_load.packages () in
-  let* lib_dirs =
-    Memo.parallel_map libs ~f:(fun lib ->
-      setup_target_format_rules sctx ~format (Lib lib))
-  and* pkg_dirs =
-    Package.Name.Map.keys packages
-    |> Memo.parallel_map ~f:(fun pkg -> setup_target_format_rules sctx ~format (Pkg pkg))
-  in
-  Memo.return (List.concat lib_dirs @ List.concat pkg_dirs)
-;;
-
 let setup_lib_markdown_rules sctx lib =
   let target = Lib lib in
   let* () =
@@ -792,6 +776,32 @@ let has_rules_with_dir_targets ?(extra = []) m =
   Memo.return (Gen_rules.make ~directory_targets (Memo.return rules))
 ;;
 
+(* Generate one output format for a single output directory [_<fmt>/<name>],
+   where [name] resolves to a library and/or a package (they share a directory
+   when a library's unique name equals its package name). *)
+let output_artifacts sctx ~format pkg_or_lib_name =
+  has_rules_with_dir_targets
+    (let ctx = Super_context.context sctx in
+     let* lib_dirs =
+       let* lib, lib_db =
+         Odoc_scope.Scope_key.of_string (Context.name ctx) pkg_or_lib_name
+       in
+       let* lib =
+         let+ lib = Lib.DB.find lib_db lib in
+         Option.bind ~f:Lib.Local.of_lib lib
+       in
+       match lib with
+       | None -> Memo.return []
+       | Some lib -> setup_target_format_rules sctx ~format (Lib lib)
+     and* pkg_dirs =
+       let* packages = Dune_load.packages () in
+       match Package.Name.Map.find packages (Package.Name.of_string pkg_or_lib_name) with
+       | None -> Memo.return []
+       | Some pkg -> setup_target_format_rules sctx ~format (Pkg (Package.name pkg))
+     in
+     Memo.return (lib_dirs @ pkg_dirs))
+;;
+
 let with_package pkg ~f =
   let pkg = Package.Name.of_string pkg in
   let* packages = Dune_load.packages () in
@@ -810,19 +820,16 @@ let gen_rules sctx ~dir rest =
          (Memo.return Rules.empty))
   | [ "_html" ] ->
     let ctx = Super_context.context sctx in
-    has_rules_with_dir_targets
-      ~extra:[ Paths.odoc_support ctx ]
-      (let* () = Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
-       and* () = setup_css_rule sctx
-       and* () = setup_global_search_db sctx
-       and* () = setup_toplevel_index_rule sctx Html
-       and* dirs = setup_all_format_rules sctx ~format:Html in
-       Memo.return dirs)
-  | [ "_json" ] ->
-    has_rules_with_dir_targets
-      (let* () = setup_toplevel_index_rule sctx Json
-       and* dirs = setup_all_format_rules sctx ~format:Json in
-       Memo.return dirs)
+    let directory_targets = Path.Build.Map.singleton (Paths.odoc_support ctx) Loc.none in
+    has_rules
+      ~directory_targets
+      (Sherlodoc.sherlodoc_dot_js sctx ~dir:(Paths.html_root ctx)
+       >>> setup_css_rule sctx
+       >>> setup_global_search_db sctx
+       >>> setup_toplevel_index_rule sctx Html)
+  | [ "_html"; pkg_or_lib_name ] -> output_artifacts sctx ~format:Html pkg_or_lib_name
+  | [ "_json" ] -> has_rules (setup_toplevel_index_rule sctx Json)
+  | [ "_json"; pkg_or_lib_name ] -> output_artifacts sctx ~format:Json pkg_or_lib_name
   | [ "_markdown" ] ->
     let* packages = Dune_load.packages () in
     let ctx = Super_context.context sctx in
