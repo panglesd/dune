@@ -845,40 +845,22 @@ let gen_rules sctx ~dir rest =
       let pkg = Package.name pkg in
       setup_package_odoc_rules sctx ~pkg)
   | [ "_odoc"; "pkg" ] -> Memo.return (Gen_rules.redirect_to_parent Gen_rules.Rules.empty)
-  | [ "_odoc"; lib_unique_name_or_pkg ] ->
+  | [ "_odoc"; lib_unique_name ] ->
     has_rules
-      ((* The [.odoc] files of a library's modules are compiled into
-          [_doc/_odoc/<pkg-or-lnu>]. All libraries of a package share that
-          directory, so we set up every library of the package here. A private
-          library (without a package) lives in [_doc/_odoc/<lnu>] on its own. *)
+      ((* Each library's modules are compiled into its own
+          [_doc/_odoc/<lib-unique-name>] directory, so the directory name
+          resolves to a single library. *)
        let ctx = Super_context.context sctx in
-       let+ () =
-         let* packages = Dune_load.packages () in
-         match
-           Package.Name.Map.find packages (Package.Name.of_string lib_unique_name_or_pkg)
-         with
-         | None -> Memo.return ()
-         | Some pkg ->
-           let* libs =
-             Context.name ctx |> Odoc_discovery.libs_of_pkg ~pkg:(Package.name pkg)
-           in
-           Memo.parallel_iter libs ~f:(setup_library_odoc_rules sctx)
-       and+ () =
-         let* lib, lib_db =
-           Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name_or_pkg
-         in
-         let* lib =
-           let+ lib = Lib.DB.find lib_db lib in
-           Option.bind ~f:Lib.Local.of_lib lib
-         in
-         match lib with
-         | None -> Memo.return ()
-         | Some lib ->
-           (match Lib_info.package (Lib.Local.info lib) with
-            | Some _ -> Memo.return ()
-            | None -> setup_library_odoc_rules sctx lib)
+       let* lib, lib_db =
+         Odoc_scope.Scope_key.of_string (Context.name ctx) lib_unique_name
        in
-       ())
+       let* lib =
+         let+ lib = Lib.DB.find lib_db lib in
+         Option.bind ~f:Lib.Local.of_lib lib
+       in
+       match lib with
+       | None -> Memo.return ()
+       | Some lib -> setup_library_odoc_rules sctx lib)
   | [ "_odocls"; lib_unique_name_or_pkg ] ->
     has_rules
       ((* TODO we can be a better with the error handling in the case where
