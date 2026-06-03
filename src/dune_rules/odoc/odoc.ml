@@ -552,11 +552,74 @@ let setup_css_rule sctx ~mode =
     ~dir:(Paths.odoc_support (Super_context.context sctx) ~mode)
 ;;
 
-let setup_toplevel_index_rule sctx ~mode output =
-  let* packages = Dune_load.packages () in
-  let index = Odoc_discovery.Toplevel_index.of_packages packages output in
-  let content = Odoc_discovery.Toplevel_index.content output index in
+let stdlib_lib_name = Lib_name.of_string "stdlib"
+
+(* External (installed) libraries documented in [Full] mode: the non-stdlib
+   external members of every local package's dependency closure, grouped by
+   their package (one representative library kept per package). *)
+let documented_external_pkgs sctx =
   let ctx = Super_context.context sctx in
+  let* packages = Dune_load.packages () in
+  let* libs =
+    Package.Name.Map.keys packages
+    |> Memo.List.concat_map ~f:(fun pkg ->
+      let* local = Odoc_discovery.libs_of_pkg (Context.name ctx) ~pkg in
+      Lib.closure
+        (List.map local ~f:Lib.Local.to_lib)
+        ~linking:false
+        ~for_:Compilation_mode.Ocaml
+      >>= Resolve.read_memo
+      >>| List.filter ~f:(fun lib ->
+        Option.is_none (Lib.Local.of_lib lib)
+        && not (Lib_name.equal (Lib.name lib) stdlib_lib_name)))
+  in
+  List.fold_left libs ~init:Package.Name.Map.empty ~f:(fun acc lib ->
+    match Lib_info.package (Lib.info lib) with
+    | None -> acc
+    | Some pkg ->
+      if Package.Name.Map.mem acc pkg then acc else Package.Name.Map.set acc pkg lib)
+  |> Package.Name.Map.to_list
+  |> Memo.return
+;;
+
+(* Index link to a representative documented page of an external library: its
+   first module's html page, e.g. [unix/unix/Unix/index.html]. *)
+let external_pkg_link sctx lib =
+  let+ artifacts = Odoc_discovery.odoc_artefacts sctx (Ext_lib lib) in
+  match artifacts with
+  | [] -> None
+  | artifact :: _ ->
+    let segments =
+      Paths.ext_lib_parent_id lib :: [ Artifact.module_dir_name artifact; "index.html" ]
+    in
+    Some (String.concat ~sep:"/" segments)
+;;
+
+let setup_toplevel_index_rule sctx ~mode output =
+  let ctx = Super_context.context sctx in
+  let* packages = Dune_load.packages () in
+  let local_items = Odoc_discovery.Toplevel_index.of_packages packages output in
+  let* external_items =
+    match (mode : Doc_mode.t), (output : Output_format.t) with
+    | Full, (Html | Json) ->
+      let* pkg_discovery = Package_discovery.create ~context:ctx in
+      let* ext_pkgs = documented_external_pkgs sctx in
+      Memo.List.filter_map ext_pkgs ~f:(fun (pkg, lib) ->
+        let* link = external_pkg_link sctx lib in
+        match link with
+        | None -> Memo.return None
+        | Some link ->
+          let+ version = Package_discovery.version_of_package pkg_discovery pkg in
+          Some
+            (Odoc_discovery.Toplevel_index.external_item
+               ~name:(Package.Name.to_string pkg)
+               ~version
+               ~link))
+    | (Full | Local_only), _ -> Memo.return []
+  in
+  let content =
+    Odoc_discovery.Toplevel_index.content output (local_items @ external_items)
+  in
   let path = Output_format.toplevel_index_path ~mode output ctx in
   add_rule sctx (Action_builder.write_file path content)
 ;;
@@ -596,8 +659,6 @@ let setup_lib_odocl_rules_def =
 let setup_lib_odocl_rules sctx lib ~requires =
   Memo.With_implicit_output.exec setup_lib_odocl_rules_def (sctx, lib, requires)
 ;;
-
-let stdlib_lib_name = Lib_name.of_string "stdlib"
 
 (* The documentation targets of the libraries [requires] links against. Unlike
    the local-only flags used for local libraries, external dependencies are

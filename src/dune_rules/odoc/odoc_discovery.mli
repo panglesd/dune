@@ -63,6 +63,11 @@ module Toplevel_index : sig
   type item
 
   val of_packages : Package.t Package.Name.Map.t -> Odoc_paths.output_format -> item list
+
+  (** An index entry for an externally-documented package (used in [Full]
+      mode), with an explicit link to one of its documented pages. *)
+  val external_item : name:string -> version:string option -> link:string -> item
+
   val content : Odoc_paths.output_format -> item list -> string
 end
 

@@ -240,6 +240,10 @@ module Toplevel_index = struct
       { name; version = Package.version package; link = sp "%s/index.%s" name extension })
   ;;
 
+  let external_item ~name ~version ~link =
+    { name; version = Option.bind version ~f:Package_version.of_string_opt; link }
+  ;;
+
   let html_list_items t =
     List.map t ~f:(fun { name; version; link } ->
       let link = sp {|<a href="%s">%s</a>|} link name in

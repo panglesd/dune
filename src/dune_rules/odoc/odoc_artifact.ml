@@ -24,6 +24,8 @@ let basename t =
   Path.Build.basename t.odoc_file |> Filename.remove_extension |> Filename.to_string
 ;;
 
+(* The capitalized directory name odoc uses for this module's html output. *)
+let module_dir_name t = Stdune.String.capitalize (basename t)
 let odocl_file ctx t = odocl ctx t.target ++ (basename t ^ ".odocl")
 
 let output_file ctx ~mode (output : output_format) t =

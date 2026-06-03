@@ -30,6 +30,20 @@ external `unix` library's findlib package is also called `unix`.
   $ test -f _build/default/_doc/_html_full/unix/unix/UnixLabels/index.html && echo ok
   ok
 
+The Full toplevel index lists `unix` as an external package, linking to one of
+its documented modules (its version span is rendered too, but omitted here as
+it is specific to the installed OCaml):
+
+  $ grep -o '<a href="unix/[^"]*">unix</a>' \
+  >   _build/default/_doc/_html_full/index.html
+  <a href="unix/unix/Unix/index.html">unix</a>
+
+The local-only index does not mention external packages:
+
+  $ grep -c unix _build/default/_doc/_html/index.html
+  0
+  [1]
+
 The external library's `.odoc`/`.odocl` are produced under `<pkg>/<lib>`:
 
   $ find _build/default/_doc/_odoc/unix _build/default/_doc/_odocls/unix \
