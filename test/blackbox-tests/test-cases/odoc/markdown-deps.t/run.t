@@ -51,7 +51,7 @@ Test markdown with multiple packages and dependencies
   > val run : unit -> unit
   > EOF
 
-  $ dune build @doc-markdown
+  $ dune build @doc-md
 
   $ find _build/default/_doc/_markdown -type d | sort
   _build/default/_doc/_markdown

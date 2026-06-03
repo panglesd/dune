@@ -10,7 +10,7 @@ Test that markdown generation includes all modules following naming conventions.
   >  (public_name mylib))
   > EOF
 
-  $ dune build @doc-markdown
+  $ dune build @doc-md
 
   $ find _build/default/_doc/_markdown -name "*.md" | sort
   _build/default/_doc/_markdown/index.md

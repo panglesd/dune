@@ -35,7 +35,7 @@ Test markdown generation with package documentation (.mld files)
   > See {!Example} for the API documentation.
   > EOF
 
-  $ dune build @doc-markdown
+  $ dune build @doc-md
 
   $ find _build/default/_doc/_markdown -name '*.md' | sort
   _build/default/_doc/_markdown/example/example/Example.md
@@ -46,9 +46,9 @@ Test markdown generation with package documentation (.mld files)
   example
   index.md
 
-  $ dune build @doc-markdown
+  $ dune build @doc-md
 
-  $ dune build @doc @doc-markdown
+  $ dune build @doc @doc-md
   $ find _build/default/_doc -name 'index.*' | grep -E '(html|md)$' | sort
   _build/default/_doc/_html/example/example/Example/index.html
   _build/default/_doc/_html/example/index.html

@@ -47,7 +47,7 @@
 
 Build markdown documentation:
 
-  $ dune build @doc-markdown
+  $ dune build @doc-md
   $ list_markdown_docs
   _build/default/_doc/_markdown/index.md
   _build/default/_doc/_markdown/mylib/index.md
