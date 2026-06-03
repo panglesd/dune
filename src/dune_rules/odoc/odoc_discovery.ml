@@ -231,3 +231,32 @@ module Toplevel_index = struct
     | Odoc_paths.Markdown -> markdown t
   ;;
 end
+
+let default_index ~pkg entry_modules =
+  let b = Buffer.create 512 in
+  Printf.bprintf b "{0 %s index}\n" (Package.Name.to_string pkg);
+  Lib.Local.Map.to_list entry_modules
+  |> List.sort ~compare:(fun (x, _) (y, _) ->
+    let name lib = Lib.name (Lib.Local.to_lib lib) in
+    Lib_name.compare (name x) (name y))
+  |> List.iter ~f:(fun (lib, modules) ->
+    let lib = Lib.Local.to_lib lib in
+    Printf.bprintf b "{1 Library %s}\n" (Lib_name.to_string (Lib.name lib));
+    Buffer.add_string
+      b
+      (match modules with
+       | [ x ] ->
+         sprintf
+           "The entry point of this library is the module:\n{!module-%s}.\n"
+           (Module_name.to_string (Module.name x))
+       | _ ->
+         sprintf
+           "This library exposes the following toplevel modules:\n{!modules:%s}\n"
+           (modules
+            |> List.filter ~f:(fun m -> Module.visibility m = Visibility.Public)
+            |> List.sort ~compare:(fun x y ->
+              Module_name.compare (Module.name x) (Module.name y))
+            |> List.map ~f:(fun m -> Module_name.to_string (Module.name m))
+            |> String.concat ~sep:" ")));
+  Buffer.contents b
+;;
